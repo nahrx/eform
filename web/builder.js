@@ -699,6 +699,26 @@ function fieldSkipTarget(f){
   }
   return null;
 }
+// Target skip pertama yang terdaftar pada field ini (dipakai sebagai default
+// ketika field belum dijawab sama sekali — lihat fieldEffectiveSkipTarget).
+function fieldPendingTarget(f){
+  const s=(f.skips||[]).find(x=>x.when&&x.to);
+  if(s)return s.to;
+  if(CHOICE.has(f.type)&&Array.isArray(f.options)){
+    const o=f.options.find(o=>o.skipTo);
+    if(o)return o.skipTo;
+  }
+  return null;
+}
+// Field yang punya kemampuan skip tapi BELUM dijawab dianggap "pending":
+// secara default field di antara dia dan target tetap disembunyikan sampai
+// dijawab dengan opsi yang TIDAK memicu skip (baru jalur normal terbuka).
+function fieldEffectiveSkipTarget(f){
+  const t=fieldSkipTarget(f);
+  if(t)return t;
+  if(pvEmpty(pv.values[f.name]))return fieldPendingTarget(f);
+  return null;
+}
 // Hitung field di halaman ini yang harus disembunyikan karena skip yang
 // sedang aktif (target di halaman yang sama), plus target lintas-halaman
 // bila skip yang aktif belum "selesai" sampai akhir halaman.
@@ -712,7 +732,7 @@ function computePageSkipState(page){
       if(f.name===skipTarget){skipActive=false;skipTarget=null;}
       else{hidden.add(f.name);continue;}
     }
-    const t=fieldSkipTarget(f);
+    const t=fieldEffectiveSkipTarget(f);
     if(t&&t!=="__next"){
       if(nodeContainsName(page,t)&&t!==f.name){skipActive=true;skipTarget=t;}
       else{skipActive=true;skipTarget=null;crossPageTarget=t;}
