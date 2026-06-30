@@ -1,0 +1,103 @@
+package config
+
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"log"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/joho/godotenv"
+)
+
+type Config struct {
+	Port          string
+	DatabaseURL   string
+	JWTSecret     []byte
+	JWTTTL        time.Duration
+	CORSOrigins   []string
+	PublicBaseURL string // dipakai untuk membentuk URL share, mis. https://eform.bpskaltim.go.id
+	WebDir        string // folder berisi login.html, admin.html, public.html, builder.html
+	PublicDir     string // folder berisi landing page publik (index.html), disajikan di "/"
+	Seed          SeedConfig
+
+	// Google OAuth (untuk responden publik)
+	GoogleClientID     string
+	GoogleClientSecret string
+	GoogleRedirectURL  string // default: {PublicBaseURL}/auth/google/callback
+}
+
+type SeedConfig struct {
+	Username string
+	Email    string
+	Password string
+}
+
+func env(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
+
+func Load() *Config {
+	// Muat .env (jika ada) sebelum membaca env apa pun.
+	// File diabaikan kalau tidak ada; env asli OS tidak ditimpa.
+	loadDotEnv(env("ENV_FILE", ".env"))
+
+	c := &Config{
+		Port:          env("PORT", "8080"),
+		DatabaseURL:   env("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/eform?sslmode=disable"),
+		PublicBaseURL: strings.TrimRight(env("PUBLIC_BASE_URL", "http://localhost:8080"), "/"),
+		WebDir:        env("WEB_DIR", "web"),
+		PublicDir:     env("PUBLIC_DIR", "public"),
+		Seed: SeedConfig{
+			Username: env("SUPERADMIN_USERNAME", "admin"),
+			Email:    env("SUPERADMIN_EMAIL", "admin@bps.go.id"),
+			Password: env("SUPERADMIN_PASSWORD", "admin12345"),
+		},
+		GoogleClientID:     env("GOOGLE_CLIENT_ID", ""),
+		GoogleClientSecret: env("GOOGLE_CLIENT_SECRET", ""),
+		GoogleRedirectURL:  env("GOOGLE_REDIRECT_URL", ""),
+	}
+
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		b := make([]byte, 32)
+		_, _ = rand.Read(b)
+		secret = hex.EncodeToString(b)
+		log.Println("[WARN] JWT_SECRET kosong — memakai secret acak (token akan invalid setelah restart). Set JWT_SECRET di produksi.")
+	}
+	c.JWTSecret = []byte(secret)
+
+	ttlHours := 24
+	if v := os.Getenv("JWT_TTL_HOURS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			ttlHours = n
+		}
+	}
+	c.JWTTTL = time.Duration(ttlHours) * time.Hour
+
+	origins := env("CORS_ORIGINS", "*")
+	for _, o := range strings.Split(origins, ",") {
+		if o = strings.TrimSpace(o); o != "" {
+			c.CORSOrigins = append(c.CORSOrigins, o)
+		}
+	}
+	return c
+}
+
+// loadDotEnv memuat file .env (jika ada) memakai joho/godotenv.
+// godotenv.Load TIDAK menimpa variabel yang sudah ada di environment OS,
+// jadi env asli tetap diutamakan. File yang tidak ada diabaikan diam-diam.
+func loadDotEnv(path string) {
+	if err := godotenv.Load(path); err != nil {
+		if !os.IsNotExist(err) {
+			log.Printf("[config] gagal memuat %s: %v", path, err)
+		}
+		return
+	}
+	log.Printf("[config] env dimuat dari %s", path)
+}

@@ -1,0 +1,70 @@
+package models
+
+import (
+	"encoding/json"
+	"time"
+)
+
+type User struct {
+	ID           string    `json:"id"`
+	Username     string    `json:"username"`
+	Email        string    `json:"email,omitempty"`
+	PasswordHash string    `json:"-"`
+	Role         string    `json:"role"`
+	IsActive     bool      `json:"isActive"`
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
+}
+
+type Form struct {
+	ID          string          `json:"id"`
+	Slug        string          `json:"slug"`
+	Title       string          `json:"title"`
+	Description string          `json:"description"`
+	Schema      json.RawMessage `json:"schema,omitempty"`
+	Status      string          `json:"status"`
+	Version     string          `json:"version"`
+	OwnerID     *string         `json:"ownerId,omitempty"`
+	CreatedAt   time.Time       `json:"createdAt"`
+	UpdatedAt   time.Time       `json:"updatedAt"`
+}
+
+type Share struct {
+	ID             string     `json:"id"`
+	FormID         string     `json:"formId"`
+	Token          string     `json:"token"`
+	Label          string     `json:"label"`
+	IsActive       bool       `json:"isActive"`
+	AllowResponses bool       `json:"allowResponses"`
+	HasPassword    bool       `json:"hasPassword"`
+	ExpiresAt      *time.Time `json:"expiresAt,omitempty"`
+	ViewCount      int64      `json:"viewCount"`
+	CreatedAt      time.Time  `json:"createdAt"`
+	// internal saja, tidak diserialisasi
+	PasswordHash *string `json:"-"`
+}
+
+type Response struct {
+	ID           string          `json:"id"`
+	FormID       string          `json:"formId"`
+	ShareID      *string         `json:"shareId,omitempty"`
+	RespondentID *string         `json:"respondentId,omitempty"`
+	Answers      json.RawMessage `json:"answers"`
+	Meta         json.RawMessage `json:"meta,omitempty"`
+	SubmittedAt  time.Time       `json:"submittedAt"`
+}
+
+type WilayahItem struct {
+	KodeWilayah string `json:"kode_wilayah"`
+	NamaWilayah string `json:"nama_wilayah"`
+}
+
+type Respondent struct {
+	ID        string    `json:"id"`
+	GoogleID  string    `json:"googleId"`
+	Email     string    `json:"email"`
+	Name      string    `json:"name"`
+	Picture   string    `json:"picture"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}

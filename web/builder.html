@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>eForm - Builder</title>
+<link rel="stylesheet" href="/builder.css">
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand"><div class="mark">eForm<span> · Builder</span></div></div>
+    <input id="instTitle" class="ttl" placeholder="Judul instrumen…" aria-label="Judul instrumen">
+    <div id="health" class="health ok"><span class="dot"></span><span id="healthTxt">Valid</span></div>
+    <div class="actions">
+      <button class="btn ghost" id="btnExample">Muat contoh</button>
+      <button class="btn ghost" id="btnImport">Impor JSON</button>
+      <button class="btn" id="btnPreview">Lihat Kuesioner</button>
+      <button class="btn ghost" id="btnExport">Ekspor JSON</button>
+      <input type="file" id="fileInput" accept=".json,application/json" hidden>
+      <div class="topbar-sep"></div>
+      <button class="btn" id="btnShare">Bagikan</button>
+      <button class="btn primary" id="btnSave">Simpan</button>
+      <div class="topbar-sep"></div>
+      <div class="user-menu" id="userMenu">
+        <button class="user-btn" id="userBtn">
+          <span class="user-avatar" id="userAvatar">?</span>
+          <span class="user-name" id="userName">…</span>
+          <span class="user-role" id="userRole"></span>
+          <span class="user-caret">▾</span>
+        </button>
+        <div class="user-dropdown" id="userDropdown" hidden>
+          <div class="udd-info">
+            <span class="udd-name" id="uddName"></span>
+            <span class="udd-role" id="uddRole"></span>
+          </div>
+          <div class="udd-sep"></div>
+          <a class="udd-item" href="/admin">← Kembali ke Admin</a>
+          <button class="udd-item danger" id="btnLogout">Keluar</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="cols" id="cols">
+    <!-- SIDEBAR 1 — komponen/builder -->
+    <aside class="sb" id="sb1">
+      <div class="full">
+        <div class="sb-head"><span class="t">Builder · Komponen</span><button class="collapse" id="col1" title="Tutup">‹</button></div>
+        <div class="sb-body" id="palette"></div>
+      </div>
+      <div class="rail"><button class="collapse" id="exp1" title="Buka">›</button><span class="rlabel">Komponen</span></div>
+    </aside>
+
+    <!-- SIDEBAR 2 — halaman/kuesioner -->
+    <aside class="sb" id="sb2">
+      <div class="full">
+        <div class="sb-head"><span class="t">Kuesioner · Halaman</span><button class="collapse" id="col2" title="Tutup">‹</button></div>
+        <div class="sb-body"><div id="pageList"></div><button class="addpage" id="addPage">+ Tambah halaman</button></div>
+      </div>
+      <div class="rail"><button class="collapse" id="exp2" title="Buka">›</button><span class="rlabel">Halaman</span></div>
+    </aside>
+
+    <!-- CANVAS -->
+    <main class="canvas">
+      <div class="cv-head" id="cvHead"></div>
+      <div class="stage" id="stage"></div>
+    </main>
+
+    <!-- INSPECTOR -->
+    <aside class="inspector">
+      <div class="tabs">
+        <button class="tab on" data-tab="props">Properti</button>
+        <button class="tab" data-tab="json">JSON &amp; Validasi <span class="n" id="tabN" hidden></span></button>
+      </div>
+      <div class="pane" id="paneProps"></div>
+      <div class="pane" id="paneJson" hidden></div>
+    </aside>
+  </div>
+</div>
+
+<div id="preview" class="pv" hidden>
+  <div class="pv-bar">
+    <span class="pv-title" id="pvTitle">Kuesioner</span>
+    <span class="pv-badge">PREVIEW</span>
+    <select class="pv-modesel" id="pvMode" title="Mode navigasi">
+      <option value="section">Per halaman</option>
+      <option value="scroll">Scroll</option>
+    </select>
+    <button class="btn" id="pvClose" style="margin-left:auto">Tutup ✕</button>
+  </div>
+  <div class="pv-main">
+    <aside class="pv-side" id="pvSide"></aside>
+    <div class="pv-body" id="pvBody"></div>
+  </div>
+</div>
+
+<script src="/builder.js"></script>
+<script src="/builder-bridge.js"></script>
+<span id="ebb-toast" class="ebb-toast"></span>
+</body>
+</html>

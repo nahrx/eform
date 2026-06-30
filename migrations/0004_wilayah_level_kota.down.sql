@@ -1,0 +1,2 @@
+-- PostgreSQL tidak mendukung DROP VALUE dari enum.
+-- Untuk rollback lengkap, jalankan 0002_wilayah.down.sql terlebih dahulu.

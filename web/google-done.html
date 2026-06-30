@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Login berhasil…</title>
+<style>
+body{font-family:ui-sans-serif,system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#eef1f5;color:#4a525e;font-size:14px}
+</style>
+</head>
+<body>
+<span>Login berhasil, mengalihkan…</span>
+<script>
+(function(){
+  const p=new URLSearchParams(location.search);
+  const token=p.get("token");
+  const next=p.get("next")||"/";
+  if(token){
+    localStorage.setItem("eform_resp_token",token);
+    // Decode payload JWT (base64url) untuk simpan info user tanpa server round-trip
+    try{
+      const payload=JSON.parse(atob(token.split(".")[1].replace(/-/g,"+").replace(/_/g,"/")));
+      localStorage.setItem("eform_resp_user",JSON.stringify({
+        id:payload.respondentId||payload.sub||"",
+        email:payload.email||"",
+        name:payload.name||"",
+        picture:payload.picture||""
+      }));
+    }catch(_){}
+  }
+  location.replace(next);
+})();
+</script>
+</body>
+</html>

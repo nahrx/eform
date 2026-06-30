@@ -1,0 +1,27 @@
+  :root{--accent:#0e7490;--ink:#0f172a;--line:#e2e8f0;--muted:#64748b;--ok:#15803d;--bg:#f1f5f9}
+  *{box-sizing:border-box} body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+  header{background:#fff;border-bottom:1px solid var(--line);padding:14px 22px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:5}
+  header h1{font-size:17px;margin:0;flex:1} .who{font-size:13px;color:var(--muted)}
+  .btn{padding:8px 13px;border:1px solid var(--line);background:#fff;border-radius:8px;font-size:13px;cursor:pointer;font-weight:600;color:var(--ink)}
+  .btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)} .btn.danger{color:#b91c1c}
+  .btn:hover{filter:brightness(.98)}
+  main{max-width:1000px;margin:22px auto;padding:0 18px}
+  .bar{display:flex;align-items:center;gap:10px;margin-bottom:16px} .bar h2{font-size:15px;margin:0;flex:1}
+  table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  th,td{text-align:left;padding:11px 14px;font-size:13.5px;border-bottom:1px solid var(--line);vertical-align:middle}
+  th{background:#f8fafc;font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted)}
+  tr:last-child td{border-bottom:none}
+  .tag{font-size:11px;padding:3px 8px;border-radius:999px;font-weight:700}
+  .tag.published{background:#dcfce7;color:var(--ok)} .tag.draft{background:#fef9c3;color:#854d0e} .tag.archived{background:#e2e8f0;color:#475569}
+  .acts{display:flex;gap:6px;flex-wrap:wrap}
+  .acts .btn{padding:5px 9px;font-size:12px}
+  .empty{padding:40px;text-align:center;color:var(--muted)}
+  dialog{border:none;border-radius:14px;padding:0;max-width:520px;width:92%;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+  .dlg-h{padding:16px 20px;border-bottom:1px solid var(--line);font-weight:700;display:flex;align-items:center}
+  .dlg-b{padding:18px 20px} .dlg-f{padding:14px 20px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px}
+  .share{border:1px solid var(--line);border-radius:9px;padding:10px 12px;margin-bottom:8px;font-size:13px}
+  .share code{background:#f1f5f9;padding:2px 6px;border-radius:5px;word-break:break-all}
+  .row{display:flex;gap:8px;align-items:center;margin:8px 0}
+  input,select{padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px}
+  .muted{color:var(--muted);font-size:12px}
+  a{color:var(--accent)}

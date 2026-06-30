@@ -1,0 +1,867 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kuesioner</title>
+<style>
+:root{
+  --ink:#13171e;--ink-soft:#4a525e;--muted:#79828f;
+  --surface:#eef1f5;--panel:#fff;--panel-2:#f7f9fb;
+  --line:#dfe4ea;
+  --accent:#0e7490;--accent-ink:#0b5563;--accent-soft:#d6edf1;
+  --roster:#047857;
+  --ok:#15803d;--ok-soft:#dcfce7;--bad:#b42318;--bad-soft:#fde7e4;
+  --radius:10px;--radius-s:7px;
+  --shadow:0 1px 2px rgba(19,23,30,.06),0 8px 24px -16px rgba(19,23,30,.25);
+  --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Inter,sans-serif;
+  --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font-family:var(--sans);color:var(--ink);background:var(--surface);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit;font-size:13px;color:var(--ink)}
+
+/* ---- layout ---- */
+.pv{display:flex;flex-direction:column;height:100vh}
+.pv-bar{display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line);flex:none}
+.pv-title{font-weight:600;font-size:15px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pv-brand{font-family:var(--mono);font-size:10.5px;color:var(--muted);flex:none;white-space:nowrap}
+.pv-main{flex:1;display:flex;min-height:0}
+.pv-side{width:222px;flex:none;background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding:13px 11px}
+.pv-side-h{font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 4px 9px}
+.pv-pg{padding:9px 10px;border-radius:var(--radius-s);cursor:pointer;font-size:12.5px;font-weight:500;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pv-pg:hover{background:var(--panel-2)}
+.pv-pg.active{background:var(--accent-soft);color:var(--accent-ink)}
+.pv-body{flex:1;overflow:auto;padding:26px 18px 40px}
+
+/* ---- user bar ---- */
+.pv-ubar{display:flex;align-items:center;gap:9px;max-width:640px;margin:0 auto 18px;padding:9px 12px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-s)}
+.pv-uavatar{width:28px;height:28px;border-radius:50%;object-fit:cover;flex:none;background:var(--accent-soft)}
+.pv-uname{font-size:12.5px;font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pv-uemail{font-size:11.5px;color:var(--muted);flex:none}
+.pv-ulogout{border:none;background:transparent;color:var(--muted);font-size:12px;cursor:pointer;padding:3px 6px;border-radius:4px}
+.pv-ulogout:hover{background:var(--panel-2);color:var(--ink)}
+
+/* ---- page content ---- */
+.pv-page{max-width:640px;margin:0 auto}
+.pv-h2{font-size:18px;margin:0 0 16px}
+.pv-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;margin-bottom:16px}
+.pv-bt{font-weight:600;font-size:14px;margin-bottom:12px}
+.pv-sec{border:1.5px solid var(--line);border-radius:9px;padding:12px;margin-bottom:14px;background:var(--panel-2)}
+.pv-st{font-weight:600;font-size:13px;color:var(--ink-soft);margin-bottom:10px}
+.pv-field{margin-bottom:14px}
+.pv-lab{display:block;font-size:13px;font-weight:500;margin-bottom:6px}
+.pv-req{color:var(--bad)}
+.pv-hint{font-size:11.5px;color:var(--muted);margin-bottom:6px}
+.pv-unit{font-size:12px;color:var(--muted);margin-left:6px}
+.pv-in{width:100%;border:1px solid var(--line);border-radius:var(--radius-s);padding:9px 10px;background:var(--panel);font-size:13px}
+.pv-in:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.pv-in:disabled{background:var(--panel-2);color:var(--muted);cursor:not-allowed}
+.pv-vmsg{font-size:11.5px;margin-top:5px}
+.pv-vmsg.error{color:var(--bad)}
+.pv-vmsg.warning{color:#b45309}
+.pv-field-err{outline:2px solid var(--bad);outline-offset:3px;border-radius:8px;transition:outline-color .2s}
+.pv-nav-err{color:var(--bad);font-size:12.5px;margin-bottom:8px;text-align:right;min-height:1em}
+textarea.pv-in{resize:vertical;min-height:60px}
+.pv-radios{display:flex;flex-direction:column;gap:4px}
+.pv-opt{display:flex;align-items:center;gap:8px;font-size:13px;padding:3px 0;cursor:pointer}
+.pv-note{background:var(--accent-soft);border-radius:8px;padding:10px;margin-bottom:14px;font-size:13px}
+.pv-loading{font-size:12.5px;color:var(--muted);padding:9px 11px;border:1px dashed var(--line);border-radius:7px;background:var(--panel-2)}
+
+/* ---- roster ---- */
+.pv-roster{border:1.5px dashed var(--roster);border-radius:9px;padding:12px;margin-bottom:14px;background:#eefaf3}
+.pv-rh{font-weight:600;font-size:13px;color:var(--roster);margin-bottom:8px}
+.pv-tag{font-family:var(--mono);font-size:9.5px;background:#d8f3e5;padding:2px 6px;border-radius:4px;margin-left:6px;vertical-align:middle}
+.pv-rowempty{font-size:12px;color:var(--muted);padding:4px 0 8px}
+.pv-rowlist{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
+.pv-rowitem{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:10px 12px}
+.pv-rowinfo{flex:1;min-width:0}
+.pv-rowinfo b{font-size:13px;display:block}
+.pv-rowinfo span{font-size:12px;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+.pv-rowinfo i{color:var(--muted)}
+.pv-rowopen{border:1px solid var(--roster);background:var(--panel);color:var(--roster);border-radius:6px;padding:7px 13px;font-weight:600;font-size:12px;cursor:pointer;flex:none}
+.pv-rowopen:hover{background:#eefaf3}
+.pv-rowdel{border:none;background:transparent;color:var(--bad);font-size:11px;cursor:pointer;flex:none}
+.pv-row{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:12px;margin-bottom:10px}
+.pv-rownum{font-size:11px;color:var(--muted);margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+.pv-del{border:none;background:transparent;color:var(--bad);font-size:11px;cursor:pointer}
+.pv-add{border:1px solid var(--roster);background:var(--roster);color:#fff;border-radius:6px;padding:8px;width:100%;font-weight:600;cursor:pointer;margin-top:4px;transition:.12s}
+.pv-add:hover{background:#035f44;border-color:#035f44}
+.pv-modal-bg{position:fixed;inset:0;background:rgba(19,23,30,.45);display:flex;align-items:center;justify-content:center;z-index:80}
+.pv-modal{background:var(--panel);border-radius:var(--radius);padding:22px;max-width:360px;width:92%;box-shadow:var(--shadow)}
+.pv-modal h3{margin:0 0 4px;font-size:15px}
+.pv-modal .pv-modal-sub{font-size:12.5px;color:var(--muted);margin:0 0 14px}
+.pv-modal input{width:100%;border:1px solid var(--line);border-radius:var(--radius-s);padding:9px 10px;font-size:13px;margin-bottom:16px;box-sizing:border-box}
+.pv-modal input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.pv-modal-actions{display:flex;justify-content:flex-end;gap:8px}
+
+/* ---- navigation ---- */
+.pv-nav{max-width:640px;margin:20px auto 0;display:flex;align-items:center;justify-content:space-between;gap:10px;padding-bottom:6px}
+.pv-prog{font-size:12px;color:var(--muted)}
+.msg{max-width:640px;margin:10px auto 0;padding:12px 14px;border-radius:9px;font-size:13px;display:none}
+.msg.ok{background:var(--ok-soft);color:var(--ok);display:block}
+.msg.err{background:var(--bad-soft);color:var(--bad);display:block}
+.view-hint{max-width:640px;margin:10px auto 0;font-size:13px;color:var(--muted);padding:10px 12px;background:var(--panel-2);border:1px solid var(--line);border-radius:var(--radius-s)}
+.foot{text-align:center;color:var(--muted);font-family:var(--mono);font-size:10.5px;letter-spacing:.03em;padding:18px 0 4px}
+
+/* ---- buttons ---- */
+.btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:7px 14px;border-radius:var(--radius-s);font-size:13px;font-weight:500;transition:.12s;cursor:pointer}
+.btn:hover{border-color:#c6cdd6;background:var(--panel-2)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700;padding:9px 22px}
+.btn.primary:hover{background:var(--accent-ink);border-color:var(--accent-ink)}
+.btn.primary:disabled{opacity:.6;cursor:default}
+
+/* ---- login gate ---- */
+.gate-wrap{display:flex;align-items:center;justify-content:center;height:100vh;background:var(--surface)}
+.gate-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:32px 28px;max-width:380px;width:92%;text-align:center;box-shadow:var(--shadow)}
+.gate-icon{font-size:36px;margin-bottom:12px}
+.gate-title{font-size:17px;font-weight:700;margin:0 0 6px}
+.gate-sub{font-size:13px;color:var(--muted);margin:0 0 20px;line-height:1.5}
+.gate-form{font-size:13px;font-weight:600;color:var(--accent);margin-bottom:18px;display:block}
+.google-btn{display:inline-flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--panel);padding:10px 20px;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;width:100%;justify-content:center;transition:.12s}
+.google-btn:hover{border-color:#c6cdd6;background:var(--panel-2)}
+.google-btn svg{flex:none}
+.gate-err{margin-top:12px;font-size:12.5px;color:var(--bad)}
+
+/* ---- init / password gate ---- */
+.init-wrap{display:flex;align-items:center;justify-content:center;height:100vh;background:var(--surface)}
+.init-msg{font-size:13px;color:var(--muted)}
+.pw-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:24px;max-width:340px;width:90%;text-align:center;box-shadow:var(--shadow)}
+.pw-card h3{margin:0 0 6px;font-size:16px}
+.pw-card .pw-sub{font-size:13px;color:var(--muted);margin:0 0 14px}
+.pw-card input{width:100%;border:1px solid var(--line);border-radius:var(--radius-s);padding:9px 10px;font-size:13px;margin-bottom:10px}
+.pw-card input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+
+@media(max-width:680px){.pv-side{display:none}}
+</style>
+</head>
+<body>
+<div id="root"><div class="init-wrap"><span class="init-msg">Memuat kuesioner…</span></div></div>
+<script>
+const SHARE_TOKEN=location.pathname.split("/").filter(Boolean).pop();
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const txt=v=>v==null?"":(typeof v==="object"?(v.id||Object.values(v)[0]||""):v);
+
+let SCHEMA=null, ALLOW=true, PW="", apiCache={};
+let PAGES=[], curPage=0, answers={};
+let rosterView=null;
+let RESP_TOKEN=localStorage.getItem("eform_resp_token")||"";
+let RESP_USER=null;
+let EXISTING_RESPONSE=null; // respons yang pernah dikirim responden
+
+try{RESP_USER=JSON.parse(localStorage.getItem("eform_resp_user")||"null");}catch(_){}
+
+/* ---- mesin ekspresi (visibleWhen/enableWhen/requiredWhen/validations/calculate/skip) ---- */
+const Expr=(function(){
+  const FUNCS=new Set(["isempty","notempty","len","count","sum","avg","min","max","in","today","age","regex","if","number","round","abs","floor","ceil","contains","upper","lower","trim"]);
+  function tokenize(src){
+    const t=[];let i=0;const n=src.length;const id=c=>/[A-Za-z0-9_]/.test(c);
+    while(i<n){let c=src[i];
+      if(c===" "||c==="\t"||c==="\n"||c==="\r"){i++;continue;}
+      if(c==="$"&&src[i+1]==="{"){let j=i+2,s="";while(j<n&&src[j]!=="}")s+=src[j++];if(src[j]!=="}")throw new Error("${ } tidak ditutup");i=j+1;t.push({t:"ref",v:s.trim()});continue;}
+      if(c==="'"||c==='"'){const q=c;let j=i+1,s="";while(j<n&&src[j]!==q){if(src[j]==="\\"){s+=src[j+1];j+=2;}else s+=src[j++];}if(src[j]!==q)throw new Error("teks tidak ditutup");i=j+1;t.push({t:"str",v:s});continue;}
+      if((c>="0"&&c<="9")||(c==="."&&src[i+1]>="0"&&src[i+1]<="9")){let j=i,s="";while(j<n&&((src[j]>="0"&&src[j]<="9")||src[j]===".")){s+=src[j++];}i=j;t.push({t:"num",v:parseFloat(s)});continue;}
+      if(/[A-Za-z_]/.test(c)){let j=i,s="";while(j<n&&id(src[j]))s+=src[j++];i=j;
+        if(s==="true")t.push({t:"bool",v:true});else if(s==="false")t.push({t:"bool",v:false});else if(s==="null")t.push({t:"null"});else t.push({t:"id",v:s});continue;}
+      const two=src.substr(i,2);
+      if(["==","!=","<=",">=","&&","||"].includes(two)){t.push({t:"op",v:two});i+=2;continue;}
+      if("+-*/%<>!".includes(c)){t.push({t:"op",v:c});i++;continue;}
+      if(c==="("){t.push({t:"lp"});i++;continue;}
+      if(c===")"){t.push({t:"rp"});i++;continue;}
+      if(c==="["){t.push({t:"lb"});i++;continue;}
+      if(c==="]"){t.push({t:"rb"});i++;continue;}
+      if(c===","){t.push({t:"comma"});i++;continue;}
+      throw new Error("karakter tak dikenal: "+c);
+    }
+    return t;
+  }
+  function parse(src){
+    const toks=tokenize(src);let p=0;
+    const peek=()=>toks[p],next=()=>toks[p++];
+    const expect=k=>{if(!toks[p]||toks[p].t!==k)throw new Error("diharapkan '"+k+"'");return toks[p++];};
+    function or(){let l=and();while(peek()&&peek().t==="op"&&peek().v==="||"){next();l={type:"bin",op:"||",l,r:and()};}return l;}
+    function and(){let l=eq();while(peek()&&peek().t==="op"&&peek().v==="&&"){next();l={type:"bin",op:"&&",l,r:eq()};}return l;}
+    function eq(){let l=cmp();while(peek()&&peek().t==="op"&&(peek().v==="=="||peek().v==="!=")){const o=next().v;l={type:"bin",op:o,l,r:cmp()};}return l;}
+    function cmp(){let l=add();while(peek()&&peek().t==="op"&&["<","<=",">",">="].includes(peek().v)){const o=next().v;l={type:"bin",op:o,l,r:add()};}return l;}
+    function add(){let l=mul();while(peek()&&peek().t==="op"&&(peek().v==="+"||peek().v==="-")){const o=next().v;l={type:"bin",op:o,l,r:mul()};}return l;}
+    function mul(){let l=un();while(peek()&&peek().t==="op"&&["*","/","%"].includes(peek().v)){const o=next().v;l={type:"bin",op:o,l,r:un()};}return l;}
+    function un(){if(peek()&&peek().t==="op"&&(peek().v==="!"||peek().v==="-")){const o=next().v;return {type:"un",op:o,e:un()};}return prim();}
+    function prim(){const k=peek();if(!k)throw new Error("ekspresi terpotong");
+      if(k.t==="num"||k.t==="str"||k.t==="bool"){next();return {type:"lit",v:k.v};}
+      if(k.t==="null"){next();return {type:"lit",v:null};}
+      if(k.t==="ref"){next();return {type:"ref",name:k.v};}
+      if(k.t==="lp"){next();const e=or();expect("rp");return e;}
+      if(k.t==="lb"){next();const items=[];if(peek()&&peek().t!=="rb"){items.push(or());while(peek()&&peek().t==="comma"){next();items.push(or());}}expect("rb");return {type:"arr",items};}
+      if(k.t==="id"){next();
+        if(peek()&&peek().t==="lp"){const fn=k.v.toLowerCase();if(!FUNCS.has(fn))throw new Error("fungsi tak dikenal: "+k.v);next();const args=[];if(peek()&&peek().t!=="rp"){args.push(or());while(peek()&&peek().t==="comma"){next();args.push(or());}}expect("rp");return {type:"call",fn,args};}
+        throw new Error("pakai ${...} untuk merujuk field, bukan '"+k.v+"'");}
+      throw new Error("token tak terduga");
+    }
+    const ast=or();if(p<toks.length)throw new Error("ada token sisa di akhir");return ast;
+  }
+  const toNum=v=>v===true?1:v===false?0:(v==null||v==="")?NaN:Number(v);
+  const isEmp=x=>x==null||x===""||(Array.isArray(x)&&x.length===0);
+  const flat=a=>{const o=[];a.forEach(x=>Array.isArray(x)?x.forEach(y=>o.push(y)):o.push(x));return o;};
+  const nums=a=>flat(a).map(Number).filter(x=>!isNaN(x));
+  const LIB={
+    isempty:a=>isEmp(a[0]),notempty:a=>!isEmp(a[0]),
+    len:a=>{const x=a[0];return Array.isArray(x)?x.length:(x==null?0:String(x).length);},
+    count:a=>{const arr=Array.isArray(a[0])?a[0]:a;return arr.filter(x=>!isEmp(x)).length;},
+    sum:a=>flat(a).reduce((s,x)=>s+(isEmp(x)?0:(Number(x)||0)),0),
+    avg:a=>{const f=nums(a);return f.length?f.reduce((s,x)=>s+x,0)/f.length:0;},
+    min:a=>{const f=nums(a);return f.length?Math.min(...f):0;},
+    max:a=>{const f=nums(a);return f.length?Math.max(...f):0;},
+    in:a=>{const x=a[0];const rest=a.length===2&&Array.isArray(a[1])?a[1]:a.slice(1);return rest.map(String).includes(String(x));},
+    today:()=>new Date().toISOString().slice(0,10),
+    age:a=>{const d=new Date(a[0]);if(isNaN(d))return NaN;const t=new Date();let g=t.getFullYear()-d.getFullYear();const m=t.getMonth()-d.getMonth();if(m<0||(m===0&&t.getDate()<d.getDate()))g--;return g;},
+    regex:a=>{try{return new RegExp(a[1]).test(String(a[0]??""));}catch(_){return false;}},
+    if:a=>a[0]?a[1]:a[2],
+    number:a=>{const x=Number(a[0]);return isNaN(x)?0:x;},
+    round:a=>{const f=Math.pow(10,a[1]||0);return Math.round((Number(a[0])||0)*f)/f;},
+    abs:a=>Math.abs(Number(a[0])||0),floor:a=>Math.floor(Number(a[0])||0),ceil:a=>Math.ceil(Number(a[0])||0),
+    contains:a=>{const h=a[0];return Array.isArray(h)?h.map(String).includes(String(a[1])):String(h??"").includes(String(a[1]));},
+    upper:a=>String(a[0]??"").toUpperCase(),lower:a=>String(a[0]??"").toLowerCase(),trim:a=>String(a[0]??"").trim()
+  };
+  function eqv(a,b){if(typeof a==="number"||typeof b==="number"){const x=toNum(a),y=toNum(b);if(!isNaN(x)&&!isNaN(y))return x===y;}if(typeof a==="boolean"||typeof b==="boolean")return Boolean(a)===Boolean(b);if(a==null||b==null)return a==null&&b==null;return String(a)===String(b);}
+  function ev(n,res){switch(n.type){
+    case "lit":return n.v;
+    case "ref":return res(n.name);
+    case "arr":return n.items.map(x=>ev(x,res));
+    case "un":{const v=ev(n.e,res);return n.op==="!"?!v:-toNum(v);}
+    case "call":return LIB[n.fn](n.args.map(a=>ev(a,res)));
+    case "bin":{const op=n.op;
+      if(op==="&&")return !!ev(n.l,res)&&!!ev(n.r,res);
+      if(op==="||")return !!ev(n.l,res)||!!ev(n.r,res);
+      const a=ev(n.l,res),b=ev(n.r,res);
+      switch(op){case "+":return toNum(a)+toNum(b);case "-":return toNum(a)-toNum(b);case "*":return toNum(a)*toNum(b);case "/":return toNum(a)/toNum(b);case "%":return toNum(a)%toNum(b);
+        case "<":return toNum(a)<toNum(b);case "<=":return toNum(a)<=toNum(b);case ">":return toNum(a)>toNum(b);case ">=":return toNum(a)>=toNum(b);
+        case "==":return eqv(a,b);case "!=":return !eqv(a,b);}}
+  }}
+  const cache=new Map();
+  function parseCached(src){if(cache.has(src))return cache.get(src);const a=parse(src);cache.set(src,a);return a;}
+  return {
+    parse,
+    evalSrc(src,res){if(!src)return undefined;let a;try{a=parseCached(src);}catch(_){return undefined;}try{return ev(a,res);}catch(_){return undefined;}}
+  };
+})();
+function coerceVal(v){if(v==="true")return true;if(v==="false")return false;if(typeof v==="string"&&v.trim()!==""&&!isNaN(Number(v)))return Number(v);return v;}
+function refResolve(name,rowPrefix){
+  name=String(name).trim();
+  if(name.includes(".")){
+    const [rn,fn]=name.split(".");
+    const r=findRoster(rn);
+    if(r){const cnt=rosterCount(r);const arr=[];for(let i=0;i<cnt;i++)arr.push(coerceVal(answers[`${rn}#${i}#${fn}`]));return arr;}
+    return undefined;
+  }
+  const rn=findRoster(name);
+  if(rn){const cnt=rosterCount(rn);return Array.from({length:cnt},(_,i)=>i);}
+  if(rowPrefix){const k=rowPrefix+name;if(k in answers)return coerceVal(answers[k]);}
+  return coerceVal(answers[name]);
+}
+function evalExprSrc(src,rowPrefix){return Expr.evalSrc(src,name=>refResolve(name,rowPrefix||""));}
+function evalVisible(src,rowPrefix){if(!src)return true;const v=evalExprSrc(src,rowPrefix||"");return v===undefined?true:!!v;}
+
+/* ---- headers helper ---- */
+function pubHeaders(extra){
+  const h={...extra};
+  if(PW)h["X-Share-Password"]=PW;
+  if(RESP_TOKEN)h["Authorization"]="Bearer "+RESP_TOKEN;
+  return h;
+}
+
+/* ---- markdown ---- */
+function mdToHtml(src){if(!src)return"";const e=s=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  const inl=s=>e(s).replace(/`([^`]+)`/g,"<code>$1</code>").replace(/\*\*([^*]+)\*\*/g,"<strong>$1</strong>").replace(/(^|[^*])\*([^*]+)\*/g,"$1<em>$2</em>").replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank">$1</a>');
+  return String(src).split(/\n{2,}/).map(b=>{const m=b.match(/^(#{1,6})\s+(.*)$/);if(m)return`<h${m[1].length}>${inl(m[2])}</h${m[1].length}>`;
+    if(/^\s*[-*]\s+/.test(b))return"<ul>"+b.split("\n").map(l=>`<li>${inl(l.replace(/^\s*[-*]\s+/,""))}</li>`).join("")+"</ul>";
+    return"<p>"+inl(b).replace(/\n/g,"<br>")+"</p>";}).join("");}
+
+/* ---- fetch form ---- */
+async function fetchForm(){
+  const headers=PW?{"X-Share-Password":PW}:{};
+  const r=await fetch("/api/public/forms/"+encodeURIComponent(SHARE_TOKEN),{headers});
+  const data=await r.json();
+  if(r.status===401){askPassword(data.error);return;}
+  if(!r.ok)throw new Error(data.error||"Gagal memuat");
+  SCHEMA=data.schema; ALLOW=data.allowResponses;
+
+  // Jika Google belum dikonfigurasi, tampilkan pesan
+  if(!data.googleEnabled){
+    setRoot(`<div class="init-wrap"><div class="pw-card"><div class="msg err" style="display:block">Login Google belum dikonfigurasi oleh administrator.</div></div></div>`);
+    return;
+  }
+
+  // Jika belum login → tampilkan gate login
+  if(!RESP_TOKEN){
+    renderLoginGate(data);
+    return;
+  }
+
+  // Verifikasi token dengan server
+  const meR=await fetch("/api/public/me",{headers:{"Authorization":"Bearer "+RESP_TOKEN}});
+  if(!meR.ok){
+    // Token expired/invalid → hapus dan minta login ulang
+    clearRespSession();
+    renderLoginGate(data);
+    return;
+  }
+  RESP_USER=await meR.json();
+  localStorage.setItem("eform_resp_user",JSON.stringify(RESP_USER));
+
+  // Coba muat jawaban lama
+  EXISTING_RESPONSE=await fetchMyResponse();
+  if(EXISTING_RESPONSE){
+    answers=parseAnswers(EXISTING_RESPONSE.answers);
+  }
+
+  render(data);
+}
+
+function parseAnswers(raw){
+  if(typeof raw==="object"&&raw!==null)return raw;
+  try{return JSON.parse(raw)||{};}catch{return{};}
+}
+
+async function fetchMyResponse(){
+  try{
+    const r=await fetch("/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/my-response",
+      {headers:pubHeaders({})});
+    if(!r.ok)return null;
+    const d=await r.json();
+    return d; // null jika belum pernah mengisi
+  }catch{return null;}
+}
+
+function clearRespSession(){
+  RESP_TOKEN="";
+  RESP_USER=null;
+  localStorage.removeItem("eform_resp_token");
+  localStorage.removeItem("eform_resp_user");
+}
+
+function setRoot(html){document.getElementById("root").innerHTML=html;}
+function askPassword(msg){
+  setRoot(`<div class="init-wrap"><div class="pw-card"><h3>Kuesioner terkunci</h3><p class="pw-sub">${esc(msg||"Masukkan password untuk membuka kuesioner")}</p><input id="pw" type="password" placeholder="Password…"><button class="btn primary" id="pwbtn" style="width:100%">Buka</button></div></div>`);
+  document.getElementById("pwbtn").onclick=()=>{PW=document.getElementById("pw").value;setRoot('<div class="init-wrap"><span class="init-msg">Memuat…</span></div>');fetchForm().catch(e=>showErr(e.message));};
+}
+function showErr(m){setRoot(`<div class="init-wrap"><div class="pw-card"><div class="msg err" style="display:block">${esc(m)}</div></div></div>`);}
+
+/* ---- login gate ---- */
+function renderLoginGate(meta){
+  const title=txt(meta.title||txt(SCHEMA?.title)||"Kuesioner");
+  document.title=title;
+  const loginUrl="/auth/google?next="+encodeURIComponent("/f/"+SHARE_TOKEN);
+  setRoot(`<div class="gate-wrap"><div class="gate-card">
+    <div class="gate-icon">📋</div>
+    <div class="gate-title">${esc(title)}</div>
+    <p class="gate-sub">Masuk dengan akun Google Anda untuk mengisi kuesioner ini. Jawaban yang sudah terkirim dapat diedit kapan saja.</p>
+    <span class="gate-form">eForm · BPS Provinsi Kalimantan Timur</span>
+    <a href="${esc(loginUrl)}" class="google-btn">
+      <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/><path fill="none" d="M0 0h48v48H0z"/></svg>
+      Masuk dengan Google
+    </a>
+  </div></div>`);
+}
+
+/* ---- options ---- */
+function getPath(o,p){return String(p).split(".").reduce((x,k)=>x==null?x:x[k],o);}
+async function optionsFor(c){
+  if(c.optionsApi&&c.optionsApi.url){
+    // Ganti setiap {key} dengan nilai dari answers (cache per resolved URL)
+    const url=c.optionsApi.url.replace(/\{([^}]+)\}/g,(_,k)=>encodeURIComponent(answers[k]??''));
+    if(apiCache[url])return apiCache[url];
+    try{const r=await fetch(url);const d=await r.json();
+      let arr=c.optionsApi.path?getPath(d,c.optionsApi.path):(Array.isArray(d)?d:(d.data||d.items||d.results||[]));
+      const vf=c.optionsApi.valueField||"code",lf=c.optionsApi.labelField||"label";
+      const opts=(arr||[]).map(it=>({value:it[vf],label:txt(it[lf])||String(it[vf])}));
+      apiCache[url]=opts;return opts;
+    }catch(e){return[];}
+  }
+  if(c.optionsRef){const t=(SCHEMA.referenceData||{})[c.optionsRef];
+    if(t&&t.items)return t.items.map(it=>({value:it.code,label:txt(it.label)}));return[];}
+  return(c.options||[]).map(o=>({value:o.value,label:txt(o.label)||String(o.value)}));
+}
+
+/* ---- field & node rendering ---- */
+const NUMER=new Set(["number","integer","decimal","currency","range","rating"]);
+const CHOICE=new Set(["select","multiselect","radio","checkbox"]);
+let pending=[];
+
+function pvEmpty(v){return v==null||v===""||(Array.isArray(v)&&v.length===0);}
+function fieldHtml(c,rp){
+  rp=rp||"";
+  if(!evalVisible(c.visibleWhen,rp))return"";
+  if(!rp&&SKIP_HIDDEN.has(c.name))return""; // disembunyikan oleh skip-to field sebelumnya di halaman ini
+  const key=rp+c.name, ke=esc(key);
+  if(c.type==="note")    return`<div class="pv-note pv-field">${txt(c.html)||""}</div>`;
+  if(c.type==="markdown")return`<div class="pv-note pv-field">${mdToHtml(txt(c.markdown))}</div>`;
+  if(c.type==="hidden")  return"";
+  const isRequired=!!c.required||!!(c.requiredWhen&&evalVisible(c.requiredWhen,rp));
+  const enabled=evalVisible(c.enableWhen,rp);
+  const dis=enabled?"":" disabled";
+  const lab=`<label class="pv-lab">${esc(txt(c.label)||c.name)}${isRequired?' <span class="pv-req">*</span>':''}</label>`;
+  const hint=c.hint?`<div class="pv-hint">${esc(txt(c.hint))}</div>`:"";
+  if(c.type==="calculated"){
+    const r=evalExprSrc(c.calculate,rp);
+    answers[key]=(r===undefined?"":r);
+    return`<div class="pv-field" data-fieldkey="${ke}">${lab}${hint}<div><input class="pv-in" value="${esc(r===undefined||r===""?"—":String(r))}" disabled></div></div>`;
+  }
+  let ctrl="";
+  if(c.type==="textarea")
+    ctrl=`<textarea data-k="${ke}" class="pv-in"${dis}></textarea>`;
+  else if(NUMER.has(c.type))
+    ctrl=`<input type="number" data-k="${ke}" class="pv-in" style="width:auto;min-width:160px"${c.min!=null&&c.min!==""?` min="${esc(String(c.min))}"` :""}${c.max!=null&&c.max!==""?` max="${esc(String(c.max))}"`:""}${dis}>` +(c.unit?`<span class="pv-unit">${esc(c.unit)}</span>`:"");
+  else if(c.type==="date"||c.type==="time"||c.type==="datetime")
+    ctrl=`<input type="${c.type==="datetime"?"datetime-local":c.type}" data-k="${ke}" class="pv-in" style="width:auto"${dis}>`;
+  else if(c.type==="boolean")
+    ctrl=`<div class="pv-radios"><label class="pv-opt"><input type="radio" name="r_${ke}" data-kr="${ke}" value="true"${dis}> Ya</label><label class="pv-opt"><input type="radio" name="r_${ke}" data-kr="${ke}" value="false"${dis}> Tidak</label></div>`;
+  else if(CHOICE.has(c.type)){
+    ctrl=`<div class="pv-radios" id="opt-${ke}"><div class="pv-loading">Memuat pilihan…</div></div>`;
+    pending.push({c,rp,enabled});
+  }
+  else
+    ctrl=`<input type="text" data-k="${ke}" class="pv-in" placeholder="${esc(c.placeholder||"")}"${dis}>`;
+  let vmsg="";
+  const val=answers[key];
+  if(!pvEmpty(val)){
+    (c.validations||[]).forEach(v=>{
+      if(!v.test)return;
+      const r=evalExprSrc(v.test,rp);
+      if(r===undefined)return;
+      if(!r)vmsg+=`<div class="pv-vmsg ${v.severity==="warning"?"warning":"error"}">${esc(txt(v.message)||"Nilai tidak valid")}</div>`;
+    });
+  }
+  return`<div class="pv-field" data-fieldkey="${ke}">${lab}${hint}<div>${ctrl}</div>${vmsg}</div>`;
+}
+
+function nodeHtml(c,rp){
+  rp=rp||"";
+  if(c.kind==="block"){
+    if(!evalVisible(c.visibleWhen,rp))return"";
+    return`<div class="pv-card">${c.title?`<div class="pv-bt">${esc(txt(c.title))}</div>`:""}${(c.components||[]).map(x=>nodeHtml(x,rp)).join("")}</div>`;
+  }
+  if(c.kind==="section"){
+    if(!evalVisible(c.visibleWhen,rp))return"";
+    return`<div class="pv-sec">${c.title?`<div class="pv-st">${esc(txt(c.title))}</div>`:""}${(c.components||[]).map(x=>nodeHtml(x,rp)).join("")}</div>`;
+  }
+  if(c.kind==="roster"){
+    if(!evalVisible(c.visibleWhen,rp))return"";
+    return rosterHtml(c);
+  }
+  return fieldHtml(c,rp);
+}
+
+/* ---- roster ---- */
+function rosterCount(r){
+  if(r.countFrom){
+    let cf=Math.floor(Number(answers[r.countFrom]));
+    if(!Number.isFinite(cf)||cf<0)cf=0;
+    if(r.max!=null&&r.max!==""&&cf>Number(r.max))cf=Number(r.max);
+    return cf;
+  }
+  const stored=answers[r.name+"#count"];
+  if(stored!=null)return Math.max(0,Math.floor(Number(stored))||0);
+  return Number(r.min)||1;
+}
+function rowSummary(r,i){
+  const fields=(r.rowDisplay&&r.rowDisplay.length)?r.rowDisplay:(r.components||[]).filter(c=>c.kind==="field").slice(0,2).map(c=>c.name);
+  return fields.map(fn=>{const v=answers[`${r.name}#${i}#${fn}`];return(v==null||v==="")?null:String(v);}).filter(Boolean).join(" · ");
+}
+function hasRowData(r,i){return(r.components||[]).some(c=>{const v=answers[`${r.name}#${i}#${c.name}`];return v!=null&&v!==""&&!(Array.isArray(v)&&!v.length);});}
+function addRowLabel(r){return r.rowTitle?`+ Tambah ${esc(txt(r.rowTitle))}`:"+ Tambah baris";}
+function rowLabel(r,i){return r.rowTitle?`${esc(txt(r.rowTitle))} #${i+1}`:`Baris #${i+1}`;}
+function rosterHtml(r){
+  const count=rosterCount(r),manual=!r.countFrom,rn=esc(r.name);
+  const title=esc(txt(r.title)||r.name);
+  if(r.rosterType==="separate"){
+    let h=`<div class="pv-roster" id="pvroster_${rn}"><div class="pv-rh">${title}<span class="pv-tag">subhalaman</span></div>`;
+    if(r.countFrom&&count<=0)h+=`<div class="pv-rowempty">Isi dulu kolom "${esc(r.countFrom)}" untuk menentukan jumlah baris.</div>`;
+    else if(count<=0)h+=`<div class="pv-rowempty">Belum ada baris.</div>`;
+    else{h+=`<div class="pv-rowlist">`;for(let i=0;i<count;i++){const sum=rowSummary(r,i),filled=hasRowData(r,i);h+=`<div class="pv-rowitem"><div class="pv-rowinfo"><b>${rowLabel(r,i)}</b><span>${sum?esc(sum):"<i>belum diisi</i>"}</span></div>${manual?`<button class="pv-rowdel" data-delrow="${rn}" data-i="${i}">hapus</button>`:""}<button class="pv-rowopen" data-openrow="${rn}" data-i="${i}">${filled?"Edit":"Isi"} →</button></div>`;}h+=`</div>`;}
+    if(manual)h+=`<button class="pv-add" data-addrow="${rn}">${addRowLabel(r)}</button>`;
+    return h+`</div>`;
+  }
+  let h=`<div class="pv-roster" id="pvroster_${rn}"><div class="pv-rh">${title}</div>`;
+  if(r.countFrom&&count<=0)h+=`<div class="pv-rowempty">Isi dulu kolom "${esc(r.countFrom)}" untuk menentukan jumlah baris.</div>`;
+  for(let i=0;i<count;i++){const rp=`${r.name}#${i}#`;h+=`<div class="pv-row"><div class="pv-rownum"><span>${rowLabel(r,i)}</span>${manual?`<button class="pv-del" data-delrow="${rn}" data-i="${i}">hapus</button>`:""}</div>`;(r.components||[]).forEach(f=>h+=nodeHtml(f,rp));h+=`</div>`;}
+  if(manual)h+=`<button class="pv-add" data-addrow="${rn}">${addRowLabel(r)}</button>`;
+  return h+`</div>`;
+}
+function primaryRowField(r){if(r.rowDisplay&&r.rowDisplay.length)return r.rowDisplay[0];const f=(r.components||[]).find(c=>c.kind==="field");return f?f.name:null;}
+function openAddRowModal(roster){
+  saveAnswers();
+  const title=txt(roster.rowTitle)||"baris";
+  const bg=document.createElement("div");bg.className="pv-modal-bg";
+  bg.innerHTML=`<div class="pv-modal">
+    <h3>Tambah ${esc(title)}</h3>
+    <p class="pv-modal-sub">Masukkan nama/judul untuk ${esc(title)} ini.</p>
+    <input type="text" id="addRowInput" placeholder="${esc(title)}…">
+    <div class="pv-modal-actions"><button class="btn ghost" id="addRowCancel">Batal</button><button class="btn primary" id="addRowConfirm">+ Tambah ${esc(title)}</button></div>
+  </div>`;
+  document.body.appendChild(bg);
+  const input=bg.querySelector("#addRowInput");input.focus();
+  const close=()=>bg.remove();
+  bg.querySelector("#addRowCancel").addEventListener("click",close);
+  bg.addEventListener("click",e=>{if(e.target===bg)close();});
+  const confirmAdd=()=>{
+    const val=input.value.trim();
+    const idx=rosterCount(roster);
+    answers[`${roster.name}#count`]=idx+1;
+    if(val){const pf=primaryRowField(roster);if(pf)answers[`${roster.name}#${idx}#${pf}`]=val;}
+    close();renderCurrentPage();
+    setTimeout(()=>{const el=document.getElementById("pvroster_"+roster.name);if(el)el.scrollIntoView({behavior:"smooth",block:"nearest"});},20);
+  };
+  bg.querySelector("#addRowConfirm").addEventListener("click",confirmAdd);
+  input.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();confirmAdd();}if(e.key==="Escape")close();});
+}
+function findRoster(rname){function search(comps){for(const c of comps){if(c.kind==="roster"&&c.name===rname)return c;if(c.components){const f=search(c.components);if(f)return f;}}return null;}for(const p of PAGES){const f=search(p.components||[]);if(f)return f;}return null;}
+function deleteRow(rname,idx){
+  const roster=findRoster(rname),count=rosterCount(roster),prefix=rname+"#",nv={};
+  Object.keys(answers).forEach(k=>{
+    if(k===rname+"#count")return;
+    if(k.startsWith(prefix)){const m=k.slice(prefix.length).match(/^(\d+)#(.*)$/);if(m){let ri=+m[1];const fn=m[2];if(ri===idx)return;if(ri>idx)ri--;nv[`${prefix}${ri}#${fn}`]=answers[k];return;}}
+    nv[k]=answers[k];
+  });
+  nv[rname+"#count"]=Math.max(0,count-1);answers=nv;
+}
+
+/* ---- visibilitas & navigasi halaman ---- */
+function isPageVisible(i){return i>=0&&i<PAGES.length&&evalVisible(PAGES[i].visibleWhen,"");}
+function visiblePageIdx(){return PAGES.map((_,i)=>i).filter(isPageVisible);}
+function nextVisibleIndex(from){for(let i=from+1;i<PAGES.length;i++)if(isPageVisible(i))return i;return -1;}
+function prevVisibleIndex(from){for(let i=from-1;i>=0;i--)if(isPageVisible(i))return i;return -1;}
+function nearestVisibleIndex(idx){if(isPageVisible(idx))return idx;const f=nextVisibleIndex(idx-1);if(f!==-1)return f;const b=prevVisibleIndex(idx+1);return b!==-1?b:idx;}
+
+/* ---- skip-to ---- */
+function nodeContainsName(node,target){if(node.name===target)return true;return (node.components||[]).some(c=>nodeContainsName(c,target));}
+function pageIndexOfTarget(target){
+  if(!target)return null;
+  if(target==="__next")return null;
+  if(target==="__prev"){const p=prevVisibleIndex(curPage);return p!==-1?p:null;}
+  if(target==="__end"){const vis=visiblePageIdx();return vis.length?vis[vis.length-1]:PAGES.length-1;}
+  for(let i=0;i<PAGES.length;i++){if(nodeContainsName(PAGES[i],target))return nearestVisibleIndex(i);}
+  return null;
+}
+function fieldSkipTarget(f){
+  for(const s of (f.skips||[])){
+    if(!s.when||!s.to)continue;
+    const r=evalExprSrc(s.when,"");
+    if(r===undefined)continue;
+    if(r)return s.to;
+  }
+  if(CHOICE.has(f.type)&&Array.isArray(f.options)){
+    const v=answers[f.name];
+    const sel=Array.isArray(v)?v.map(String):[String(v)];
+    for(const o of f.options){if(o.skipTo&&sel.includes(String(o.value)))return o.skipTo;}
+  }
+  return null;
+}
+// Hitung field mana di halaman ini yang harus disembunyikan karena ada skip
+// yang sedang aktif (target ada di halaman yang sama), dan target halaman
+// lain bila skip yang aktif belum "selesai" sampai akhir halaman ini.
+function computePageSkipState(page){
+  const hidden=new Set();
+  const fields=[];
+  (function walk(n,prefix){(n.components||[]).forEach(c=>{if(c.kind==="field")fields.push(c);else if(c.kind!=="roster")walk(c,prefix);});})(page,"");
+  let skipActive=false,skipTarget=null,crossPageTarget=null;
+  for(const f of fields){
+    if(skipActive){
+      if(f.name===skipTarget){skipActive=false;skipTarget=null;}
+      else{hidden.add(f.name);continue;}
+    }
+    const t=fieldSkipTarget(f);
+    if(t&&t!=="__next"){
+      if(nodeContainsName(page,t)&&t!==f.name){skipActive=true;skipTarget=t;}
+      else{skipActive=true;skipTarget=null;crossPageTarget=t;}
+    }
+  }
+  return{hidden,crossPageTarget:skipActive?crossPageTarget:null};
+}
+let SKIP_HIDDEN=new Set();
+function clearPageAnswers(pageIdx){
+  const page=PAGES[pageIdx];if(!page)return;
+  (function walk(n,prefix){(n.components||[]).forEach(c=>{
+    if(c.kind==="field"){delete answers[prefix+c.name];}
+    else if(c.kind==="roster"){
+      const cnt=Math.max(rosterCount(c),Number(answers[`${c.name}#count`])||0);
+      for(let i=0;i<cnt;i++){(c.components||[]).forEach(f=>{delete answers[`${c.name}#${i}#${f.name}`];});}
+      delete answers[`${c.name}#count`];
+    }else{walk(c,prefix);}
+  });})(page,"");
+}
+function clearSkippedAnswers(fromIdx,toIdx){if(toIdx<=fromIdx+1)return;for(let i=fromIdx+1;i<toIdx;i++)clearPageAnswers(i);}
+
+/* ---- validasi sebelum lanjut/kirim ---- */
+function pageValidationTargets(page){
+  const out=[];
+  (function walk(n,prefix){(n.components||[]).forEach(c=>{
+    if(!evalVisible(c.visibleWhen,prefix))return;
+    if(c.kind==="field"){if(!SKIP_HIDDEN.has(c.name))out.push({c,rp:prefix});}
+    else if(c.kind==="roster"){
+      if(c.rosterType==="inline"){
+        const cnt=rosterCount(c);
+        for(let i=0;i<cnt;i++){const rp2=`${c.name}#${i}#`;(c.components||[]).forEach(f=>{if(evalVisible(f.visibleWhen,rp2))out.push({c:f,rp:rp2});});}
+      }
+    }else{walk(c,prefix);}
+  });})(page,"");
+  return out;
+}
+function validateCurrentPage(){
+  saveAnswers();
+  const targets=pageValidationTargets(PAGES[curPage]);
+  for(const {c,rp} of targets){
+    if(c.type==="note"||c.type==="markdown"||c.type==="hidden"||c.type==="calculated")continue;
+    if(!evalVisible(c.enableWhen,rp))continue;
+    const key=rp+c.name,val=answers[key];
+    const isRequired=!!c.required||!!(c.requiredWhen&&evalVisible(c.requiredWhen,rp));
+    if(isRequired&&pvEmpty(val))return{ok:false,key};
+    if(!pvEmpty(val)){
+      for(const v of (c.validations||[])){
+        if(!v.test||v.severity==="warning")continue;
+        const r=evalExprSrc(v.test,rp);
+        if(r===undefined)continue;
+        if(!r)return{ok:false,key};
+      }
+    }
+  }
+  return{ok:true,key:null};
+}
+function focusField(key){
+  const el=document.querySelector(`[data-fieldkey="${CSS.escape(key)}"]`);
+  if(!el)return;
+  el.classList.add("pv-field-err");
+  el.scrollIntoView({behavior:"smooth",block:"center"});
+  setTimeout(()=>el.classList.remove("pv-field-err"),2500);
+}
+
+/* ---- render shell ---- */
+function render(meta){
+  PAGES=SCHEMA.pages||[];
+  const title=txt(meta.title||txt(SCHEMA.title)||"Kuesioner");
+  document.title=title;
+  const sideHtml=PAGES.map((p,i)=>({p,i})).filter(({p})=>evalVisible(p.visibleWhen,"")).map(({p,i})=>`<div class="pv-pg" data-pg="${i}">${esc(txt(p.title)||p.name||`Halaman ${i+1}`)}</div>`).join("");
+  const userBar=RESP_USER?`
+    <div class="pv-ubar">
+      ${RESP_USER.picture?`<img class="pv-uavatar" src="${esc(RESP_USER.picture)}" referrerpolicy="no-referrer">`:`<div class="pv-uavatar"></div>`}
+      <span class="pv-uname">${esc(RESP_USER.name||RESP_USER.email)}</span>
+      <span class="pv-uemail">${esc(RESP_USER.email)}</span>
+      <button class="pv-ulogout" onclick="logout()">Keluar</button>
+    </div>`:"";
+  setRoot(`<div class="pv">
+    <div class="pv-bar"><span class="pv-title">${esc(title)}</span><span class="pv-brand">eForm · BPS Kaltim</span></div>
+    <div class="pv-main">
+      <aside class="pv-side"><div class="pv-side-h">Daftar Halaman</div>${sideHtml}</aside>
+      <div class="pv-body" id="pvBody"><div id="pvUserBar">${userBar}</div></div>
+    </div>
+  </div>`);
+  document.querySelectorAll(".pv-pg").forEach(el=>el.addEventListener("click",()=>goToPage(+el.dataset.pg)));
+  curPage=0;rosterView=null;
+  goToPage(0);
+}
+
+function logout(){clearRespSession();location.reload();}
+
+/* ---- navigasi ---- */
+function saveAnswers(){
+  document.querySelectorAll("[data-k]").forEach(el=>{answers[el.dataset.k]=el.value;});
+  document.querySelectorAll("[data-kr]:checked").forEach(el=>{answers[el.dataset.kr]=el.value;});
+  const cbKeys=new Set([...document.querySelectorAll("[data-kc]")].map(el=>el.dataset.kc));
+  cbKeys.forEach(key=>{answers[key]=[...document.querySelectorAll(`[data-kc="${CSS.escape(key)}"]:checked`)].map(el=>el.value);});
+}
+function goToPage(idx){
+  saveAnswers();rosterView=null;
+  idx=Math.max(0,Math.min(idx,PAGES.length-1));
+  curPage=nearestVisibleIndex(idx);
+  updateSidebarActive();renderCurrentPage();
+}
+function updateSidebarActive(){
+  const activeIdx=rosterView?rosterView.pageIdx:curPage;
+  document.querySelectorAll(".pv-pg").forEach((el,i)=>el.classList.toggle("active",i===activeIdx));
+}
+function renderCurrentPage(){
+  const pvBody=document.getElementById("pvBody");
+  if(!pvBody||!PAGES.length)return;
+  pvBody.scrollTop=0;
+  const p=PAGES[curPage],isLast=nextVisibleIndex(curPage)===-1;
+  const vis=visiblePageIdx(),posInVis=vis.indexOf(curPage)+1,totalVis=vis.length;
+  SKIP_HIDDEN=computePageSkipState(p).hidden;
+  SKIP_HIDDEN.forEach(name=>{delete answers[name];});
+  pending=[];
+  const userBar=document.getElementById("pvUserBar")?.outerHTML||"";
+  let html=`${userBar}<div class="pv-page"><h2 class="pv-h2">${esc(txt(p.title)||p.name||`Halaman ${curPage+1}`)}</h2>`;
+  (p.components||[]).forEach(c=>html+=nodeHtml(c,""));
+  html+=`</div>`;
+  if(isLast)html+=`<div class="msg" id="msg"></div>`;
+  if(isLast&&!ALLOW)html+=`<div class="view-hint">Tautan ini hanya untuk melihat kuesioner — tidak menerima jawaban.</div>`;
+  const isEdit=!!EXISTING_RESPONSE;
+  const prevBtn=prevVisibleIndex(curPage)!==-1?`<button class="btn" id="pvPrev">← Sebelumnya</button>`:`<span></span>`;
+  const nextBtn=isLast
+    ?(ALLOW?`<button class="btn primary" id="pvSubmit">${isEdit?"Perbarui Jawaban":"Kirim Jawaban"}</button>`:`<span></span>`)
+    :`<button class="btn primary" id="pvNext">Lanjut →</button>`;
+  html+=`<div class="pv-nav-err" id="pvNavErr"></div><div class="pv-nav">${prevBtn}<span class="pv-prog">Halaman ${posInVis} / ${totalVis}</span>${nextBtn}</div>`;
+  html+=`<div class="foot">eForm · BPS Provinsi Kalimantan Timur</div>`;
+  pvBody.innerHTML=html;
+  restoreAnswers();bindPageEvents();resolveOptions();
+}
+
+/* ---- roster row subhalaman ---- */
+function openRosterRow(rname,rowIdx){
+  saveAnswers();const roster=findRoster(rname);if(!roster)return;
+  rosterView={roster,rowIdx,pageIdx:curPage};updateSidebarActive();renderRosterRow();
+}
+function renderRosterRow(){
+  const pvBody=document.getElementById("pvBody");if(!pvBody||!rosterView)return;pvBody.scrollTop=0;
+  const {roster,rowIdx,pageIdx}=rosterView,rp=`${roster.name}#${rowIdx}#`;
+  const pageTitle=esc(txt(PAGES[pageIdx].title)||PAGES[pageIdx].name||"Kembali");
+  pending=[];
+  const userBar=document.getElementById("pvUserBar")?.outerHTML||"";
+  let html=`${userBar}<div class="pv-page">
+    <button class="btn" id="pvBack" style="margin-bottom:14px">← ${pageTitle}</button>
+    <h2 class="pv-h2">${esc(txt(roster.title)||roster.name)} — ${rowLabel(roster,rowIdx)}</h2>`;
+  (roster.components||[]).forEach(f=>html+=nodeHtml(f,rp));
+  html+=`<div class="pv-nav"><span></span><span></span><button class="btn primary" id="pvBackDone">Simpan &amp; kembali</button></div></div>`;
+  pvBody.innerHTML=html;
+  restoreAnswers();resolveOptions();
+  const backFn=()=>{saveAnswers();const rname=rosterView.roster.name;rosterView=null;updateSidebarActive();renderCurrentPage();setTimeout(()=>{const el=document.getElementById("pvroster_"+rname);if(el)el.scrollIntoView({behavior:"smooth",block:"center"});},40);};
+  document.getElementById("pvBack")?.addEventListener("click",backFn);
+  document.getElementById("pvBackDone")?.addEventListener("click",backFn);
+}
+
+/* ---- restore & bind ---- */
+function restoreAnswers(){
+  document.querySelectorAll("[data-k]").forEach(el=>{const v=answers[el.dataset.k];if(v!=null)el.value=v;});
+  document.querySelectorAll("[data-kr]").forEach(el=>{el.checked=(String(answers[el.dataset.kr])===el.value);});
+}
+function bindPageEvents(){
+  document.getElementById("pvPrev")?.addEventListener("click",()=>{const p=prevVisibleIndex(curPage);if(p!==-1)goToPage(p);});
+  document.getElementById("pvNext")?.addEventListener("click",()=>{
+    const gate=validateCurrentPage();
+    if(!gate.ok){
+      const err=document.getElementById("pvNavErr");if(err)err.textContent="Lengkapi pertanyaan wajib / perbaiki isian yang tidak valid sebelum melanjutkan.";
+      focusField(gate.key);
+      return;
+    }
+    const target=computePageSkipState(PAGES[curPage]).crossPageTarget;
+    const skipIdx=target?pageIndexOfTarget(target):null;
+    if(skipIdx!=null){clearSkippedAnswers(curPage,skipIdx);goToPage(skipIdx);return;}
+    const nxt=nextVisibleIndex(curPage);
+    if(nxt!==-1)goToPage(nxt);
+  });
+  document.getElementById("pvSubmit")?.addEventListener("click",()=>{
+    const gate=validateCurrentPage();
+    if(!gate.ok){
+      const err=document.getElementById("pvNavErr");if(err)err.textContent="Lengkapi pertanyaan wajib / perbaiki isian yang tidak valid sebelum mengirim.";
+      focusField(gate.key);
+      return;
+    }
+    submit();
+  });
+  document.querySelectorAll("[data-addrow]").forEach(btn=>btn.addEventListener("click",()=>{
+    const rname=btn.dataset.addrow,roster=findRoster(rname);if(!roster)return;
+    openAddRowModal(roster);
+  }));
+  document.querySelectorAll("[data-delrow]").forEach(btn=>btn.addEventListener("click",()=>{
+    saveAnswers();deleteRow(btn.dataset.delrow,+btn.dataset.i);renderCurrentPage();
+  }));
+  document.querySelectorAll("[data-openrow]").forEach(btn=>btn.addEventListener("click",()=>{
+    openRosterRow(btn.dataset.openrow,+btn.dataset.i);
+  }));
+  const cfFields=new Set();
+  (PAGES[curPage]?.components||[]).forEach(function walk(c){if(c.kind==="roster"&&c.countFrom)cfFields.add(c.countFrom);(c.components||[]).forEach(walk);});
+  cfFields.forEach(fname=>{const el=document.querySelector(`[data-k="${fname}"]`);if(el)el.addEventListener("change",()=>{saveAnswers();renderCurrentPage();});});
+  // Re-render hidup saat field apa pun berubah, supaya visibleWhen/enableWhen/skip-to
+  // langsung berefek tanpa menunggu pindah halaman (select/radio CHOICE diwire terpisah
+  // di resolveOptions karena baru ada di DOM setelah fetch opsi selesai).
+  document.querySelectorAll("[data-k]").forEach(el=>el.addEventListener("change",()=>{saveAnswers();renderCurrentPage();}));
+  document.querySelectorAll("[data-kr]").forEach(el=>el.addEventListener("change",()=>{saveAnswers();renderCurrentPage();}));
+}
+
+/* ---- async options ---- */
+function resolveOptions(){
+  const snap=pending.splice(0);
+  snap.forEach(async({c,rp,enabled})=>{
+    rp=rp||"";const key=rp+c.name,ke=esc(key);
+    const box=document.getElementById("opt-"+ke);if(!box)return;
+    const dis=enabled===false?" disabled":"";
+
+    // Dependency: placeholder {dep} di URL optionsApi + dataKey trigger eksplisit (depKeys)
+    const urlTpl=(c.optionsApi&&c.optionsApi.url)||"";
+    const urlDeps=[...urlTpl.matchAll(/\{([^}]+)\}/g)].map(m=>m[1]);
+    const explicitDeps=((c.optionsApi&&c.optionsApi.depKeys)||"").split(",").map(s=>s.trim()).filter(Boolean);
+    const deps=[...new Set([...urlDeps,...explicitDeps])];
+
+    // Pasang listener pada setiap field dependency: ketika berubah, hapus
+    // jawaban field ini lalu re-render halaman (cascade otomatis lewat missing-dep check).
+    function wireDeps(){
+      deps.forEach(dep=>{
+        const el=document.querySelector(`[data-k="${CSS.escape(dep)}"]`);
+        if(el&&!el._depWired){
+          el._depWired=true;
+          el.addEventListener("change",()=>{saveAnswers();answers[key]="";renderCurrentPage();});
+        }
+      });
+    }
+
+    // Jika ada dependency yang belum terisi → jangan fetch, tampilkan placeholder
+    const missing=deps.find(dep=>{const v=answers[dep];return v==null||v==="";});
+    if(missing){
+      answers[key]="";
+      box.innerHTML=`<select class="pv-in" disabled><option value="">— isi kolom sebelumnya dahulu —</option></select>`;
+      wireDeps();
+      return;
+    }
+
+    wireDeps();
+    const opts=await optionsFor(c);
+    const multi=(c.type==="checkbox"||c.type==="multiselect");
+    const saved=answers[key];
+    if(c.type==="select"){
+      const cur=saved!=null?String(saved):"";
+      box.innerHTML=`<select data-k="${ke}" class="pv-in"${dis}><option value="">— pilih —</option>${opts.map(o=>`<option value="${esc(o.value)}"${cur===String(o.value)?" selected":""}>${esc(o.label)}</option>`).join("")}</select>`;
+      // Pasang change listener agar field downstream yang mengandalkan field ini
+      // bisa ikut re-render saat nilai berubah (wireDeps dari field lain baru bisa
+      // menemukan elemen ini setelah SELECT berhasil dirender).
+      if(enabled!==false)box.querySelector("select")?.addEventListener("change",()=>{saveAnswers();renderCurrentPage();});
+    }else{
+      const savedArr=Array.isArray(saved)?saved.map(String):(saved!=null?[String(saved)]:[]);
+      box.innerHTML=opts.map(o=>{const chk=multi?savedArr.includes(String(o.value)):String(saved)===String(o.value);const attr=multi?`data-kc="${ke}"`:`name="r_${ke}" data-kr="${ke}"`;return`<label class="pv-opt"><input type="${multi?"checkbox":"radio"}" ${attr} value="${esc(o.value)}"${chk?" checked":""}${dis}> ${esc(o.label)}</label>`;}).join("")||`<span class="pv-loading">tidak ada pilihan</span>`;
+      if(enabled!==false)box.querySelectorAll("[data-kr],[data-kc]").forEach(el=>el.addEventListener("change",()=>{saveAnswers();renderCurrentPage();}));
+    }
+  });
+}
+
+/* ---- submit ---- */
+function collectAll(){
+  saveAnswers();
+  const ans={};
+  Object.entries(answers).forEach(([k,v])=>{if(Array.isArray(v)?v.length>0:(v!==""&&v!=null))ans[k]=v;});
+  return ans;
+}
+async function submit(){
+  const btn=document.getElementById("pvSubmit"),msg=document.getElementById("msg");
+  if(!btn||!msg)return;
+  msg.className="msg";
+  const ans=collectAll();
+  if(!Object.keys(ans).length){msg.className="msg err";msg.textContent="Belum ada jawaban yang diisi.";return;}
+  btn.disabled=true;btn.textContent="Mengirim…";
+  try{
+    const headers=pubHeaders({"Content-Type":"application/json"});
+    const r=await fetch("/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/responses",
+      {method:"POST",headers,body:JSON.stringify({answers:ans})});
+    const d=await r.json();
+    if(r.status===401){msg.className="msg err";msg.textContent="Sesi habis. Silakan login ulang.";btn.disabled=false;btn.textContent=EXISTING_RESPONSE?"Perbarui Jawaban":"Kirim Jawaban";return;}
+    if(!r.ok)throw new Error(d.error||"Gagal mengirim");
+    EXISTING_RESPONSE=d; // update state agar tombol berganti jadi "Perbarui"
+    msg.className="msg ok";
+    msg.textContent=EXISTING_RESPONSE?"Jawaban berhasil diperbarui.":"Terima kasih! Jawaban Anda sudah terkirim.";
+    btn.textContent="Perbarui Jawaban";btn.disabled=false;
+    document.getElementById("pvBody")?.scrollTo({top:0,behavior:"smooth"});
+  }catch(e){msg.className="msg err";msg.textContent=e.message;btn.disabled=false;btn.textContent=EXISTING_RESPONSE?"Perbarui Jawaban":"Kirim Jawaban";}
+}
+
+fetchForm().catch(e=>showErr(e.message));
+</script>
+</body>
+</html>

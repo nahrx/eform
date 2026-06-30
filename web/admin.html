@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard · eForm BPS Kaltim</title>
+<link rel="stylesheet" href="/admin.css">
+</head>
+<body>
+<header>
+  <h1>eForm · Dashboard</h1>
+  <span class="who" id="who"></span>
+  <button class="btn primary" onclick="location.href='/builder'">+ Kuesioner baru</button>
+  <button class="btn" id="logout">Keluar</button>
+</header>
+<main>
+  <div class="bar"><h2>Daftar Kuesioner</h2><button class="btn" id="refresh">↻ Muat ulang</button></div>
+  <table id="tbl"><thead><tr><th>Judul</th><th>Status</th><th>Diperbarui</th><th>Jawaban</th><th></th></tr></thead>
+  <tbody id="rows"><tr><td colspan="5" class="empty">Memuat…</td></tr></tbody></table>
+</main>
+
+<dialog id="shareDlg">
+  <div class="dlg-h" style="justify-content:space-between"><span>Bagikan kuesioner</span><button class="btn" onclick="shareDlg.close()">✕</button></div>
+  <div class="dlg-b">
+    <div class="muted" id="shareNote"></div>
+    <div class="row"><input id="shareLabel" placeholder="Label (opsional, mis. 'Petugas Lapangan')" style="flex:1"></div>
+    <div class="row"><label class="muted"><input type="checkbox" id="shareAllow" checked> Terima jawaban publik</label></div>
+    <div class="row"><input id="sharePw" type="text" placeholder="Password (opsional)" style="flex:1"></div>
+    <button class="btn primary" id="makeShare">Buat tautan share</button>
+    <div id="shareList" style="margin-top:14px"></div>
+  </div>
+</dialog>
+
+<script src="/admin.js"></script>
+</body>
+</html>
