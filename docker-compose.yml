@@ -1,0 +1,114 @@
+# ============================================================
+# eForm BPS Kalimantan Timur — Docker Compose
+# ============================================================
+# Penggunaan:
+#   1. Salin .env.example ke .env, lalu sesuaikan nilainya.
+#   2. docker compose up -d
+#
+# Urutan startup otomatis:
+#   db  →  app (migrasi + seed superadmin)  →  seeder (data wilayah)
+#
+# Memerlukan Docker Compose v2 (perintah: docker compose).
+# ============================================================
+
+services:
+  # ----------------------------------------------------------
+  # PostgreSQL
+  # ----------------------------------------------------------
+  db:
+    image: postgres:16-alpine
+    container_name: eform_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-eform}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-eform_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-eform}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-eform} -d ${POSTGRES_DB:-eform}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - eform_net
+
+  # ----------------------------------------------------------
+  # Aplikasi utama
+  # Migrasi skema & seed superadmin dijalankan otomatis saat startup.
+  # ----------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: eform-backend:latest # diberi nama agar di-reuse oleh service seeder
+    container_name: eform_app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgres://${POSTGRES_USER:-eform}:${POSTGRES_PASSWORD:-eform_secret}@db:5432/${POSTGRES_DB:-eform}?sslmode=disable
+
+      # JWT — WAJIB diganti di produksi (string panjang acak)
+      JWT_SECRET: ${JWT_SECRET:-GANTI_DI_PRODUKSI_PAKAI_STRING_PANJANG_ACAK}
+      JWT_TTL_HOURS: ${JWT_TTL_HOURS:-24}
+
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8080}
+      WEB_DIR: /app/web
+      PUBLIC_DIR: /app/public
+
+      # Superadmin awal (hanya dibuat jika tabel users masih kosong)
+      SUPERADMIN_USERNAME: ${SUPERADMIN_USERNAME:-admin}
+      SUPERADMIN_EMAIL: ${SUPERADMIN_EMAIL:-admin@bps.go.id}
+      SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD:-admin12345}
+
+      # Google OAuth (opsional — kosongkan jika tidak dipakai)
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URL: ${GOOGLE_REDIRECT_URL:-}
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:8080/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    networks:
+      - eform_net
+
+  # ----------------------------------------------------------
+  # Seeder data wilayah Indonesia
+  # Dijalankan sekali setelah app sehat (migrasi sudah selesai).
+  # Idempoten: aman dijalankan ulang, tidak menduplikasi data.
+  # ----------------------------------------------------------
+  seeder:
+    image: eform-backend:latest # reuse image yang sama, tidak build ulang
+    container_name: eform_seeder
+    restart: "no" # cukup satu kali; restart manual jika perlu
+    depends_on:
+      app:
+        condition: service_healthy
+    command: ["./eform-seeder", "-file", "./data/wilayah_indonesia.csv"]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-eform}:${POSTGRES_PASSWORD:-eform_secret}@db:5432/${POSTGRES_DB:-eform}?sslmode=disable
+    networks:
+      - eform_net
+
+# ----------------------------------------------------------
+# Volumes & Networks
+# ----------------------------------------------------------
+volumes:
+  db_data:
+    driver: local
+
+networks:
+  eform_net:
+    driver: bridge

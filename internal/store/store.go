@@ -346,6 +346,45 @@ func (s *Store) CountResponsesByForm(ctx context.Context, formID string) (int64,
 	return n, err
 }
 
+/* ---------------- drafts ---------------- */
+
+func (s *Store) UpsertDraft(ctx context.Context, formID string, shareID *string, respondentID string, answers json.RawMessage, curPage int) (*models.Draft, error) {
+	if len(answers) == 0 {
+		answers = json.RawMessage(`{}`)
+	}
+	d := &models.Draft{}
+	err := s.pool.QueryRow(ctx,
+		`INSERT INTO response_drafts(form_id,share_id,respondent_id,answers,cur_page)
+		 VALUES ($1,$2,$3,$4,$5)
+		 ON CONFLICT (form_id,respondent_id)
+		 DO UPDATE SET share_id=EXCLUDED.share_id, answers=EXCLUDED.answers,
+		               cur_page=EXCLUDED.cur_page, saved_at=now()
+		 RETURNING id,form_id,share_id,respondent_id,answers,cur_page,saved_at`,
+		formID, shareID, respondentID, answers, curPage,
+	).Scan(&d.ID, &d.FormID, &d.ShareID, &d.RespondentID, &d.Answers, &d.CurPage, &d.SavedAt)
+	return d, err
+}
+
+func (s *Store) GetDraftByFormAndRespondent(ctx context.Context, formID, respondentID string) (*models.Draft, error) {
+	d := &models.Draft{}
+	err := s.pool.QueryRow(ctx,
+		`SELECT id,form_id,share_id,respondent_id,answers,cur_page,saved_at
+		 FROM response_drafts WHERE form_id=$1 AND respondent_id=$2`,
+		formID, respondentID,
+	).Scan(&d.ID, &d.FormID, &d.ShareID, &d.RespondentID, &d.Answers, &d.CurPage, &d.SavedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return d, err
+}
+
+func (s *Store) DeleteDraft(ctx context.Context, formID, respondentID string) error {
+	_, err := s.pool.Exec(ctx,
+		`DELETE FROM response_drafts WHERE form_id=$1 AND respondent_id=$2`,
+		formID, respondentID)
+	return err
+}
+
 /* ---------------- wilayah ---------------- */
 
 // GetWilayahByParent mengembalikan daftar wilayah anak dari kodeParent.

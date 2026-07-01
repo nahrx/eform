@@ -8,12 +8,12 @@
 :root{
   --ink:#13171e;--ink-soft:#4a525e;--muted:#79828f;
   --surface:#eef1f5;--panel:#fff;--panel-2:#f7f9fb;
-  --line:#dfe4ea;
+  --line:#dfe4ea;--line-2:#eef1f5;
   --accent:#0e7490;--accent-ink:#0b5563;--accent-soft:#d6edf1;
   --roster:#047857;
-  --ok:#15803d;--ok-soft:#dcfce7;--bad:#b42318;--bad-soft:#fde7e4;
+  --ok:#15803d;--ok-soft:#dcfce7;--bad:#b42318;--bad-soft:#fde7e4;--warn:#b45309;
   --radius:10px;--radius-s:7px;
-  --shadow:0 1px 2px rgba(19,23,30,.06),0 8px 24px -16px rgba(19,23,30,.25);
+  --shadow:0 1px 3px rgba(19,23,30,.07),0 4px 14px -6px rgba(19,23,30,.1);
   --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Inter,sans-serif;
   --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
 }
@@ -21,106 +21,148 @@
 html,body{height:100%;margin:0}
 body{font-family:var(--sans);color:var(--ink);background:var(--surface);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
 button{font-family:inherit;cursor:pointer}
-input,select,textarea{font-family:inherit;font-size:13px;color:var(--ink)}
+input,select,textarea{font-family:inherit;font-size:13.5px;color:var(--ink)}
 
 /* ---- layout ---- */
 .pv{display:flex;flex-direction:column;height:100vh}
-.pv-bar{display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line);flex:none}
-.pv-title{font-weight:600;font-size:15px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pv-bar{display:flex;align-items:center;gap:10px;padding:11px 18px;background:var(--panel);border-bottom:1px solid var(--line);flex:none}
+.pv-title{font-weight:700;font-size:15px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pv-brand{font-family:var(--mono);font-size:10.5px;color:var(--muted);flex:none;white-space:nowrap}
 .pv-main{flex:1;display:flex;min-height:0}
-.pv-side{width:222px;flex:none;background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding:13px 11px}
-.pv-side-h{font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 4px 9px}
-.pv-pg{padding:9px 10px;border-radius:var(--radius-s);cursor:pointer;font-size:12.5px;font-weight:500;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pv-side{width:230px;flex:none;background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding:14px 12px}
+.pv-side-h{font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 4px 10px}
+.pv-pg{padding:9px 10px;border-radius:var(--radius-s);cursor:pointer;font-size:12.5px;font-weight:500;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:background .1s}
 .pv-pg:hover{background:var(--panel-2)}
-.pv-pg.active{background:var(--accent-soft);color:var(--accent-ink)}
-.pv-body{flex:1;overflow:auto;padding:26px 18px 40px}
+.pv-pg.active{background:var(--accent-soft);color:var(--accent-ink);font-weight:600}
+.pv-content{flex:1;display:flex;flex-direction:column;min-height:0;min-width:0}
+.pv-body{flex:1;overflow:auto;padding:28px 20px 36px}
+
+/* ---- draft note ---- */
+.pv-draft-note{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 18px;background:var(--accent-soft);border-bottom:1px solid #c3dfe5;font-size:12.5px;color:var(--accent-ink);flex:none}
+.pv-draft-note button{border:none;background:transparent;color:var(--accent-ink);font-size:16px;line-height:1;cursor:pointer;padding:0 4px;opacity:.7}
+.pv-draft-note button:hover{opacity:1}
 
 /* ---- user bar ---- */
-.pv-ubar{display:flex;align-items:center;gap:9px;max-width:640px;margin:0 auto 18px;padding:9px 12px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-s)}
-.pv-uavatar{width:28px;height:28px;border-radius:50%;object-fit:cover;flex:none;background:var(--accent-soft)}
-.pv-uname{font-size:12.5px;font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pv-ubar{display:flex;align-items:center;gap:10px;max-width:660px;margin:0 auto 20px;padding:10px 14px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-s);box-shadow:var(--shadow)}
+.pv-uavatar{width:30px;height:30px;border-radius:50%;object-fit:cover;flex:none;background:var(--accent-soft)}
+.pv-uname{font-size:13px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pv-uemail{font-size:11.5px;color:var(--muted);flex:none}
-.pv-ulogout{border:none;background:transparent;color:var(--muted);font-size:12px;cursor:pointer;padding:3px 6px;border-radius:4px}
+.pv-ulogout{border:none;background:transparent;color:var(--muted);font-size:12px;cursor:pointer;padding:4px 8px;border-radius:5px;transition:.1s}
 .pv-ulogout:hover{background:var(--panel-2);color:var(--ink)}
 
 /* ---- page content ---- */
-.pv-page{max-width:640px;margin:0 auto}
-.pv-h2{font-size:18px;margin:0 0 16px}
-.pv-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;margin-bottom:16px}
-.pv-bt{font-weight:600;font-size:14px;margin-bottom:12px}
-.pv-sec{border:1.5px solid var(--line);border-radius:9px;padding:12px;margin-bottom:14px;background:var(--panel-2)}
-.pv-st{font-weight:600;font-size:13px;color:var(--ink-soft);margin-bottom:10px}
-.pv-field{margin-bottom:14px}
-.pv-lab{display:block;font-size:13px;font-weight:500;margin-bottom:6px}
+.pv-page{max-width:660px;margin:0 auto 10px}
+.pv-h2{font-size:21px;font-weight:700;margin:0 0 20px;line-height:1.3;color:var(--ink)}
+.pv-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px 22px;margin-bottom:14px}
+.pv-bt{font-weight:700;font-size:15px;margin:0 0 16px;padding-bottom:11px;border-bottom:1px solid var(--line-2);color:var(--ink)}
+.pv-sec{border:1px solid var(--line);border-top:3px solid var(--accent);border-radius:9px;padding:14px 16px;margin-bottom:16px;background:var(--panel-2)}
+.pv-st{font-weight:700;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent-ink);margin-bottom:14px}
+.pv-field{margin-bottom:18px}
+.pv-lab{display:block;font-size:13.5px;font-weight:600;margin-bottom:5px;line-height:1.4;color:var(--ink)}
 .pv-req{color:var(--bad)}
-.pv-hint{font-size:11.5px;color:var(--muted);margin-bottom:6px}
+.pv-hint{font-size:12px;color:var(--muted);margin-bottom:7px;line-height:1.55}
 .pv-unit{font-size:12px;color:var(--muted);margin-left:6px}
-.pv-in{width:100%;border:1px solid var(--line);border-radius:var(--radius-s);padding:9px 10px;background:var(--panel);font-size:13px}
+.pv-in{width:100%;border:1.5px solid var(--line);border-radius:var(--radius-s);padding:10px 12px;background:var(--panel);font-size:13.5px;transition:border-color .15s,box-shadow .15s}
 .pv-in:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
-.pv-in:disabled{background:var(--panel-2);color:var(--muted);cursor:not-allowed}
+.pv-in:disabled{background:var(--panel-2);color:var(--muted);cursor:not-allowed;border-color:var(--line)}
 .pv-vmsg{font-size:11.5px;margin-top:5px}
 .pv-vmsg.error{color:var(--bad)}
-.pv-vmsg.warning{color:#b45309}
-.pv-field-err{outline:2px solid var(--bad);outline-offset:3px;border-radius:8px;transition:outline-color .2s}
-.pv-nav-err{color:var(--bad);font-size:12.5px;margin-bottom:8px;text-align:right;min-height:1em}
-textarea.pv-in{resize:vertical;min-height:60px}
-.pv-radios{display:flex;flex-direction:column;gap:4px}
-.pv-opt{display:flex;align-items:center;gap:8px;font-size:13px;padding:3px 0;cursor:pointer}
-.pv-note{background:var(--accent-soft);border-radius:8px;padding:10px;margin-bottom:14px;font-size:13px}
+.pv-vmsg.warning{color:var(--warn)}
+.pv-vmsg.req{color:var(--muted)}
+.pv-inbtn{display:flex;gap:8px;align-items:center}
+.pv-inbtn .pv-in{flex:1}
+.pv-smbtn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:8px 12px;border-radius:var(--radius-s);font-size:12.5px;font-weight:500;cursor:pointer;white-space:nowrap;flex:none;transition:.12s}
+.pv-smbtn:hover:not(:disabled){border-color:#c6cdd6;background:var(--panel-2)}
+.pv-smbtn:disabled{opacity:.5;cursor:not-allowed}
+.pv-geomsg{font-size:11.5px;color:var(--muted);margin-top:5px}
+.pv-geomsg.error{color:var(--bad)}
+.pv-sigwrap{display:flex;flex-direction:column;gap:8px}
+.pv-sigpad{width:100%;max-width:400px;height:140px;border:1.5px solid var(--line);border-radius:var(--radius-s);background:#fafcff;touch-action:none;cursor:crosshair}
+.pv-sigpad[data-disabled="1"]{cursor:not-allowed;opacity:.6}
+.pv-sigactions{display:flex}
+.pv-scanmodal video{width:100%;max-width:340px;border-radius:var(--radius-s);background:#000;margin-bottom:14px}
+.pv-field-err{outline:2px solid var(--bad);outline-offset:4px;border-radius:8px;transition:outline-color .2s}
+textarea.pv-in{width:100%;resize:vertical;min-height:72px}
+.pv-md{line-height:1.65}.pv-md h1,.pv-md h2,.pv-md h3,.pv-md h4{margin:.4em 0 .3em;line-height:1.25}
+.pv-md h1{font-size:1.4em}.pv-md h2{font-size:1.2em}.pv-md h3{font-size:1.05em}
+.pv-md p{margin:.5em 0}.pv-md ul,.pv-md ol{padding-left:1.4em;margin:.4em 0}.pv-md li{margin:.15em 0}
+.pv-md blockquote{border-left:3px solid var(--accent);margin:.5em 0;padding:.3em .9em;color:var(--ink-soft);background:rgba(0,0,0,.02)}
+.pv-md code{font-family:var(--mono);font-size:.9em;background:rgba(0,0,0,.06);padding:1px 5px;border-radius:4px}
+.pv-md hr{border:none;border-top:1px solid var(--line);margin:.8em 0}
+.pv-md a{color:var(--accent)}
+.pv-radios{display:flex;flex-direction:column;gap:2px}
+.pv-opt{display:flex;align-items:center;gap:10px;font-size:13.5px;padding:7px 9px;border-radius:7px;cursor:pointer;margin:0 -5px;transition:background .1s}
+.pv-opt:hover{background:var(--panel-2)}
+.pv-opt input[type=radio],.pv-opt input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent);flex:none;cursor:pointer}
+.pv-note{background:linear-gradient(135deg,var(--accent-soft),#ecf7f9);border:1px solid #c3dfe5;border-left:3px solid var(--accent);border-radius:8px;padding:12px 14px;margin-bottom:16px;font-size:13px;line-height:1.55}
 .pv-loading{font-size:12.5px;color:var(--muted);padding:9px 11px;border:1px dashed var(--line);border-radius:7px;background:var(--panel-2)}
 
 /* ---- roster ---- */
-.pv-roster{border:1.5px dashed var(--roster);border-radius:9px;padding:12px;margin-bottom:14px;background:#eefaf3}
-.pv-rh{font-weight:600;font-size:13px;color:var(--roster);margin-bottom:8px}
-.pv-tag{font-family:var(--mono);font-size:9.5px;background:#d8f3e5;padding:2px 6px;border-radius:4px;margin-left:6px;vertical-align:middle}
-.pv-rowempty{font-size:12px;color:var(--muted);padding:4px 0 8px}
-.pv-rowlist{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
-.pv-rowitem{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:10px 12px}
+.pv-roster{border:1.5px solid #b5dfc7;border-radius:10px;padding:16px;margin-bottom:16px;background:#f4fcf8}
+.pv-rh{font-weight:700;font-size:13.5px;color:var(--roster);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.pv-tag{font-family:var(--mono);font-size:9.5px;background:#d8f3e5;padding:2px 6px;border-radius:4px;color:var(--roster);font-weight:600;vertical-align:middle}
+.pv-rowempty{font-size:12px;color:var(--muted);padding:4px 0 10px}
+.pv-rowlist{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+.pv-rowitem{display:flex;align-items:center;gap:10px;border:1px solid #d8eedf;border-radius:8px;background:var(--panel);padding:11px 14px;transition:border-color .1s}
+.pv-rowitem:hover{border-color:#99d4b4}
 .pv-rowinfo{flex:1;min-width:0}
-.pv-rowinfo b{font-size:13px;display:block}
-.pv-rowinfo span{font-size:12px;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+.pv-rowinfo b{font-size:13px;font-weight:600;display:block}
+.pv-rowinfo span{font-size:12px;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block;margin-top:2px}
 .pv-rowinfo i{color:var(--muted)}
-.pv-rowopen{border:1px solid var(--roster);background:var(--panel);color:var(--roster);border-radius:6px;padding:7px 13px;font-weight:600;font-size:12px;cursor:pointer;flex:none}
-.pv-rowopen:hover{background:#eefaf3}
-.pv-rowdel{border:none;background:transparent;color:var(--bad);font-size:11px;cursor:pointer;flex:none}
-.pv-row{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:12px;margin-bottom:10px}
-.pv-rownum{font-size:11px;color:var(--muted);margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
-.pv-del{border:none;background:transparent;color:var(--bad);font-size:11px;cursor:pointer}
-.pv-add{border:1px solid var(--roster);background:var(--roster);color:#fff;border-radius:6px;padding:8px;width:100%;font-weight:600;cursor:pointer;margin-top:4px;transition:.12s}
-.pv-add:hover{background:#035f44;border-color:#035f44}
-.pv-modal-bg{position:fixed;inset:0;background:rgba(19,23,30,.45);display:flex;align-items:center;justify-content:center;z-index:80}
-.pv-modal{background:var(--panel);border-radius:var(--radius);padding:22px;max-width:360px;width:92%;box-shadow:var(--shadow)}
-.pv-modal h3{margin:0 0 4px;font-size:15px}
+.pv-rowopen{border:1px solid var(--roster);background:var(--panel);color:var(--roster);border-radius:6px;padding:7px 13px;font-weight:600;font-size:12px;cursor:pointer;flex:none;transition:.1s}
+.pv-rowopen:hover{background:#edfaf4}
+.pv-rowdel{border:none;background:transparent;color:var(--bad);font-size:11.5px;cursor:pointer;flex:none;padding:4px 7px;border-radius:5px;transition:.1s}
+.pv-rowdel:hover{background:var(--bad-soft)}
+.pv-row{border:1px solid #dceee4;border-radius:8px;background:var(--panel);padding:14px 16px;margin-bottom:10px}
+.pv-rownum{font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:12px;display:flex;justify-content:space-between;align-items:center}
+.pv-del{border:none;background:transparent;color:var(--bad);font-size:11.5px;cursor:pointer;padding:3px 6px;border-radius:5px;transition:.1s}
+.pv-del:hover{background:var(--bad-soft)}
+.pv-add{border:1.5px dashed #7cc9a0;background:transparent;color:var(--roster);border-radius:8px;padding:10px;width:100%;font-weight:600;font-size:13px;cursor:pointer;transition:.15s}
+.pv-add:hover{background:#edfaf4;border-color:#47b077;border-style:solid}
+
+/* ---- save draft button ---- */
+.pv-savedraft{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:var(--radius-s);padding:8px 14px;font-size:13px;font-weight:500;cursor:pointer;transition:.12s;white-space:nowrap}
+.pv-savedraft:hover:not(:disabled){border-color:#c6cdd6;background:var(--panel-2)}
+.pv-savedraft:disabled{opacity:.5;cursor:not-allowed}
+.pv-savedraft.saved{border-color:var(--ok);color:var(--ok);background:var(--ok-soft)}
+
+/* ---- modal ---- */
+.pv-modal-bg{position:fixed;inset:0;background:rgba(19,23,30,.5);display:flex;align-items:center;justify-content:center;z-index:80;backdrop-filter:blur(2px)}
+.pv-modal{background:var(--panel);border-radius:var(--radius);padding:24px;max-width:400px;width:92%;box-shadow:0 8px 40px -8px rgba(19,23,30,.3)}
+.pv-modal h3{margin:0 0 4px;font-size:16px;font-weight:700}
 .pv-modal .pv-modal-sub{font-size:12.5px;color:var(--muted);margin:0 0 14px}
-.pv-modal input{width:100%;border:1px solid var(--line);border-radius:var(--radius-s);padding:9px 10px;font-size:13px;margin-bottom:16px;box-sizing:border-box}
-.pv-modal input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.pv-modal input,.pv-modal-in{width:100%;border:1.5px solid var(--line);border-radius:var(--radius-s);padding:10px 11px;font-size:13px;margin-bottom:12px;box-sizing:border-box;transition:border-color .15s,box-shadow .15s;font-family:inherit;color:var(--ink)}
+.pv-modal input:focus,.pv-modal-in:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .pv-modal-actions{display:flex;justify-content:flex-end;gap:8px}
 
-/* ---- navigation ---- */
-.pv-nav{max-width:640px;margin:20px auto 0;display:flex;align-items:center;justify-content:space-between;gap:10px;padding-bottom:6px}
-.pv-prog{font-size:12px;color:var(--muted)}
-.msg{max-width:640px;margin:10px auto 0;padding:12px 14px;border-radius:9px;font-size:13px;display:none}
-.msg.ok{background:var(--ok-soft);color:var(--ok);display:block}
-.msg.err{background:var(--bad-soft);color:var(--bad);display:block}
-.view-hint{max-width:640px;margin:10px auto 0;font-size:13px;color:var(--muted);padding:10px 12px;background:var(--panel-2);border:1px solid var(--line);border-radius:var(--radius-s)}
-.foot{text-align:center;color:var(--muted);font-family:var(--mono);font-size:10.5px;letter-spacing:.03em;padding:18px 0 4px}
+/* ---- navigation footer ---- */
+.pv-nav-area{flex:none;background:var(--panel);border-top:1px solid var(--line);padding:0 20px 4px;box-shadow:0 -2px 16px rgba(19,23,30,.06)}
+.pv-nav{max-width:660px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 0 14px}
+.pv-nav-err{max-width:660px;margin:0 auto;font-size:12.5px;text-align:center;color:var(--bad);padding:8px 0 0;min-height:0}
+.pv-prog{font-size:12.5px;color:var(--muted);font-weight:500}
+.msg{max-width:660px;margin:10px auto 0;padding:13px 16px;border-radius:9px;font-size:13.5px;font-weight:500;display:none}
+.msg.ok{background:var(--ok-soft);color:var(--ok);display:block;border:1px solid #a3e5b6}
+.msg.err{background:var(--bad-soft);color:var(--bad);display:block;border:1px solid #f3b8b0}
+.view-hint{max-width:660px;margin:10px auto 0;font-size:13px;color:var(--muted);padding:11px 14px;background:var(--panel-2);border:1px solid var(--line);border-radius:var(--radius-s)}
+.foot{text-align:center;color:var(--muted);font-family:var(--mono);font-size:10.5px;letter-spacing:.03em;padding:20px 0 6px}
 
 /* ---- buttons ---- */
-.btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:7px 14px;border-radius:var(--radius-s);font-size:13px;font-weight:500;transition:.12s;cursor:pointer}
+.btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:8px 16px;border-radius:var(--radius-s);font-size:13px;font-weight:500;transition:.12s;cursor:pointer}
 .btn:hover{border-color:#c6cdd6;background:var(--panel-2)}
-.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700;padding:9px 22px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700;padding:10px 24px;border-radius:var(--radius-s)}
 .btn.primary:hover{background:var(--accent-ink);border-color:var(--accent-ink)}
 .btn.primary:disabled{opacity:.6;cursor:default}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--ink-soft)}
+.btn.ghost:hover{background:var(--panel-2)}
 
 /* ---- login gate ---- */
 .gate-wrap{display:flex;align-items:center;justify-content:center;height:100vh;background:var(--surface)}
-.gate-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:32px 28px;max-width:380px;width:92%;text-align:center;box-shadow:var(--shadow)}
-.gate-icon{font-size:36px;margin-bottom:12px}
-.gate-title{font-size:17px;font-weight:700;margin:0 0 6px}
-.gate-sub{font-size:13px;color:var(--muted);margin:0 0 20px;line-height:1.5}
+.gate-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:34px 30px;max-width:400px;width:92%;text-align:center;box-shadow:0 2px 4px rgba(19,23,30,.06),0 12px 40px -16px rgba(19,23,30,.2)}
+.gate-icon{font-size:38px;margin-bottom:14px}
+.gate-title{font-size:18px;font-weight:700;margin:0 0 6px}
+.gate-sub{font-size:13.5px;color:var(--muted);margin:0 0 22px;line-height:1.55}
 .gate-form{font-size:13px;font-weight:600;color:var(--accent);margin-bottom:18px;display:block}
-.google-btn{display:inline-flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--panel);padding:10px 20px;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;width:100%;justify-content:center;transition:.12s}
+.google-btn{display:inline-flex;align-items:center;gap:10px;border:1.5px solid var(--line);background:var(--panel);padding:11px 22px;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;width:100%;justify-content:center;transition:.12s}
 .google-btn:hover{border-color:#c6cdd6;background:var(--panel-2)}
 .google-btn svg{flex:none}
 .gate-err{margin-top:12px;font-size:12.5px;color:var(--bad)}
@@ -128,13 +170,37 @@ textarea.pv-in{resize:vertical;min-height:60px}
 /* ---- init / password gate ---- */
 .init-wrap{display:flex;align-items:center;justify-content:center;height:100vh;background:var(--surface)}
 .init-msg{font-size:13px;color:var(--muted)}
-.pw-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:24px;max-width:340px;width:90%;text-align:center;box-shadow:var(--shadow)}
-.pw-card h3{margin:0 0 6px;font-size:16px}
-.pw-card .pw-sub{font-size:13px;color:var(--muted);margin:0 0 14px}
-.pw-card input{width:100%;border:1px solid var(--line);border-radius:var(--radius-s);padding:9px 10px;font-size:13px;margin-bottom:10px}
+.pw-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:26px;max-width:340px;width:90%;text-align:center;box-shadow:var(--shadow)}
+.pw-card h3{margin:0 0 6px;font-size:16px;font-weight:700}
+.pw-card .pw-sub{font-size:13px;color:var(--muted);margin:0 0 16px;line-height:1.5}
+.pw-card input{width:100%;border:1.5px solid var(--line);border-radius:var(--radius-s);padding:10px 12px;font-size:13.5px;margin-bottom:10px;transition:border-color .15s}
 .pw-card input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 
-@media(max-width:680px){.pv-side{display:none}}
+.pv-prog-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:0 18px}
+.pv-progbar-track{width:100%;height:4px;background:var(--line);border-radius:4px;overflow:hidden}
+.pv-progbar{height:100%;background:var(--accent);border-radius:4px;transition:width .35s ease}
+.pv-prog-wrap .pv-prog{font-size:11.5px;color:var(--muted);font-weight:500}
+
+/* ---- error summary ---- */
+.pv-err-head{text-align:center;padding:4px 0 24px}
+.pv-err-icon{font-size:38px;margin-bottom:12px}
+.pv-err-sub{font-size:13.5px;color:var(--muted);margin:0;line-height:1.5}
+.pv-err-list{display:flex;flex-direction:column;gap:10px}
+.pv-err-item{display:flex;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--bad);border-radius:9px;padding:13px 16px;transition:border-color .1s}
+.pv-err-item:hover{border-color:#f3b8b0}
+.pv-err-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.pv-err-page{font-size:10.5px;font-family:var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.pv-err-lbl{font-size:13.5px;font-weight:600;color:var(--ink)}
+.pv-err-msg{font-size:12px;color:var(--bad)}
+.pv-err-fix{flex:none;border:1px solid var(--bad);background:var(--bad-soft);color:var(--bad);border-radius:6px;padding:8px 14px;font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap;transition:.12s;font-family:inherit}
+.pv-err-fix:hover{background:var(--bad);color:#fff}
+
+@media(max-width:700px){
+  .pv-side{display:none}
+  .pv-body{padding:18px 14px 60px}
+  .pv-card{padding:16px}
+  .pv-nav{padding:11px 0 14px}
+}
 </style>
 </head>
 <body>
@@ -150,8 +216,26 @@ let rosterView=null;
 let RESP_TOKEN=localStorage.getItem("eform_resp_token")||"";
 let RESP_USER=null;
 let EXISTING_RESPONSE=null; // respons yang pernah dikirim responden
+let DRAFT_RESTORED_AT=null; // timestamp draf lokal yang sedang dipakai (null jika tidak ada)
+let AUTOSAVE_TIMER=null;
 
 try{RESP_USER=JSON.parse(localStorage.getItem("eform_resp_user")||"null");}catch(_){}
+
+/* ---- draft/autosave lokal: simpan progres pengisian di localStorage agar
+   tidak hilang kalau tab tertutup / koneksi putus sebelum sempat "Kirim". ---- */
+function draftKey(){return RESP_USER?`eform_draft_${SHARE_TOKEN}_${RESP_USER.id}`:null;}
+function saveDraft(){
+  const key=draftKey();if(!key)return;
+  try{localStorage.setItem(key,JSON.stringify({answers,curPage,savedAt:new Date().toISOString()}));}catch(_){}
+}
+function loadDraft(){
+  const key=draftKey();if(!key)return null;
+  try{const raw=localStorage.getItem(key);if(!raw)return null;return JSON.parse(raw);}catch(_){return null;}
+}
+function clearDraft(){
+  const key=draftKey();if(!key)return;
+  try{localStorage.removeItem(key);}catch(_){}
+}
 
 /* ---- mesin ekspresi (visibleWhen/enableWhen/requiredWhen/validations/calculate/skip) ---- */
 const Expr=(function(){
@@ -250,10 +334,12 @@ function coerceVal(v){if(v==="true")return true;if(v==="false")return false;if(t
 function refResolve(name,rowPrefix){
   name=String(name).trim();
   if(name.includes(".")){
-    const [rn,fn]=name.split(".");
+    const dot=name.indexOf(".");const rn=name.slice(0,dot),fn=name.slice(dot+1);
     const r=findRoster(rn);
     if(r){const cnt=rosterCount(r);const arr=[];for(let i=0;i<cnt;i++)arr.push(coerceVal(answers[`${rn}#${i}#${fn}`]));return arr;}
-    return undefined;
+    // Bukan notasi roster.field — nama field biasa yang kebetulan mengandung titik
+    if(rowPrefix){const k=rowPrefix+name;if(k in answers)return coerceVal(answers[k]);}
+    return name in answers?coerceVal(answers[name]):undefined;
   }
   const rn=findRoster(name);
   if(rn){const cnt=rosterCount(rn);return Array.from({length:cnt},(_,i)=>i);}
@@ -272,11 +358,23 @@ function pubHeaders(extra){
 }
 
 /* ---- markdown ---- */
-function mdToHtml(src){if(!src)return"";const e=s=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-  const inl=s=>e(s).replace(/`([^`]+)`/g,"<code>$1</code>").replace(/\*\*([^*]+)\*\*/g,"<strong>$1</strong>").replace(/(^|[^*])\*([^*]+)\*/g,"$1<em>$2</em>").replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank">$1</a>');
-  return String(src).split(/\n{2,}/).map(b=>{const m=b.match(/^(#{1,6})\s+(.*)$/);if(m)return`<h${m[1].length}>${inl(m[2])}</h${m[1].length}>`;
-    if(/^\s*[-*]\s+/.test(b))return"<ul>"+b.split("\n").map(l=>`<li>${inl(l.replace(/^\s*[-*]\s+/,""))}</li>`).join("")+"</ul>";
-    return"<p>"+inl(b).replace(/\n/g,"<br>")+"</p>";}).join("");}
+function mdToHtml(src){
+  if(!src)return"";
+  const e=s=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  const inl=s=>e(s).replace(/`([^`]+)`/g,"<code>$1</code>").replace(/\*\*([^*]+)\*\*/g,"<strong>$1</strong>").replace(/(^|[^*])\*([^*]+)\*/g,"$1<em>$2</em>").replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+  const L=String(src).replace(/\r\n/g,"\n").split("\n");let h="",i=0;
+  while(i<L.length){const l=L[i];
+    let m=l.match(/^\s*(#{1,6})\s+(.*)$/);if(m){h+=`<h${m[1].length}>${inl(m[2])}</h${m[1].length}>`;i++;continue;}
+    if(/^\s*[-*]\s+/.test(l)){const it=[];while(i<L.length&&/^\s*[-*]\s+/.test(L[i])){it.push(`<li>${inl(L[i].replace(/^\s*[-*]\s+/,""))}</li>`);i++;}h+=`<ul>${it.join("")}</ul>`;continue;}
+    if(/^\s*\d+\.\s+/.test(l)){const it=[];while(i<L.length&&/^\s*\d+\.\s+/.test(L[i])){it.push(`<li>${inl(L[i].replace(/^\s*\d+\.\s+/,""))}</li>`);i++;}h+=`<ol>${it.join("")}</ol>`;continue;}
+    if(/^\s*>\s?/.test(l)){const q=[];while(i<L.length&&/^\s*>\s?/.test(L[i])){q.push(inl(L[i].replace(/^\s*>\s?/,"")));i++;}h+=`<blockquote>${q.join("<br>")}</blockquote>`;continue;}
+    if(/^\s*(-{3,}|\*{3,})\s*$/.test(l)){h+="<hr>";i++;continue;}
+    if(/^\s*$/.test(l)){i++;continue;}
+    const para=[];while(i<L.length&&!/^\s*$/.test(L[i])&&!/^\s*(#{1,6}\s|[-*]\s|\d+\.\s|>\s?|-{3,}|\*{3,})/.test(L[i])){para.push(inl(L[i]));i++;}
+    h+=`<p>${para.join("<br>")}</p>`;
+  }
+  return h;
+}
 
 /* ---- fetch form ---- */
 async function fetchForm(){
@@ -316,12 +414,45 @@ async function fetchForm(){
     answers=parseAnswers(EXISTING_RESPONSE.answers);
   }
 
+  // Pilih sumber data terbaru: jawaban final, draf server, atau draf lokal
+  let restorePage=null;
+  const serverTime=EXISTING_RESPONSE?new Date(EXISTING_RESPONSE.submittedAt):null;
+
+  // Draf server
+  const serverDraft=await fetchMyDraft();
+  const serverDraftTime=serverDraft?new Date(serverDraft.savedAt):null;
+
+  // Draf lokal
+  const localDraft=loadDraft();
+  const localDraftTime=localDraft&&localDraft.savedAt?new Date(localDraft.savedAt):null;
+
+  // Tentukan draf mana yang dipakai (lebih baru dari jawaban final)
+  const useServerDraft=serverDraftTime&&(!serverTime||serverDraftTime>serverTime)&&(!localDraftTime||serverDraftTime>=localDraftTime);
+  const useLocalDraft=!useServerDraft&&localDraftTime&&localDraft.answers&&Object.keys(localDraft.answers).length&&(!serverTime||localDraftTime>serverTime);
+
+  if(useServerDraft){
+    answers=parseAnswers(serverDraft.answers);
+    restorePage=serverDraft.curPage||0;
+    DRAFT_RESTORED_AT=serverDraft.savedAt;
+    clearDraft(); // sinkronkan lokal dengan server
+  }else if(useLocalDraft){
+    answers=localDraft.answers;
+    restorePage=localDraft.curPage||0;
+    DRAFT_RESTORED_AT=localDraft.savedAt||null;
+  }else{
+    clearDraft();
+  }
+
   render(data);
+  if(restorePage!=null)goToPage(restorePage);
 }
 
 function parseAnswers(raw){
   if(typeof raw==="object"&&raw!==null)return raw;
   try{return JSON.parse(raw)||{};}catch{return{};}
+}
+function formatDraftTime(iso){
+  try{return new Date(iso).toLocaleString("id-ID",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});}catch(_){return"";}
 }
 
 async function fetchMyResponse(){
@@ -332,6 +463,36 @@ async function fetchMyResponse(){
     const d=await r.json();
     return d; // null jika belum pernah mengisi
   }catch{return null;}
+}
+
+async function fetchMyDraft(){
+  try{
+    const r=await fetch("/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/draft",
+      {headers:pubHeaders({})});
+    if(!r.ok)return null;
+    return await r.json(); // null jika belum ada draf
+  }catch{return null;}
+}
+
+async function saveDraftToServer(){
+  const btn=document.getElementById("pvSaveDraft");
+  if(btn){btn.disabled=true;btn.textContent="Menyimpan…";}
+  saveAnswers();
+  const ans=collectAll();
+  try{
+    const r=await fetch("/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/draft",{
+      method:"POST",
+      headers:pubHeaders({"Content-Type":"application/json"}),
+      body:JSON.stringify({answers:ans,curPage})
+    });
+    if(!r.ok)throw new Error("Gagal menyimpan draf");
+    const d=await r.json();
+    saveDraft(); // perbarui draf lokal juga
+    if(btn){btn.className="pv-savedraft saved";btn.textContent="✓ Tersimpan "+formatDraftTime(d.savedAt);setTimeout(()=>{if(btn){btn.className="pv-savedraft";btn.textContent="Simpan Draf";btn.disabled=false;}},3000);}
+  }catch(e){
+    if(btn){btn.disabled=false;btn.textContent="Simpan Draf";}
+    const err=document.getElementById("pvNavErr");if(err){err.textContent=e.message;setTimeout(()=>{err.textContent="";},3000);}
+  }
 }
 
 function clearRespSession(){
@@ -367,10 +528,11 @@ function renderLoginGate(meta){
 
 /* ---- options ---- */
 function getPath(o,p){return String(p).split(".").reduce((x,k)=>x==null?x:x[k],o);}
-async function optionsFor(c){
+async function optionsFor(c,rp){
+  rp=rp||"";
   if(c.optionsApi&&c.optionsApi.url){
-    // Ganti setiap {key} dengan nilai dari answers (cache per resolved URL)
-    const url=c.optionsApi.url.replace(/\{([^}]+)\}/g,(_,k)=>encodeURIComponent(answers[k]??''));
+    // Cari nilai dep: roster-prefixed dahulu, fallback ke field halaman
+    const url=c.optionsApi.url.replace(/\{([^}]+)\}/g,(_,k)=>encodeURIComponent((rp?(answers[rp+k]??answers[k]):answers[k])??''));
     if(apiCache[url])return apiCache[url];
     try{const r=await fetch(url);const d=await r.json();
       let arr=c.optionsApi.path?getPath(d,c.optionsApi.path):(Array.isArray(d)?d:(d.data||d.items||d.results||[]));
@@ -393,36 +555,52 @@ function pvEmpty(v){return v==null||v===""||(Array.isArray(v)&&v.length===0);}
 function fieldHtml(c,rp){
   rp=rp||"";
   if(!evalVisible(c.visibleWhen,rp))return"";
-  if(!rp&&SKIP_HIDDEN.has(c.name))return""; // disembunyikan oleh skip-to field sebelumnya di halaman ini
+  if(rp?ROW_SKIP_HIDDEN.get(rp.slice(0,-1))?.has(c.name):SKIP_HIDDEN.has(c.name))return""; // disembunyikan oleh skip-to
   const key=rp+c.name, ke=esc(key);
   if(c.type==="note")    return`<div class="pv-note pv-field">${txt(c.html)||""}</div>`;
-  if(c.type==="markdown")return`<div class="pv-note pv-field">${mdToHtml(txt(c.markdown))}</div>`;
+  if(c.type==="markdown")return`<div class="pv-note pv-field pv-md">${mdToHtml(txt(c.markdown))}</div>`;
   if(c.type==="hidden")  return"";
   const isRequired=!!c.required||!!(c.requiredWhen&&evalVisible(c.requiredWhen,rp));
   const enabled=evalVisible(c.enableWhen,rp);
   const dis=enabled?"":" disabled";
-  const lab=`<label class="pv-lab">${esc(txt(c.label)||c.name)}${isRequired?' <span class="pv-req">*</span>':''}</label>`;
-  const hint=c.hint?`<div class="pv-hint">${esc(txt(c.hint))}</div>`:"";
+  const rdOnly=c.readOnly?" readonly":"";
+  const disAll=(enabled&&!c.readOnly)?"":" disabled";
+  const lab=`<label class="pv-lab">${esc(rowInterp(txt(c.label)||c.name,rp))}${isRequired?' <span class="pv-req">*</span>':''}</label>`;
+  const hint=c.hint?`<div class="pv-hint">${esc(rowInterp(txt(c.hint),rp))}</div>`:"";
+  if(c.defaultValue&&pvEmpty(answers[key]))answers[key]=c.defaultValue;
   if(c.type==="calculated"){
+    if(c.autofill){
+      if(pvEmpty(answers[key])){const r=evalExprSrc(c.calculate,rp);if(r!==undefined&&r!=="")answers[key]=String(r);}
+      const val=answers[key]??"";
+      return`<div class="pv-field" data-fieldkey="${ke}">${lab}${hint}<div><input type="text" data-k="${ke}" class="pv-in" value="${esc(val)}"${dis}></div></div>`;
+    }
     const r=evalExprSrc(c.calculate,rp);
     answers[key]=(r===undefined?"":r);
     return`<div class="pv-field" data-fieldkey="${ke}">${lab}${hint}<div><input class="pv-in" value="${esc(r===undefined||r===""?"—":String(r))}" disabled></div></div>`;
   }
   let ctrl="";
   if(c.type==="textarea")
-    ctrl=`<textarea data-k="${ke}" class="pv-in"${dis}></textarea>`;
+    ctrl=`<textarea data-k="${ke}" class="pv-in" rows="3"${dis}${rdOnly}></textarea>`;
+  else if(c.type==="email")
+    ctrl=`<input type="email" data-k="${ke}" class="pv-in" placeholder="${esc(c.placeholder||"nama@domain.com")}"${dis}${rdOnly}>`;
   else if(NUMER.has(c.type))
-    ctrl=`<input type="number" data-k="${ke}" class="pv-in" style="width:auto;min-width:160px"${c.min!=null&&c.min!==""?` min="${esc(String(c.min))}"` :""}${c.max!=null&&c.max!==""?` max="${esc(String(c.max))}"`:""}${dis}>` +(c.unit?`<span class="pv-unit">${esc(c.unit)}</span>`:"");
+    ctrl=`<input type="number" data-k="${ke}" class="pv-in" style="width:auto;min-width:160px"${c.min!=null&&c.min!==""?` min="${esc(String(c.min))}"` :""}${c.max!=null&&c.max!==""?` max="${esc(String(c.max))}"`:""}${dis}${rdOnly}>` +(c.unit?`<span class="pv-unit">${esc(c.unit)}</span>`:"");
   else if(c.type==="date"||c.type==="time"||c.type==="datetime")
-    ctrl=`<input type="${c.type==="datetime"?"datetime-local":c.type}" data-k="${ke}" class="pv-in" style="width:auto"${dis}>`;
+    ctrl=`<input type="${c.type==="datetime"?"datetime-local":c.type}" data-k="${ke}" class="pv-in" style="width:auto"${dis}${rdOnly}>`;
   else if(c.type==="boolean")
-    ctrl=`<div class="pv-radios"><label class="pv-opt"><input type="radio" name="r_${ke}" data-kr="${ke}" value="true"${dis}> Ya</label><label class="pv-opt"><input type="radio" name="r_${ke}" data-kr="${ke}" value="false"${dis}> Tidak</label></div>`;
+    ctrl=`<div class="pv-radios"><label class="pv-opt"><input type="radio" name="r_${ke}" data-kr="${ke}" value="true"${disAll}> Ya</label><label class="pv-opt"><input type="radio" name="r_${ke}" data-kr="${ke}" value="false"${disAll}> Tidak</label></div>`;
   else if(CHOICE.has(c.type)){
     ctrl=`<div class="pv-radios" id="opt-${ke}"><div class="pv-loading">Memuat pilihan…</div></div>`;
-    pending.push({c,rp,enabled});
+    pending.push({c,rp,enabled:enabled&&!c.readOnly});
   }
+  else if(c.type==="geopoint")
+    ctrl=`<div class="pv-inbtn"><input type="text" data-k="${ke}" class="pv-in" placeholder="lat, lng"${dis}${rdOnly}><button type="button" class="pv-smbtn pv-geobtn"${disAll}>📍 Ambil Lokasi</button></div><div class="pv-geomsg"></div>`;
+  else if(c.type==="barcode")
+    ctrl=`<div class="pv-inbtn"><input type="text" data-k="${ke}" class="pv-in" placeholder="scan / ketik kode"${dis}${rdOnly}><button type="button" class="pv-smbtn pv-scanbtn"${disAll}>📷 Pindai</button></div>`;
+  else if(c.type==="signature")
+    ctrl=`<div class="pv-sigwrap"><input type="hidden" data-k="${ke}"><canvas class="pv-sigpad" width="400" height="140"${(enabled&&!c.readOnly)?"":' data-disabled="1"'}></canvas><div class="pv-sigactions"><button type="button" class="pv-smbtn pv-sigclear"${disAll}>Hapus tanda tangan</button></div></div>`;
   else
-    ctrl=`<input type="text" data-k="${ke}" class="pv-in" placeholder="${esc(c.placeholder||"")}"${dis}>`;
+    ctrl=`<input type="text" data-k="${ke}" class="pv-in" placeholder="${esc(c.placeholder||"")}"${dis}${rdOnly}>`;
   let vmsg="";
   const val=answers[key];
   if(!pvEmpty(val)){
@@ -465,13 +643,18 @@ function rosterCount(r){
   if(stored!=null)return Math.max(0,Math.floor(Number(stored))||0);
   return Number(r.min)||1;
 }
+function flatRosterFields(r){const out=[];function go(a){(a||[]).forEach(c=>{c.kind==="field"?out.push(c):c.components&&go(c.components);});}go(r.components);return out;}
 function rowSummary(r,i){
-  const fields=(r.rowDisplay&&r.rowDisplay.length)?r.rowDisplay:(r.components||[]).filter(c=>c.kind==="field").slice(0,2).map(c=>c.name);
+  const fields=(r.rowDisplay&&r.rowDisplay.length)?r.rowDisplay:flatRosterFields(r).slice(0,2).map(c=>c.name);
   return fields.map(fn=>{const v=answers[`${r.name}#${i}#${fn}`];return(v==null||v==="")?null:String(v);}).filter(Boolean).join(" · ");
 }
-function hasRowData(r,i){return(r.components||[]).some(c=>{const v=answers[`${r.name}#${i}#${c.name}`];return v!=null&&v!==""&&!(Array.isArray(v)&&!v.length);});}
+function hasRowData(r,i){return flatRosterFields(r).some(c=>{const v=answers[`${r.name}#${i}#${c.name}`];return v!=null&&v!==""&&!(Array.isArray(v)&&!v.length);});}
 function addRowLabel(r){return r.rowTitle?`+ Tambah ${esc(txt(r.rowTitle))}`:"+ Tambah baris";}
-function rowLabel(r,i){return r.rowTitle?`${esc(txt(r.rowTitle))} #${i+1}`:`Baris #${i+1}`;}
+function rowInterp(text,rp){if(!text||!rp)return text;return text.replace(/\{\{([^}]+)\}\}/g,(_,n)=>{const v=answers[rp+n.trim()];return v!=null?String(v):"";});}
+function rowLabel(r,i){
+  if(r.itemLabel){const rp=`${r.name}#${i}#`;return esc(txt(r.itemLabel).replace(/\{\{index\}\}/g,String(i+1)).replace(/\{\{([^}]+)\}\}/g,(_,n)=>{const v=answers[rp+n.trim()];return v!=null?String(v):"";}));}
+  return r.rowTitle?`${esc(txt(r.rowTitle))} #${i+1}`:`Baris #${i+1}`;
+}
 function rosterHtml(r){
   const count=rosterCount(r),manual=!r.countFrom,rn=esc(r.name);
   const title=esc(txt(r.title)||r.name);
@@ -485,36 +668,39 @@ function rosterHtml(r){
   }
   let h=`<div class="pv-roster" id="pvroster_${rn}"><div class="pv-rh">${title}</div>`;
   if(r.countFrom&&count<=0)h+=`<div class="pv-rowempty">Isi dulu kolom "${esc(r.countFrom)}" untuk menentukan jumlah baris.</div>`;
-  for(let i=0;i<count;i++){const rp=`${r.name}#${i}#`;h+=`<div class="pv-row"><div class="pv-rownum"><span>${rowLabel(r,i)}</span>${manual?`<button class="pv-del" data-delrow="${rn}" data-i="${i}">hapus</button>`:""}</div>`;(r.components||[]).forEach(f=>h+=nodeHtml(f,rp));h+=`</div>`;}
+  for(let i=0;i<count;i++){const rowSkip=computeRosterRowSkipState(r,i);ROW_SKIP_HIDDEN.set(`${r.name}#${i}`,rowSkip);rowSkip.forEach(n=>{delete answers[`${r.name}#${i}#${n}`];});const rp=`${r.name}#${i}#`;h+=`<div class="pv-row"><div class="pv-rownum"><span>${rowLabel(r,i)}</span>${manual?`<button class="pv-del" data-delrow="${rn}" data-i="${i}">hapus</button>`:""}</div>`;(r.components||[]).forEach(f=>h+=nodeHtml(f,rp));h+=`</div>`;}
   if(manual)h+=`<button class="pv-add" data-addrow="${rn}">${addRowLabel(r)}</button>`;
   return h+`</div>`;
 }
-function primaryRowField(r){if(r.rowDisplay&&r.rowDisplay.length)return r.rowDisplay[0];const f=(r.components||[]).find(c=>c.kind==="field");return f?f.name:null;}
+function primaryRowField(r){if(r.rowDisplay&&r.rowDisplay.length)return r.rowDisplay[0];const f=flatRosterFields(r)[0];return f?f.name:null;}
 function openAddRowModal(roster){
   saveAnswers();
   const title=txt(roster.rowTitle)||"baris";
+  const promptFields=flatRosterFields(roster).filter(f=>f.promptOnAdd);
   const bg=document.createElement("div");bg.className="pv-modal-bg";
-  bg.innerHTML=`<div class="pv-modal">
-    <h3>Tambah ${esc(title)}</h3>
-    <p class="pv-modal-sub">Masukkan nama/judul untuk ${esc(title)} ini.</p>
-    <input type="text" id="addRowInput" placeholder="${esc(title)}…">
-    <div class="pv-modal-actions"><button class="btn ghost" id="addRowCancel">Batal</button><button class="btn primary" id="addRowConfirm">+ Tambah ${esc(title)}</button></div>
-  </div>`;
+  const fieldsHtml=promptFields.length
+    ?promptFields.map(f=>`<div style="margin-bottom:10px"><label style="display:block;font-size:12.5px;font-weight:500;margin-bottom:5px">${esc(txt(f.label)||f.name)}</label><input class="pv-modal-in" data-pf="${esc(f.name)}" placeholder="${esc(txt(f.placeholder)||txt(f.label)||f.name)}…" style="width:100%;border:1px solid var(--line);border-radius:var(--radius-s);padding:9px 10px;font-size:13px;box-sizing:border-box"></div>`).join("")
+    :`<input type="text" id="addRowInput" placeholder="${esc(title)}…">`;
+  bg.innerHTML=`<div class="pv-modal"><h3>Tambah ${esc(title)}</h3>${fieldsHtml}<div class="pv-modal-actions"><button class="btn ghost" id="addRowCancel">Batal</button><button class="btn primary" id="addRowConfirm">+ Tambah ${esc(title)}</button></div></div>`;
   document.body.appendChild(bg);
-  const input=bg.querySelector("#addRowInput");input.focus();
+  const firstInput=bg.querySelector("input");if(firstInput)firstInput.focus();
   const close=()=>bg.remove();
   bg.querySelector("#addRowCancel").addEventListener("click",close);
   bg.addEventListener("click",e=>{if(e.target===bg)close();});
   const confirmAdd=()=>{
-    const val=input.value.trim();
     const idx=rosterCount(roster);
     answers[`${roster.name}#count`]=idx+1;
-    if(val){const pf=primaryRowField(roster);if(pf)answers[`${roster.name}#${idx}#${pf}`]=val;}
+    if(promptFields.length){
+      bg.querySelectorAll("[data-pf]").forEach(el=>{const v=el.value.trim();if(v)answers[`${roster.name}#${idx}#${el.dataset.pf}`]=v;});
+    }else{
+      const val=bg.querySelector("#addRowInput")?.value.trim();
+      if(val){const pf=primaryRowField(roster);if(pf)answers[`${roster.name}#${idx}#${pf}`]=val;}
+    }
     close();renderCurrentPage();
     setTimeout(()=>{const el=document.getElementById("pvroster_"+roster.name);if(el)el.scrollIntoView({behavior:"smooth",block:"nearest"});},20);
   };
   bg.querySelector("#addRowConfirm").addEventListener("click",confirmAdd);
-  input.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();confirmAdd();}if(e.key==="Escape")close();});
+  bg.querySelectorAll("input").forEach(inp=>inp.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();confirmAdd();}if(e.key==="Escape")close();}));
 }
 function findRoster(rname){function search(comps){for(const c of comps){if(c.kind==="roster"&&c.name===rname)return c;if(c.components){const f=search(c.components);if(f)return f;}}return null;}for(const p of PAGES){const f=search(p.components||[]);if(f)return f;}return null;}
 function deleteRow(rname,idx){
@@ -578,6 +764,44 @@ function fieldEffectiveSkipTarget(f){
   if(pvEmpty(answers[f.name]))return fieldPendingTarget(f);
   return null;
 }
+// Varian roster: evaluasi skip dengan jawaban dari baris tertentu (rp = "roster#idx#").
+function fieldSkipTargetRp(f,rp){
+  for(const s of (f.skips||[])){
+    if(!s.when||!s.to)continue;
+    const r=evalExprSrc(s.when,rp);
+    if(r===undefined)continue;
+    if(r)return s.to;
+  }
+  if(CHOICE.has(f.type)&&Array.isArray(f.options)){
+    const v=answers[rp+f.name];
+    const sel=Array.isArray(v)?v.map(String):[String(v)];
+    for(const o of f.options){if(o.skipTo&&sel.includes(String(o.value)))return o.skipTo;}
+  }
+  return null;
+}
+function fieldEffectiveSkipTargetRp(f,rp){
+  const t=fieldSkipTargetRp(f,rp);
+  if(t)return t;
+  if(pvEmpty(answers[rp+f.name]))return fieldPendingTarget(f);
+  return null;
+}
+// Hitung field dalam satu baris roster yang harus disembunyikan karena skip-to.
+function computeRosterRowSkipState(roster,rowIdx){
+  const rp=`${roster.name}#${rowIdx}#`;
+  const allRowFields=flatRosterFields(roster);
+  const allNames=new Set(allRowFields.map(f=>f.name));
+  const hidden=new Set();
+  let skipActive=false,skipTarget=null;
+  for(const f of allRowFields){
+    if(skipActive){
+      if(f.name===skipTarget){skipActive=false;skipTarget=null;}
+      else{hidden.add(f.name);continue;}
+    }
+    const t=fieldEffectiveSkipTargetRp(f,rp);
+    if(t&&allNames.has(t)&&t!==f.name){skipActive=true;skipTarget=t;}
+  }
+  return hidden;
+}
 // Hitung field mana di halaman ini yang harus disembunyikan karena ada skip
 // yang sedang aktif (target ada di halaman yang sama), dan target halaman
 // lain bila skip yang aktif belum "selesai" sampai akhir halaman ini.
@@ -600,6 +824,7 @@ function computePageSkipState(page){
   return{hidden,crossPageTarget:skipActive?crossPageTarget:null};
 }
 let SKIP_HIDDEN=new Set();
+let ROW_SKIP_HIDDEN=new Map();
 function clearPageAnswers(pageIdx){
   const page=PAGES[pageIdx];if(!page)return;
   (function walk(n,prefix){(n.components||[]).forEach(c=>{
@@ -632,7 +857,7 @@ function validateCurrentPage(){
   saveAnswers();
   const targets=pageValidationTargets(PAGES[curPage]);
   for(const {c,rp} of targets){
-    if(c.type==="note"||c.type==="markdown"||c.type==="hidden"||c.type==="calculated")continue;
+    if(c.type==="note"||c.type==="markdown"||c.type==="hidden"||(c.type==="calculated"&&!c.autofill))continue;
     if(!evalVisible(c.enableWhen,rp))continue;
     const key=rp+c.name,val=answers[key];
     const isRequired=!!c.required||!!(c.requiredWhen&&evalVisible(c.requiredWhen,rp));
@@ -656,6 +881,79 @@ function focusField(key){
   setTimeout(()=>el.classList.remove("pv-field-err"),2500);
 }
 
+/* ---- kumpulkan semua error di seluruh halaman ---- */
+function collectAllErrors(){
+  saveAnswers();
+  const errors=[];
+  for(let pi=0;pi<PAGES.length;pi++){
+    const page=PAGES[pi];
+    if(!evalVisible(page.visibleWhen,""))continue;
+    const saved=SKIP_HIDDEN;
+    SKIP_HIDDEN=computePageSkipState(page).hidden;
+    const targets=pageValidationTargets(page);
+    SKIP_HIDDEN=saved;
+    for(const {c,rp} of targets){
+      if(c.type==="note"||c.type==="markdown"||c.type==="hidden"||(c.type==="calculated"&&!c.autofill))continue;
+      if(!evalVisible(c.enableWhen,rp))continue;
+      const key=rp+c.name,val=answers[key];
+      const isRequired=!!c.required||!!(c.requiredWhen&&evalVisible(c.requiredWhen,rp));
+      if(isRequired&&pvEmpty(val)){errors.push({pageIdx:pi,key,label:txt(c.label)||c.name,rp,msg:""});continue;}
+      if(!pvEmpty(val)){
+        for(const v of (c.validations||[])){
+          if(!v.test||v.severity==="warning")continue;
+          const r=evalExprSrc(v.test,rp);
+          if(r===undefined)continue;
+          if(!r){errors.push({pageIdx:pi,key,label:txt(c.label)||c.name,rp,msg:txt(v.message)||""});break;}
+        }
+      }
+    }
+  }
+  return errors;
+}
+
+/* ---- tampilkan ringkasan error sebelum kirim ---- */
+function showErrorSummary(errors){
+  const pvBody=document.getElementById("pvBody");
+  const navArea=document.getElementById("pvNavArea");
+  if(!pvBody)return;
+  const vis=visiblePageIdx();
+  let rows="";
+  errors.forEach(err=>{
+    const p=PAGES[err.pageIdx];
+    const pTitle=txt(p.title)||p.name||`Halaman ${err.pageIdx+1}`;
+    const visPos=vis.indexOf(err.pageIdx);
+    const pageLbl=visPos>=0?`Hal. ${visPos+1} — ${esc(pTitle)}`:esc(pTitle);
+    const roster=err.rp?err.rp.match(/^([^#]+)#(\d+)#/):null;
+    const ctxLbl=roster?`${esc(roster[1])} (Baris ${+roster[2]+1}) · ${esc(err.label)}`:esc(err.label);
+    const msgLbl=err.msg?esc(err.msg):"Isian wajib belum diisi";
+    rows+=`<div class="pv-err-item">
+      <div class="pv-err-info">
+        <span class="pv-err-page">${pageLbl}</span>
+        <span class="pv-err-lbl">${ctxLbl}</span>
+        <span class="pv-err-msg">${msgLbl}</span>
+      </div>
+      <button class="pv-err-fix" data-ep="${err.pageIdx}" data-ek="${esc(err.key)}">Perbaiki →</button>
+    </div>`;
+  });
+  pvBody.innerHTML=`<div class="pv-page">
+    <div class="pv-err-head">
+      <div class="pv-err-icon">⚠</div>
+      <h2 class="pv-h2" style="margin-bottom:6px">Ada ${errors.length} isian yang perlu dilengkapi</h2>
+      <p class="pv-err-sub">Silakan lengkapi semua isian yang ditandai sebelum mengirim jawaban.</p>
+    </div>
+    <div class="pv-err-list">${rows}</div>
+  </div><div class="foot">eForm · BPS Provinsi Kalimantan Timur</div>`;
+  if(navArea)navArea.innerHTML=`<div class="pv-nav"><button class="btn" id="pvErrBack">← Kembali ke halaman terakhir</button><span></span><span></span></div>`;
+  document.getElementById("pvErrBack")?.addEventListener("click",()=>goToPage(curPage));
+  document.querySelectorAll(".pv-err-fix").forEach(btn=>{
+    btn.addEventListener("click",()=>{
+      const pi=+btn.dataset.ep,k=btn.dataset.ek;
+      goToPage(pi);
+      setTimeout(()=>focusField(k),80);
+    });
+  });
+}
+
 /* ---- render shell ---- */
 function render(meta){
   PAGES=SCHEMA.pages||[];
@@ -669,16 +967,28 @@ function render(meta){
       <span class="pv-uemail">${esc(RESP_USER.email)}</span>
       <button class="pv-ulogout" onclick="logout()">Keluar</button>
     </div>`:"";
+  const draftNote=DRAFT_RESTORED_AT?`<div class="pv-draft-note" id="draftNote">
+      <span>📝 Draf jawaban yang belum terkirim berhasil dipulihkan (tersimpan ${formatDraftTime(DRAFT_RESTORED_AT)}).</span>
+      <button id="draftNoteClose" title="Tutup">×</button>
+    </div>`:"";
   setRoot(`<div class="pv">
     <div class="pv-bar"><span class="pv-title">${esc(title)}</span><span class="pv-brand">eForm · BPS Kaltim</span></div>
+    ${draftNote}
     <div class="pv-main">
       <aside class="pv-side"><div class="pv-side-h">Daftar Halaman</div>${sideHtml}</aside>
-      <div class="pv-body" id="pvBody"><div id="pvUserBar">${userBar}</div></div>
+      <div class="pv-content">
+        <div class="pv-body" id="pvBody"><div id="pvUserBar">${userBar}</div></div>
+        <div id="pvNavArea" class="pv-nav-area"></div>
+      </div>
     </div>
   </div>`);
+  document.getElementById("draftNoteClose")?.addEventListener("click",()=>{document.getElementById("draftNote")?.remove();});
   document.querySelectorAll(".pv-pg").forEach(el=>el.addEventListener("click",()=>goToPage(+el.dataset.pg)));
   curPage=0;rosterView=null;
   goToPage(0);
+  // Jaring pengaman: simpan draf berkala supaya ketikan yang belum sempat
+  // "blur" (event change) tetap tertangkap kalau tab tertutup mendadak.
+  if(!AUTOSAVE_TIMER)AUTOSAVE_TIMER=setInterval(saveAnswers,20000);
 }
 
 function logout(){clearRespSession();location.reload();}
@@ -689,25 +999,30 @@ function saveAnswers(){
   document.querySelectorAll("[data-kr]:checked").forEach(el=>{answers[el.dataset.kr]=el.value;});
   const cbKeys=new Set([...document.querySelectorAll("[data-kc]")].map(el=>el.dataset.kc));
   cbKeys.forEach(key=>{answers[key]=[...document.querySelectorAll(`[data-kc="${CSS.escape(key)}"]:checked`)].map(el=>el.value);});
+  saveDraft();
 }
 function goToPage(idx){
   saveAnswers();rosterView=null;
   idx=Math.max(0,Math.min(idx,PAGES.length-1));
   curPage=nearestVisibleIndex(idx);
   updateSidebarActive();renderCurrentPage();
+  const pvBody=document.getElementById("pvBody");if(pvBody)pvBody.scrollTop=0;
 }
 function updateSidebarActive(){
   const activeIdx=rosterView?rosterView.pageIdx:curPage;
   document.querySelectorAll(".pv-pg").forEach((el,i)=>el.classList.toggle("active",i===activeIdx));
 }
 function renderCurrentPage(){
+  // Catatan: TIDAK reset scroll di sini — fungsi ini juga dipanggil untuk
+  // live update (mis. coretan tanda tangan, ambil lokasi) yang seharusnya
+  // tidak melompat balik ke atas halaman. Reset scroll hanya di goToPage().
   const pvBody=document.getElementById("pvBody");
   if(!pvBody||!PAGES.length)return;
-  pvBody.scrollTop=0;
   const p=PAGES[curPage],isLast=nextVisibleIndex(curPage)===-1;
   const vis=visiblePageIdx(),posInVis=vis.indexOf(curPage)+1,totalVis=vis.length;
   SKIP_HIDDEN=computePageSkipState(p).hidden;
   SKIP_HIDDEN.forEach(name=>{delete answers[name];});
+  ROW_SKIP_HIDDEN=new Map();
   pending=[];
   const userBar=document.getElementById("pvUserBar")?.outerHTML||"";
   let html=`${userBar}<div class="pv-page"><h2 class="pv-h2">${esc(txt(p.title)||p.name||`Halaman ${curPage+1}`)}</h2>`;
@@ -717,12 +1032,17 @@ function renderCurrentPage(){
   if(isLast&&!ALLOW)html+=`<div class="view-hint">Tautan ini hanya untuk melihat kuesioner — tidak menerima jawaban.</div>`;
   const isEdit=!!EXISTING_RESPONSE;
   const prevBtn=prevVisibleIndex(curPage)!==-1?`<button class="btn" id="pvPrev">← Sebelumnya</button>`:`<span></span>`;
+  const saveDraftBtn=ALLOW?`<button class="pv-savedraft" id="pvSaveDraft">Simpan Draf</button>`:"";
   const nextBtn=isLast
     ?(ALLOW?`<button class="btn primary" id="pvSubmit">${isEdit?"Perbarui Jawaban":"Kirim Jawaban"}</button>`:`<span></span>`)
     :`<button class="btn primary" id="pvNext">Lanjut →</button>`;
-  html+=`<div class="pv-nav-err" id="pvNavErr"></div><div class="pv-nav">${prevBtn}<span class="pv-prog">Halaman ${posInVis} / ${totalVis}</span>${nextBtn}</div>`;
   html+=`<div class="foot">eForm · BPS Provinsi Kalimantan Timur</div>`;
   pvBody.innerHTML=html;
+  const navArea=document.getElementById("pvNavArea");
+  if(navArea){
+    const pct=totalVis>1?Math.round((posInVis/totalVis)*100):100;
+    navArea.innerHTML=`<div class="pv-nav-err" id="pvNavErr"></div><div class="pv-nav">${prevBtn}<div class="pv-prog-wrap"><div class="pv-progbar-track"><div class="pv-progbar" style="width:${pct}%"></div></div><span class="pv-prog">Halaman ${posInVis} / ${totalVis}</span></div><div style="display:flex;gap:8px;align-items:center">${saveDraftBtn}${nextBtn}</div></div>`;
+  }
   restoreAnswers();bindPageEvents();resolveOptions();
 }
 
@@ -735,15 +1055,22 @@ function renderRosterRow(){
   const pvBody=document.getElementById("pvBody");if(!pvBody||!rosterView)return;pvBody.scrollTop=0;
   const {roster,rowIdx,pageIdx}=rosterView,rp=`${roster.name}#${rowIdx}#`;
   const pageTitle=esc(txt(PAGES[pageIdx].title)||PAGES[pageIdx].name||"Kembali");
+  const rowSkip=computeRosterRowSkipState(roster,rowIdx);
+  ROW_SKIP_HIDDEN.set(`${roster.name}#${rowIdx}`,rowSkip);
+  rowSkip.forEach(n=>{delete answers[rp+n];});
   pending=[];
   const userBar=document.getElementById("pvUserBar")?.outerHTML||"";
   let html=`${userBar}<div class="pv-page">
     <button class="btn" id="pvBack" style="margin-bottom:14px">← ${pageTitle}</button>
     <h2 class="pv-h2">${esc(txt(roster.title)||roster.name)} — ${rowLabel(roster,rowIdx)}</h2>`;
   (roster.components||[]).forEach(f=>html+=nodeHtml(f,rp));
-  html+=`<div class="pv-nav"><span></span><span></span><button class="btn primary" id="pvBackDone">Simpan &amp; kembali</button></div></div>`;
+  html+=`</div>`;
   pvBody.innerHTML=html;
-  restoreAnswers();resolveOptions();
+  const navArea=document.getElementById("pvNavArea");
+  if(navArea)navArea.innerHTML=`<div class="pv-nav"><span></span><span></span><button class="btn primary" id="pvBackDone">Simpan &amp; kembali</button></div>`;
+  restoreAnswers();resolveOptions();wireFieldWidgets();
+  document.querySelectorAll("[data-k]").forEach(el=>el.addEventListener("change",()=>{saveAnswers();renderRosterRow();}));
+  document.querySelectorAll("[data-kr]").forEach(el=>el.addEventListener("change",()=>{saveAnswers();renderRosterRow();}));
   const backFn=()=>{saveAnswers();const rname=rosterView.roster.name;rosterView=null;updateSidebarActive();renderCurrentPage();setTimeout(()=>{const el=document.getElementById("pvroster_"+rname);if(el)el.scrollIntoView({behavior:"smooth",block:"center"});},40);};
   document.getElementById("pvBack")?.addEventListener("click",backFn);
   document.getElementById("pvBackDone")?.addEventListener("click",backFn);
@@ -770,14 +1097,11 @@ function bindPageEvents(){
     if(nxt!==-1)goToPage(nxt);
   });
   document.getElementById("pvSubmit")?.addEventListener("click",()=>{
-    const gate=validateCurrentPage();
-    if(!gate.ok){
-      const err=document.getElementById("pvNavErr");if(err)err.textContent="Lengkapi pertanyaan wajib / perbaiki isian yang tidak valid sebelum mengirim.";
-      focusField(gate.key);
-      return;
-    }
+    const errors=collectAllErrors();
+    if(errors.length>0){showErrorSummary(errors);return;}
     submit();
   });
+  document.getElementById("pvSaveDraft")?.addEventListener("click",()=>saveDraftToServer());
   document.querySelectorAll("[data-addrow]").forEach(btn=>btn.addEventListener("click",()=>{
     const rname=btn.dataset.addrow,roster=findRoster(rname);if(!roster)return;
     openAddRowModal(roster);
@@ -796,6 +1120,115 @@ function bindPageEvents(){
   // di resolveOptions karena baru ada di DOM setelah fetch opsi selesai).
   document.querySelectorAll("[data-k]").forEach(el=>el.addEventListener("change",()=>{saveAnswers();renderCurrentPage();}));
   document.querySelectorAll("[data-kr]").forEach(el=>el.addEventListener("change",()=>{saveAnswers();renderCurrentPage();}));
+  wireFieldWidgets();
+}
+
+/* ---- widget field khusus: tanda tangan, lokasi, pindai barcode ---- */
+function wireFieldWidgets(){
+  document.querySelectorAll(".pv-sigpad").forEach(canvas=>wireSignaturePad(canvas));
+  document.querySelectorAll(".pv-geobtn").forEach(btn=>wireGeoButton(btn));
+  document.querySelectorAll(".pv-scanbtn").forEach(btn=>wireScanButton(btn));
+}
+
+function wireSignaturePad(canvas){
+  if(canvas._wired)return;canvas._wired=true;
+  const hidden=canvas.previousElementSibling; // <input type="hidden" data-k="...">
+  if(!hidden)return;
+  const ctx=canvas.getContext("2d");
+  ctx.lineWidth=2.2;ctx.lineCap="round";ctx.lineJoin="round";ctx.strokeStyle="#13171e";
+  if(hidden.value)loadSignatureImage(canvas,hidden.value);
+  let drawing=false,last=null;
+  const pos=e=>{const r=canvas.getBoundingClientRect();return {x:(e.clientX-r.left)*(canvas.width/r.width),y:(e.clientY-r.top)*(canvas.height/r.height)};};
+  const start=e=>{if(canvas.dataset.disabled==="1")return;e.preventDefault();drawing=true;last=pos(e);};
+  const move=e=>{if(!drawing)return;e.preventDefault();const p=pos(e);ctx.beginPath();ctx.moveTo(last.x,last.y);ctx.lineTo(p.x,p.y);ctx.stroke();last=p;};
+  const end=()=>{
+    if(!drawing)return;drawing=false;
+    hidden.value=canvas.toDataURL("image/png");
+    hidden.dispatchEvent(new Event("change",{bubbles:true}));
+  };
+  canvas.addEventListener("pointerdown",start);
+  canvas.addEventListener("pointermove",move);
+  canvas.addEventListener("pointerup",end);
+  canvas.addEventListener("pointercancel",end);
+  canvas.addEventListener("pointerleave",end);
+  const clearBtn=canvas.parentElement.querySelector(".pv-sigclear");
+  clearBtn?.addEventListener("click",()=>{
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    hidden.value="";
+    hidden.dispatchEvent(new Event("change",{bubbles:true}));
+  });
+}
+function loadSignatureImage(canvas,dataUrl){
+  const ctx=canvas.getContext("2d");
+  const img=new Image();
+  img.onload=()=>{ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0,canvas.width,canvas.height);};
+  img.src=dataUrl;
+}
+
+function wireGeoButton(btn){
+  if(btn._wired)return;btn._wired=true;
+  btn.addEventListener("click",()=>{
+    const wrap=btn.closest(".pv-field");
+    const msg=wrap?.querySelector(".pv-geomsg");
+    const input=btn.previousElementSibling;
+    if(msg){msg.textContent="";msg.classList.remove("error");}
+    if(!navigator.geolocation){if(msg){msg.textContent="Geolocation tidak didukung browser ini.";msg.classList.add("error");}return;}
+    const orig=btn.textContent;btn.disabled=true;btn.textContent="Mencari…";
+    navigator.geolocation.getCurrentPosition(
+      pos=>{
+        btn.disabled=false;btn.textContent=orig;
+        input.value=`${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`;
+        input.dispatchEvent(new Event("change",{bubbles:true}));
+      },
+      err=>{
+        btn.disabled=false;btn.textContent=orig;
+        if(msg){msg.textContent=err.code===1?"Izin lokasi ditolak.":"Gagal mengambil lokasi: "+err.message;msg.classList.add("error");}
+      },
+      {enableHighAccuracy:true,timeout:15000}
+    );
+  });
+}
+
+function wireScanButton(btn){
+  if(btn._wired)return;btn._wired=true;
+  if(!("BarcodeDetector" in window)){btn.disabled=true;btn.title="Pemindaian otomatis tidak didukung browser ini — isi manual.";return;}
+  btn.addEventListener("click",()=>openBarcodeScanner(btn.previousElementSibling));
+}
+async function openBarcodeScanner(input){
+  const bg=document.createElement("div");bg.className="pv-modal-bg";
+  bg.innerHTML=`<div class="pv-modal pv-scanmodal">
+    <h3>Pindai Barcode</h3>
+    <p class="pv-modal-sub">Arahkan kamera ke barcode/QR.</p>
+    <video id="scanVideo" autoplay playsinline muted></video>
+    <div class="pv-modal-actions"><button class="btn ghost" id="scanCancel">Batal</button></div>
+  </div>`;
+  document.body.appendChild(bg);
+  const video=bg.querySelector("#scanVideo"),sub=bg.querySelector(".pv-modal-sub");
+  let stream=null,stopped=false;
+  const close=()=>{stopped=true;if(stream)stream.getTracks().forEach(t=>t.stop());bg.remove();};
+  bg.querySelector("#scanCancel").addEventListener("click",close);
+  bg.addEventListener("click",e=>{if(e.target===bg)close();});
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
+    video.srcObject=stream;
+    const detector=new BarcodeDetector();
+    const loop=async()=>{
+      if(stopped)return;
+      try{
+        const codes=await detector.detect(video);
+        if(codes.length){
+          input.value=codes[0].rawValue;
+          input.dispatchEvent(new Event("change",{bubbles:true}));
+          close();
+          return;
+        }
+      }catch(_){}
+      requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+  }catch(e){
+    if(sub)sub.textContent="Tidak bisa mengakses kamera: "+e.message;
+  }
 }
 
 /* ---- async options ---- */
@@ -812,20 +1245,25 @@ function resolveOptions(){
     const explicitDeps=((c.optionsApi&&c.optionsApi.depKeys)||"").split(",").map(s=>s.trim()).filter(Boolean);
     const deps=[...new Set([...urlDeps,...explicitDeps])];
 
-    // Pasang listener pada setiap field dependency: ketika berubah, hapus
-    // jawaban field ini lalu re-render halaman (cascade otomatis lewat missing-dep check).
+    // Re-render yang tepat: baris roster atau halaman biasa
+    const rerender=()=>{saveAnswers();rosterView?renderRosterRow():renderCurrentPage();};
+
+    // Pasang listener pada field dependency: cari elemen dengan prefix roster dahulu,
+    // fallback ke field halaman. Ketika berubah, hapus jawaban ini lalu re-render.
     function wireDeps(){
       deps.forEach(dep=>{
-        const el=document.querySelector(`[data-k="${CSS.escape(dep)}"]`);
+        const el=document.querySelector(`[data-k="${CSS.escape(rp+dep)}"]`)
+               ||document.querySelector(`[data-k="${CSS.escape(dep)}"]`);
         if(el&&!el._depWired){
           el._depWired=true;
-          el.addEventListener("change",()=>{saveAnswers();answers[key]="";renderCurrentPage();});
+          el.addEventListener("change",()=>{saveAnswers();answers[key]="";rerender();});
         }
       });
     }
 
-    // Jika ada dependency yang belum terisi → jangan fetch, tampilkan placeholder
-    const missing=deps.find(dep=>{const v=answers[dep];return v==null||v==="";});
+    // Nilai dep: cari roster-prefixed dahulu, fallback ke field halaman
+    const depVal=dep=>(rp?(answers[rp+dep]??answers[dep]):answers[dep]);
+    const missing=deps.find(dep=>{const v=depVal(dep);return v==null||v==="";});
     if(missing){
       answers[key]="";
       box.innerHTML=`<select class="pv-in" disabled><option value="">— isi kolom sebelumnya dahulu —</option></select>`;
@@ -834,20 +1272,17 @@ function resolveOptions(){
     }
 
     wireDeps();
-    const opts=await optionsFor(c);
+    const opts=await optionsFor(c,rp);
     const multi=(c.type==="checkbox"||c.type==="multiselect");
     const saved=answers[key];
     if(c.type==="select"){
       const cur=saved!=null?String(saved):"";
       box.innerHTML=`<select data-k="${ke}" class="pv-in"${dis}><option value="">— pilih —</option>${opts.map(o=>`<option value="${esc(o.value)}"${cur===String(o.value)?" selected":""}>${esc(o.label)}</option>`).join("")}</select>`;
-      // Pasang change listener agar field downstream yang mengandalkan field ini
-      // bisa ikut re-render saat nilai berubah (wireDeps dari field lain baru bisa
-      // menemukan elemen ini setelah SELECT berhasil dirender).
-      if(enabled!==false)box.querySelector("select")?.addEventListener("change",()=>{saveAnswers();renderCurrentPage();});
+      if(enabled!==false)box.querySelector("select")?.addEventListener("change",()=>{saveAnswers();rerender();});
     }else{
       const savedArr=Array.isArray(saved)?saved.map(String):(saved!=null?[String(saved)]:[]);
       box.innerHTML=opts.map(o=>{const chk=multi?savedArr.includes(String(o.value)):String(saved)===String(o.value);const attr=multi?`data-kc="${ke}"`:`name="r_${ke}" data-kr="${ke}"`;return`<label class="pv-opt"><input type="${multi?"checkbox":"radio"}" ${attr} value="${esc(o.value)}"${chk?" checked":""}${dis}> ${esc(o.label)}</label>`;}).join("")||`<span class="pv-loading">tidak ada pilihan</span>`;
-      if(enabled!==false)box.querySelectorAll("[data-kr],[data-kc]").forEach(el=>el.addEventListener("change",()=>{saveAnswers();renderCurrentPage();}));
+      if(enabled!==false)box.querySelectorAll("[data-kr],[data-kc]").forEach(el=>el.addEventListener("change",()=>{saveAnswers();rerender();}));
     }
   });
 }
@@ -874,6 +1309,8 @@ async function submit(){
     if(r.status===401){msg.className="msg err";msg.textContent="Sesi habis. Silakan login ulang.";btn.disabled=false;btn.textContent=EXISTING_RESPONSE?"Perbarui Jawaban":"Kirim Jawaban";return;}
     if(!r.ok)throw new Error(d.error||"Gagal mengirim");
     EXISTING_RESPONSE=d; // update state agar tombol berganti jadi "Perbarui"
+    clearDraft(); // sudah aman tersimpan di server, draf lokal tidak diperlukan lagi
+    document.getElementById("draftNote")?.remove();
     msg.className="msg ok";
     msg.textContent=EXISTING_RESPONSE?"Jawaban berhasil diperbarui.":"Terima kasih! Jawaban Anda sudah terkirim.";
     btn.textContent="Perbarui Jawaban";btn.disabled=false;

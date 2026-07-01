@@ -1,0 +1,24 @@
+# Version control
+.git
+.gitignore
+
+# Env file (dikirim lewat docker-compose environment, bukan file)
+.env
+
+# Build artifacts
+bin/
+
+# File development & perancangan
+Perancangan/
+*.tar.gz
+*.zip
+
+# Claude Code
+.claude/
+
+# Go test cache
+**/*_test.go
+
+# OS
+.DS_Store
+Thumbs.db

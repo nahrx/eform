@@ -48,6 +48,8 @@ func (s *Server) Routes() http.Handler {
 	mux.Handle("GET /api/public/me", s.respondentMW(s.respondentMe))
 	mux.Handle("GET /api/public/forms/{token}/my-response", s.respondentMW(s.myResponse))
 	mux.Handle("POST /api/public/forms/{token}/responses", s.respondentMW(s.publicSubmit))
+	mux.Handle("GET /api/public/forms/{token}/draft", s.respondentMW(s.myDraft))
+	mux.Handle("POST /api/public/forms/{token}/draft", s.respondentMW(s.saveDraftHandler))
 
 	// --- OAuth Google (redirect, tidak butuh JWT) ---
 	mux.HandleFunc("GET /auth/google", s.googleLogin)

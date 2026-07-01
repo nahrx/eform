@@ -54,6 +54,16 @@ type Response struct {
 	SubmittedAt  time.Time       `json:"submittedAt"`
 }
 
+type Draft struct {
+	ID           string          `json:"id"`
+	FormID       string          `json:"formId"`
+	ShareID      *string         `json:"shareId,omitempty"`
+	RespondentID string          `json:"respondentId"`
+	Answers      json.RawMessage `json:"answers"`
+	CurPage      int             `json:"curPage"`
+	SavedAt      time.Time       `json:"savedAt"`
+}
+
 type WilayahItem struct {
 	KodeWilayah string `json:"kode_wilayah"`
 	NamaWilayah string `json:"nama_wilayah"`

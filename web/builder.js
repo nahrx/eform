@@ -2,12 +2,12 @@
 const uid=(()=>{let i=0;return()=>"u"+(++i)+Math.random().toString(36).slice(2,6);})();
 
 /* ---- field type taxonomy ---- */
-const TYPES={input:["text","textarea","number","integer","decimal","currency","range","rating","calculated","hidden"],
+const TYPES={input:["text","email","textarea","number","integer","decimal","currency","range","rating","calculated","hidden"],
   choice:["select","multiselect","radio","checkbox","boolean"],time:["date","time","datetime"],
   media:["geopoint","photo","file","signature","barcode"],struct:["markdown","note"]};
 const CAT_OF={}; Object.entries(TYPES).forEach(([c,a])=>a.forEach(t=>CAT_OF[t]=c));
 const CAT_VAR={input:"--input",choice:"--choice",time:"--time",media:"--media",struct:"--struct",node:"--node"};
-const LABELS={text:"Teks singkat",textarea:"Teks panjang",number:"Angka",integer:"Bilangan bulat",decimal:"Desimal",currency:"Mata uang",range:"Slider",rating:"Rating",calculated:"Terhitung",hidden:"Tersembunyi",select:"Dropdown",multiselect:"Pilih banyak",radio:"Radio",checkbox:"Checkbox",boolean:"Ya/Tidak",date:"Tanggal",time:"Jam",datetime:"Tanggal+jam",geopoint:"Titik GPS",photo:"Foto",file:"Berkas",signature:"Tanda tangan",barcode:"Barcode",note:"Catatan (HTML)",markdown:"Keterangan (Markdown)"};
+const LABELS={text:"Teks singkat",email:"Email",textarea:"Teks panjang",number:"Angka",integer:"Bilangan bulat",decimal:"Desimal",currency:"Mata uang",range:"Slider",rating:"Rating",calculated:"Terhitung",hidden:"Tersembunyi",select:"Dropdown",multiselect:"Pilih banyak",radio:"Radio",checkbox:"Checkbox",boolean:"Ya/Tidak",date:"Tanggal",time:"Jam",datetime:"Tanggal+jam",geopoint:"Titik GPS",photo:"Foto",file:"Berkas",signature:"Tanda tangan",barcode:"Barcode",note:"Catatan (HTML)",markdown:"Keterangan (Markdown)"};
 const CHOICE=new Set(["select","multiselect","radio","checkbox"]);
 const NUMERIC=new Set(["number","integer","decimal","currency","range","rating"]);
 const TEXTY=new Set(["text","textarea"]);
@@ -127,7 +127,7 @@ function mdToHtml(src){
 }
 
 /* ---- containment rules: parentKind -> allowed childKind ---- */
-const ACCEPT={page:["block"],block:["section","roster","field"],section:["field","roster"],roster:["field"]};
+const ACCEPT={page:["block"],block:["section","roster","field"],section:["section","field","roster"],roster:["section","field"]};
 
 let state=blankState(); let selected=null; let view={type:"page",uid:null};
 const collapsed={sb1:false,sb2:false};
@@ -152,7 +152,7 @@ function newPage(){return {uid:uid(),kind:"page",name:autoName("page"),title:"",
 function newBlock(){return {uid:uid(),kind:"block",name:autoName("block"),title:"",visibleWhen:"",components:[]};}
 function newSection(){return {uid:uid(),kind:"section",name:autoName("section"),title:"",visibleWhen:"",components:[]};}
 function newRoster(rt){return {uid:uid(),kind:"roster",name:autoName("roster"),title:"",rowTitle:"",rosterType:rt||"inline",min:"",max:"",countFrom:"",itemLabel:"",rowDisplay:[],visibleWhen:"",components:[]};}
-function newField(type){const f={uid:uid(),kind:"field",type,name:autoName(type),label:"",hint:"",required:false,readOnly:false,visibleWhen:"",enableWhen:"",requiredWhen:"",allowRemark:false,defaultValue:""};
+function newField(type){const f={uid:uid(),kind:"field",type,name:autoName(type),label:"",hint:"",required:false,readOnly:false,promptOnAdd:false,visibleWhen:"",enableWhen:"",requiredWhen:"",allowRemark:false,defaultValue:""};
   if(CHOICE.has(type)){f.options=[{value:"1",label:"Opsi 1"}];f.optionSource="manual";f.optionsRef="";f.optionsFilterBy="";f.optionsApi={};}
   if(NUMERIC.has(type)){f.min="";f.max="";f.step="";f.unit="";}
   if(TEXTY.has(type)){f.maxLength="";f.pattern="";f.placeholder="";}
@@ -228,7 +228,7 @@ function buildPalette(){
     ${chip("__roster_separate","Roster — subhalaman","--roster")}</div>`;
   const groups=[["Input",TYPES.input],["Pilihan",TYPES.choice],["Tanggal & Waktu",TYPES.time],["Media & Lokasi",TYPES.media],["Lainnya",TYPES.struct]];
   for(const [t,arr] of groups){html+=`<div class="pal-group"><div class="pal-h">${t}</div>`;arr.forEach(x=>html+=chip(x,LABELS[x],CAT_VAR[CAT_OF[x]]));html+=`</div>`;}
-  html+=`<div class="hint">Block → Section → field. Roster bisa di Block/Section. Inline tampil di halaman ini; subhalaman muncul di panel Halaman.</div>`;
+  html+=`<div class="hint">Block → Section → field. Roster bisa di Block/Section. Section bisa di dalam Roster. Inline tampil di halaman ini; subhalaman muncul di panel Halaman.</div>`;
   pal.innerHTML=html;
   pal.querySelectorAll(".chip").forEach(ch=>ch.addEventListener("dragstart",e=>{dnd.payload={mode:"new",type:ch.dataset.type};e.dataTransfer.effectAllowed="copy";e.dataTransfer.setData("text/plain","new");}));
 }
@@ -279,7 +279,7 @@ function renderCanvas(){
     head.querySelector("#backBtn").addEventListener("click",()=>{openPage(pg.uid);select(r.uid);render();});
     const wrap=document.createElement("div");wrap.className="roster-inline";
     wrap.appendChild(nodeHead(r,"roster",`Roster: ${r.title||r.name}`));
-    wrap.appendChild(dropzone(r,["field"],"Seret field — ini diulang tiap baris"));
+    wrap.appendChild(dropzone(r,["section","field"],"Seret Section atau field — diulang tiap baris"));
     stage.appendChild(wrap); return;
   }
   const page=findNode(view.uid);
@@ -318,7 +318,7 @@ function renderNode(n){
   if(n.kind==="section"){
     const el=document.createElement("div");el.className="section"+(selected===n.uid?" sel":"");el.dataset.uid=n.uid;el.draggable=true;
     el.appendChild(nodeHead(n,"section"));
-    el.appendChild(dropzone(n,["field","roster"],"Seret field ke dalam section"));
+    el.appendChild(dropzone(n,["section","field","roster"],"Seret Section, field, atau Roster ke dalam section"));
     wireDrag(el,n); return el;
   }
   if(n.kind==="roster"){
@@ -331,7 +331,7 @@ function renderNode(n){
     }
     const el=document.createElement("div");el.className="roster-inline"+(selected===n.uid?" sel":"");el.dataset.uid=n.uid;el.draggable=true;
     el.appendChild(nodeHead(n,"roster",`Roster inline: ${n.title||n.name}`));
-    el.appendChild(dropzone(n,["field"],"Seret field — diulang tiap baris"));
+    el.appendChild(dropzone(n,["section","field"],"Seret Section atau field — diulang tiap baris"));
     wireDrag(el,n); return el;
   }
   // field card
@@ -424,12 +424,12 @@ function rosterForm(n){
   const childFields=(n.components||[]).filter(c=>c.kind==="field");
   const dispBlock = `<div class="group"><div class="gh">Field tampil di daftar baris</div>${childFields.length?childFields.map(f=>`<label class="check"><input type="checkbox" data-rowdisp="${esc(f.name)}" ${(n.rowDisplay||[]).includes(f.name)?"checked":""}> ${esc(f.label||f.name)}</label>`).join(""):`<div class="help" style="margin-left:0">Tambah field ke roster dulu.</div>`}<div class="help" style="margin-left:0;margin-top:6px">Untuk roster subhalaman: nilai field ini jadi ringkasan tiap baris di halaman utama.</div></div>`;
   return `${headBar("roster",n.name)}
+  <div class="field"><label>Nama (dataKey)</label><input class="ctrl mono" data-k="name" value="${esc(n.name)}"></div>
   <div class="field"><label>Jenis roster</label>
     <div class="seg" id="rtSeg"><button data-rt="inline" class="${n.rosterType==="inline"?"on":""}">Inline</button><button data-rt="separate" class="${n.rosterType==="separate"?"on":""}">Subhalaman</button></div>
     <div class="help" style="margin-left:0;margin-top:6px">${n.rosterType==="inline"?"Input di halaman yang sama.":"Daftar baris di halaman utama; isi tiap baris di halaman terpisah."}</div></div>
   <div class="field"><label>Judul roster (opsional)</label><input class="ctrl" data-k="title" value="${esc(n.title||"")}"></div>
   <div class="field"><label>Judul baris roster <span class="help">mis. "Usaha" — dipakai di tombol &amp; popup tambah baris</span></label><input class="ctrl" data-k="rowTitle" placeholder="Usaha" value="${esc(n.rowTitle||"")}"></div>
-  <div class="field"><label>Nama (dataKey)</label><input class="ctrl mono" data-k="name" value="${esc(n.name)}"></div>
   <div class="row2"><div class="field"><label>Min baris</label><input class="ctrl" type="number" step="1" min="0" inputmode="numeric" data-k="min" value="${esc(n.min??"")}"></div><div class="field"><label>Maks baris</label><input class="ctrl" type="number" step="1" min="0" inputmode="numeric" data-k="max" value="${esc(n.max??"")}"></div></div>
   <div class="field"><label>Jumlah baris dari field (countFrom) <span class="help">otomatis generate baris; kosongkan untuk pakai tombol "+ Tambah ${n.rowTitle?esc(n.rowTitle):"baris"}" dengan popup</span></label><input class="ctrl mono" data-k="countFrom" value="${esc(n.countFrom||"")}"></div>
   <div class="field"><label>Label tiap baris (itemLabel)</label><input class="ctrl" data-k="itemLabel" placeholder="Usaha {{index}}: \${nama}" value="${esc(n.itemLabel||"")}"></div>
@@ -443,11 +443,20 @@ function fieldForm(c){const t=c.type;let html=headBar(t,c.name);
   html+=`<div class="field"><label>Petunjuk (hint)</label><input class="ctrl" data-k="hint" value="${esc(c.hint||"")}"></div>`;
   if(t==="note")html+=`<div class="field"><label>Konten HTML</label><textarea class="ctrl" data-k="html" rows="3">${esc(c.html||"")}</textarea></div>`;
   if(t==="markdown")html+=`<div class="field"><label>Keterangan (Markdown)</label><textarea class="ctrl" data-k="markdown" rows="6" placeholder="# Petunjuk Pengisian&#10;&#10;Isi sesuai **kondisi sebenarnya**. Lihat:&#10;- poin pertama&#10;- poin kedua&#10;&#10;> Catatan penting.">${esc(c.markdown||"")}</textarea><div class="help" style="margin-left:0;margin-top:4px">Mendukung: # judul, **tebal**, *miring*, \`kode\`, list (- / 1.), &gt; kutipan, [teks](url), --- garis.</div></div>`;
-  if(t==="calculated")html+=`<div class="field"><label>Rumus (calculate)</label><textarea class="ctrl" data-k="calculate" placeholder="\${a}+\${b}">${esc(c.calculate||"")}</textarea></div>`;
+  if(t==="calculated")html+=`<div class="field"><label>Rumus (calculate)</label><textarea class="ctrl" data-k="calculate" placeholder="\${a}+\${b}">${esc(c.calculate||"")}</textarea></div><label class="check" style="margin-top:6px"><input type="checkbox" data-k="autofill" ${c.autofill?"checked":""}> Autofill — isi otomatis tapi bisa diedit</label>`;
   if(NUMERIC.has(t))html+=`<div class="row3">${mini("min","Min",c.min)}${mini("max","Maks",c.max)}${mini("step","Step",c.step)}</div><div class="field"><label>Satuan</label><input class="ctrl" data-k="unit" value="${esc(c.unit||"")}"></div>`;
   if(TEXTY.has(t))html+=`<div class="row2">${mini("maxLength","Maks karakter",c.maxLength,"number")}<div class="field"><label>Placeholder</label><input class="ctrl" data-k="placeholder" value="${esc(c.placeholder||"")}"></div></div><div class="field"><label>Pola (regex)</label><input class="ctrl mono" data-k="pattern" value="${esc(c.pattern||"")}"></div>`;
   if(CHOICE.has(t))html+=optionsBlock(c);
-  html+=`<div class="group"><div class="gh">Perilaku</div><label class="check"><input type="checkbox" data-k="required" ${c.required?"checked":""}> Wajib diisi</label><label class="check"><input type="checkbox" data-k="readOnly" ${c.readOnly?"checked":""}> Hanya baca</label><label class="check"><input type="checkbox" data-k="allowRemark" ${c.allowRemark?"checked":""}> Izinkan catatan</label></div>`;
+  const dvHtml=(()=>{
+    if(t==="note"||t==="markdown"||t==="calculated")return"";
+    if(t==="boolean")return`<div class="field" style="margin-top:8px"><label>Nilai awal (default)</label><select class="ctrl" data-k="defaultValue"><option value="">— tidak ada —</option><option value="true"${c.defaultValue==="true"?" selected":""}>Ya</option><option value="false"${c.defaultValue==="false"?" selected":""}>Tidak</option></select></div>`;
+    if(CHOICE.has(t)&&(c.optionSource==="manual"||(!c.optionSource&&c.options&&c.options.length))){
+      const opts=(c.options||[]).map(o=>{const v=String(o.value??"");const lbl=typeof o.label==="object"?(o.label[state.defaultLocale]||o.label.id||v):(o.label||v);return`<option value="${esc(v)}"${String(c.defaultValue??"")=== v?" selected":""}>${esc(lbl)}</option>`;}).join("");
+      return`<div class="field" style="margin-top:8px"><label>Nilai awal (default)</label><select class="ctrl" data-k="defaultValue"><option value="">— tidak ada —</option>${opts}</select></div>`;
+    }
+    return`<div class="field" style="margin-top:8px"><label>Nilai awal (default)</label><input class="ctrl" data-k="defaultValue" value="${esc(c.defaultValue||"")}"></div>`;
+  })();
+  html+=`<div class="group"><div class="gh">Perilaku</div><label class="check"><input type="checkbox" data-k="required" ${c.required?"checked":""}> Wajib diisi</label><label class="check"><input type="checkbox" data-k="readOnly" ${c.readOnly?"checked":""}> Hanya baca</label><label class="check"><input type="checkbox" data-k="allowRemark" ${c.allowRemark?"checked":""}> Izinkan catatan</label><label class="check"><input type="checkbox" data-k="promptOnAdd" ${c.promptOnAdd?"checked":""}> Ditanyakan saat tambah baris <span class="help">nilai bisa dipanggil di label dengan <code>{{${c.name}}}</code></span></label>${dvHtml}</div>`;
   html+=`<div class="group"><div class="gh">Kondisi & alur</div>${cond("visibleWhen","Tampil bila",c.visibleWhen)}${cond("enableWhen","Aktif bila",c.enableWhen)}${cond("requiredWhen","Wajib bila",c.requiredWhen)}${skipsBlock(c)}</div>`;
   html+=validationsBlock(c); return html;
 }
@@ -517,7 +526,7 @@ function serNode(n){
   if(clean(c.hint))o.hint=loc(c.hint);
   if(c.type==="note"&&clean(c.html))o.html=loc(c.html);
   if(c.type==="markdown"&&clean(c.markdown))o.markdown=loc(c.markdown);
-  if(c.type==="calculated"&&clean(c.calculate))o.calculate=c.calculate;
+  if(c.type==="calculated"&&clean(c.calculate))o.calculate=c.calculate;if(c.type==="calculated"&&c.autofill)o.autofill=true;
   if(clean(c.unit))o.unit=c.unit;
   ["min","max","step","maxLength"].forEach(k=>{if(clean(c[k]))o[k]=num(c[k]);});
   if(clean(c.pattern))o.pattern=c.pattern;if(clean(c.placeholder))o.placeholder=loc(c.placeholder);
@@ -525,7 +534,8 @@ function serNode(n){
     if(mode==="api"&&c.optionsApi&&c.optionsApi.url){const a={url:c.optionsApi.url};["valueField","labelField","parentParam","searchParam","path","method","depKeys"].forEach(k=>{if(clean(c.optionsApi[k]))a[k]=c.optionsApi[k];});o.optionsApi=a;if(clean(c.optionsFilterBy))o.optionsFilterBy=c.optionsFilterBy;}
     else if(mode==="ref"&&clean(c.optionsRef)){o.optionsRef=c.optionsRef;if(clean(c.optionsFilterBy))o.optionsFilterBy=c.optionsFilterBy;}
     else if(c.options&&c.options.length)o.options=c.options.map(op=>{const x={value:coerce(op.value)};if(clean(op.label))x.label=loc(op.label);if(clean(op.skipTo))x.skipTo=op.skipTo;return x;});}
-  ["required","readOnly","allowRemark"].forEach(k=>{if(c[k])o[k]=true;});
+  ["required","readOnly","allowRemark","promptOnAdd"].forEach(k=>{if(c[k])o[k]=true;});
+  if(clean(c.defaultValue))o.defaultValue=c.defaultValue;
   ["visibleWhen","enableWhen","requiredWhen"].forEach(k=>{if(clean(c[k]))o[k]=c[k];});
   if(c.skips&&c.skips.length){const s=c.skips.filter(x=>clean(x.when)||clean(x.to));if(s.length)o.skips=s.map(x=>({when:x.when,to:x.to}));}
   if(c.validations&&c.validations.length){const v=c.validations.filter(x=>clean(x.test));if(v.length)o.validations=v.map(x=>({test:x.test,message:loc(x.message||""),severity:x.severity||"error"}));}
@@ -548,7 +558,7 @@ function lint(){
   Object.entries(names).forEach(([n,ps])=>{if(ps.length>1)add("error",n,`Nama '${n}' dipakai ${ps.length}×`);});
   const tables=new Set(Object.keys(state.referenceData||{}));const nav=new Set([...fields,...containers,"__end","__next","__prev"]);
   refs.forEach(r=>{if(r.kind==="table"&&!tables.has(r.val))add("error",r.path,`optionsRef '${r.val}' tidak ada di referenceData`);if(r.kind==="field"&&!fields.has(r.val))add("error",r.path,`'${r.val}' bukan field yang ada`);if(r.kind==="nav"&&!nav.has(r.val))add("error",r.path,`target lompatan '${r.val}' tidak ditemukan`);});
-  exprs.forEach(({path,expr})=>{try{Expr.parse(expr);}catch(e){add("error",path,"ekspresi tidak valid: "+e.message);}for(const m of String(expr).matchAll(/\$\{([^}]*)\}/g)){const b=m[1].trim().split(/[.\[]/)[0];if(!b||b.startsWith("__"))continue;if(!fields.has(b)&&!containers.has(b))add("error",path,`ekspresi merujuk '${b}' yang tidak ada`);}});
+  exprs.forEach(({path,expr})=>{try{Expr.parse(expr);}catch(e){add("error",path,"ekspresi tidak valid: "+e.message);}for(const m of String(expr).matchAll(/\$\{([^}]*)\}/g)){const full=m[1].trim();const b=full.split(/[.\[]/)[0];if(!b||b.startsWith("__"))continue;if(fields.has(full)||containers.has(full))continue;if(!fields.has(b)&&!containers.has(b))add("error",path,`ekspresi merujuk '${b}' yang tidak ada`);}});
   const locs=new Set(state.locales||[]);if(state.defaultLocale&&locs.size&&!locs.has(state.defaultLocale))add("warning","defaultLocale",`locale utama '${state.defaultLocale}' tidak ada di locales`);
   return issues;
 }
@@ -577,8 +587,8 @@ function impNode(n,forceKind){
   const kind=forceKind||n.kind||"field";
   if(kind==="page"||kind==="block"||kind==="section"){return {uid:uid(),kind,name:n.name||autoName(kind),title:textOf(n.title),visibleWhen:n.visibleWhen||"",components:(n.components||[]).map(c=>impNode(c))};}
   if(kind==="roster"){return {uid:uid(),kind:"roster",name:n.name||autoName("roster"),title:textOf(n.title),rowTitle:n.rowTitle||"",rosterType:n.rosterType||"inline",min:n.min??"",max:n.max??"",countFrom:n.countFrom||"",itemLabel:textOf(n.itemLabel),rowDisplay:n.rowDisplay||[],visibleWhen:n.visibleWhen||"",components:(n.components||[]).map(c=>impNode(c))};}
-  const f=newField(n.type||"text");f.uid=uid();f.name=n.name||f.name;f.label=textOf(n.label);f.hint=textOf(n.hint);f.html=textOf(n.html);f.markdown=textOf(n.markdown);f.calculate=n.calculate||"";
-  ["required","readOnly","allowRemark","visibleWhen","enableWhen","requiredWhen","unit","pattern","optionsRef","optionsFilterBy","min","max","step","maxLength"].forEach(k=>{if(n[k]!=null)f[k]=n[k];});
+  const f=newField(n.type||"text");f.uid=uid();f.name=n.name||f.name;f.label=textOf(n.label);f.hint=textOf(n.hint);f.html=textOf(n.html);f.markdown=textOf(n.markdown);f.calculate=n.calculate||"";f.autofill=!!n.autofill;
+  ["required","readOnly","allowRemark","promptOnAdd","visibleWhen","enableWhen","requiredWhen","unit","pattern","optionsRef","optionsFilterBy","min","max","step","maxLength","defaultValue"].forEach(k=>{if(n[k]!=null)f[k]=n[k];});
   f.placeholder=textOf(n.placeholder);
   if(n.options)f.options=n.options.map(o=>({value:String(o.value),label:textOf(o.label),skipTo:o.skipTo||""}));
   if(n.optionsApi){f.optionsApi={...n.optionsApi};f.optionSource="api";}else if(n.optionsRef){f.optionSource="ref";}else if(CHOICE.has(f.type))f.optionSource="manual";
@@ -622,7 +632,7 @@ function closePreview(){document.getElementById("preview").hidden=true;}
 function coerceVal(v){if(v==="true")return true;if(v==="false")return false;if(typeof v==="string"&&v.trim()!==""&&!isNaN(Number(v)))return Number(v);return v;}
 function refResolve(name,rowPrefix){
   name=String(name).trim();
-  if(name.includes(".")){const [rn,fn]=name.split(".");const r=allNodes().find(x=>x.kind==="roster"&&x.name===rn);if(r){const cnt=rosterCount(r);const arr=[];for(let i=0;i<cnt;i++)arr.push(coerceVal(pv.values[`${rn}#${i}#${fn}`]));return arr;}return undefined;}
+  if(name.includes(".")){const dot=name.indexOf(".");const rn=name.slice(0,dot),fn=name.slice(dot+1);const r=allNodes().find(x=>x.kind==="roster"&&x.name===rn);if(r){const cnt=rosterCount(r);const arr=[];for(let i=0;i<cnt;i++)arr.push(coerceVal(pv.values[`${rn}#${i}#${fn}`]));return arr;}if(rowPrefix){const k=rowPrefix+name;if(k in pv.values)return coerceVal(pv.values[k]);}return name in pv.values?coerceVal(pv.values[name]):undefined;}
   const rn=allNodes().find(x=>x.kind==="roster"&&x.name===name);
   if(rn){const cnt=rosterCount(rn);return Array.from({length:cnt},(_,i)=>i);}
   if(rowPrefix){const k=rowPrefix+name;if(k in pv.values)return coerceVal(pv.values[k]);}
@@ -634,17 +644,17 @@ function pvEmpty(v){return v==null||v===""||(Array.isArray(v)&&v.length===0);}
 function refLabels(ref,parentVal,filterField){const tbl=state.referenceData&&state.referenceData[ref];if(!tbl||!tbl.items)return [];return tbl.items.filter(it=>{if(filterField&&parentVal!=null&&parentVal!=="")return String(it.parent)===String(parentVal);return true;}).map(it=>({value:it.code,label:textOf(it.label)}));}
 function pvOptions(c,rowPrefix){if(c.optionsRef){const pVal=c.optionsFilterBy?refResolve(c.optionsFilterBy,rowPrefix):null;return refLabels(c.optionsRef,pVal,c.optionsFilterBy);}return (c.options||[]).map(o=>({value:o.value,label:textOf(o.label)||String(o.value)}));}
 function getPath(obj,path){return String(path).split(".").reduce((o,k)=>(o==null?o:o[k]),obj);}
-function buildApiUrl(tbl,parentVal){
+function buildApiUrl(tbl,parentVal,rp){
+  rp=rp||"";
   let url=tbl.url;
-  // Ganti semua {key}: {parent} → parentVal, {key} lain → pv.values[key]
-  url=url.replace(/\{([^}]+)\}/g,(_,k)=>encodeURIComponent(k==="parent"?(parentVal??""): (pv.values[k]??"")));
-  // Fallback: URL tanpa placeholder, tapi ada parentParam → append sebagai query
+  // Ganti {key}: {parent} → parentVal; field lain → cari roster-prefixed dahulu, fallback halaman
+  url=url.replace(/\{([^}]+)\}/g,(_,k)=>encodeURIComponent(k==="parent"?(parentVal??""): ((rp&&pv.values[rp+k]!=null?pv.values[rp+k]:pv.values[k])??"")));
   if(!tbl.url.includes("{")&&tbl.parentParam&&parentVal!=null&&parentVal!=="")
     url+=(url.includes("?")?"&":"?")+encodeURIComponent(tbl.parentParam)+"="+encodeURIComponent(parentVal);
   return url;
 }
-function apiFetch(tbl,parentVal){
-  pv.apiCache=pv.apiCache||{};const url=buildApiUrl(tbl,parentVal);let e=pv.apiCache[url];
+function apiFetch(tbl,parentVal,rp){
+  pv.apiCache=pv.apiCache||{};const url=buildApiUrl(tbl,parentVal,rp);let e=pv.apiCache[url];
   if(!e){e=pv.apiCache[url]={state:"loading",opts:[]};
     fetch(url,{method:tbl.method||"GET",headers:tbl.headers||{}})
       .then(r=>{if(!r.ok)throw new Error("HTTP "+r.status);return r.json();})
@@ -661,12 +671,12 @@ function resolveOptions(c,rp){
     const urlDeps=(cfg.url.match(/\{([^}]+)\}/g)||[]).map(m=>m.slice(1,-1)).filter(k=>k!=="parent");
     const explicitDeps=(cfg.depKeys||"").split(",").map(s=>s.trim()).filter(Boolean);
     const deps=[...new Set([...urlDeps,...explicitDeps])];
-    const missing=deps.find(k=>pv.values[k]==null||pv.values[k]==="");
+    const missing=deps.find(k=>{const v=rp?(pv.values[rp+k]??pv.values[k]):pv.values[k];return v==null||v==="";});
     if(missing)return {state:"skip",opts:[]};
     const parentVal=c.optionsFilterBy?refResolve(c.optionsFilterBy,rp):null;
-    const e=apiFetch(cfg,parentVal);return {state:e.state==="done"?"ok":e.state,opts:e.opts||[],error:e.error};
+    const e=apiFetch(cfg,parentVal,rp);return {state:e.state==="done"?"ok":e.state,opts:e.opts||[],error:e.error};
   }
-  if(mode==="ref"&&c.optionsRef){const tbl=state.referenceData&&state.referenceData[c.optionsRef];if(!tbl)return {state:"ok",opts:[]};const parentVal=c.optionsFilterBy?refResolve(c.optionsFilterBy,rp):null;if(tbl.source==="api"){const e=apiFetch(tbl,parentVal);return {state:e.state==="done"?"ok":e.state,opts:e.opts||[],error:e.error};}return {state:"ok",opts:refLabels(c.optionsRef,parentVal,c.optionsFilterBy)};}
+  if(mode==="ref"&&c.optionsRef){const tbl=state.referenceData&&state.referenceData[c.optionsRef];if(!tbl)return {state:"ok",opts:[]};const parentVal=c.optionsFilterBy?refResolve(c.optionsFilterBy,rp):null;if(tbl.source==="api"){const e=apiFetch(tbl,parentVal,rp);return {state:e.state==="done"?"ok":e.state,opts:e.opts||[],error:e.error};}return {state:"ok",opts:refLabels(c.optionsRef,parentVal,c.optionsFilterBy)};}
   return {state:"ok",opts:(c.options||[]).map(o=>({value:o.value,label:textOf(o.label)||String(o.value)}))};
 }
 function optWrap(ro,fn,key){
@@ -719,6 +729,44 @@ function fieldEffectiveSkipTarget(f){
   if(pvEmpty(pv.values[f.name]))return fieldPendingTarget(f);
   return null;
 }
+// Varian roster: evaluasi skip dengan jawaban dari baris tertentu (rp = "roster#idx#").
+function fieldSkipTargetRp(f,rp){
+  for(const s of (f.skips||[])){
+    if(!s.when||!s.to)continue;
+    const r=evalExprSrc(s.when,rp);
+    if(r===undefined)continue;
+    if(r)return s.to;
+  }
+  if(CHOICE.has(f.type)&&Array.isArray(f.options)){
+    const v=pv.values[rp+f.name];
+    const sel=Array.isArray(v)?v.map(String):[String(v)];
+    for(const o of f.options){if(o.skipTo&&sel.includes(String(o.value)))return o.skipTo;}
+  }
+  return null;
+}
+function fieldEffectiveSkipTargetRp(f,rp){
+  const t=fieldSkipTargetRp(f,rp);
+  if(t)return t;
+  if(pvEmpty(pv.values[rp+f.name]))return fieldPendingTarget(f);
+  return null;
+}
+// Hitung field dalam satu baris roster yang harus disembunyikan karena skip-to.
+function computeRosterRowSkipState(roster,rowIdx){
+  const rp=`${roster.name}#${rowIdx}#`;
+  const allRowFields=flatFields(roster.components);
+  const allNames=new Set(allRowFields.map(f=>f.name));
+  const hidden=new Set();
+  let skipActive=false,skipTarget=null;
+  for(const f of allRowFields){
+    if(skipActive){
+      if(f.name===skipTarget){skipActive=false;skipTarget=null;}
+      else{hidden.add(f.name);continue;}
+    }
+    const t=fieldEffectiveSkipTargetRp(f,rp);
+    if(t&&allNames.has(t)&&t!==f.name){skipActive=true;skipTarget=t;}
+  }
+  return hidden;
+}
 // Hitung field di halaman ini yang harus disembunyikan karena skip yang
 // sedang aktif (target di halaman yang sama), plus target lintas-halaman
 // bila skip yang aktif belum "selesai" sampai akhir halaman.
@@ -741,6 +789,7 @@ function computePageSkipState(page){
   return{hidden,crossPageTarget:skipActive?crossPageTarget:null};
 }
 let SKIP_HIDDEN=new Set();
+let ROW_SKIP_HIDDEN=new Map();
 function clearPageValues(page){
   (function walk(n,prefix){(n.components||[]).forEach(c=>{
     if(c.kind==="field"){delete pv.values[prefix+c.name];}
@@ -769,7 +818,7 @@ function pageValidationTargets(page){
 function validateCurrentPage(page){
   const targets=pageValidationTargets(page);
   for(const {c,rp} of targets){
-    if(c.type==="note"||c.type==="markdown"||c.type==="hidden"||c.type==="calculated")continue;
+    if(c.type==="note"||c.type==="markdown"||c.type==="hidden"||(c.type==="calculated"&&!c.autofill))continue;
     if(!evalVisible(c.enableWhen,rp))continue;
     const key=rp+c.name,val=pv.values[key];
     const isRequired=!!c.required||!!(c.requiredWhen&&evalVisible(c.requiredWhen,rp));
@@ -799,12 +848,14 @@ function renderPreview(){
   const pages=visiblePages();
   if(!pages.length){body.innerHTML=`<div class="pv-empty">Belum ada halaman untuk ditampilkan.</div>`;renderPvSide();return;}
   let html="";
-  if(pv.mode==="scroll"){SKIP_HIDDEN=new Set();pages.forEach(p=>html+=pvPage(p));}
+  if(pv.mode==="scroll"){SKIP_HIDDEN=new Set();ROW_SKIP_HIDDEN=new Map();pages.forEach(p=>html+=pvPage(p));}
   else{if(pv.page>=pages.length)pv.page=pages.length-1;const p=pages[pv.page];
     SKIP_HIDDEN=computePageSkipState(p).hidden;
     SKIP_HIDDEN.forEach(name=>{delete pv.values[name];});
+    ROW_SKIP_HIDDEN=new Map();
     html+=pvPage(p);
-    html+=`<div class="pv-nav-err" id="pvNavErr"></div><div class="pv-nav">${pv.page>0?`<button class="btn" id="pvPrev">← Sebelumnya</button>`:`<span></span>`}<span class="pv-prog">Halaman ${pv.page+1} / ${pages.length}</span>${pv.page<pages.length-1?`<button class="btn primary" id="pvNext">Lanjut →</button>`:`<button class="btn primary" id="pvDone">Selesai</button>`}</div>`;}
+    const pct=pages.length>1?Math.round(((pv.page+1)/pages.length)*100):100;
+    html+=`<div class="pv-nav-err" id="pvNavErr"></div><div class="pv-nav">${pv.page>0?`<button class="btn" id="pvPrev">← Sebelumnya</button>`:`<span></span>`}<div class="pv-prog-wrap"><div class="pv-progbar-track"><div class="pv-progbar" style="width:${pct}%"></div></div><span class="pv-prog">Halaman ${pv.page+1} / ${pages.length}</span></div>${pv.page<pages.length-1?`<button class="btn primary" id="pvNext">Lanjut →</button>`:`<button class="btn primary" id="pvDone">Selesai</button>`}</div>`;}
   body.innerHTML=html;bindPreview(body);body.scrollTop=keep;renderPvSide();
   body.querySelector("#pvPrev")?.addEventListener("click",()=>{pv.page--;body.scrollTop=0;renderPreview();});
   body.querySelector("#pvNext")?.addEventListener("click",()=>{
@@ -836,36 +887,40 @@ function rosterCount(r){
   const k=`${r.name}#count`;if(pv.values[k]==null)pv.values[k]=Number(r.min)||1;return pv.values[k];
 }
 function labelOfField(name){const n=allNodes().find(x=>x.kind==="field"&&x.name===name);return n?(n.label||n.name):name;}
+function flatFields(comps){const out=[];function go(a){(a||[]).forEach(c=>{c.kind==="field"?out.push(c):c.components&&go(c.components);});}go(comps);return out;}
 function rowSummary(r,i){
-  const disp=(r.rowDisplay&&r.rowDisplay.length)?r.rowDisplay:((r.components||[]).filter(c=>c.kind==="field").slice(0,1).map(c=>c.name));
+  const disp=(r.rowDisplay&&r.rowDisplay.length)?r.rowDisplay:flatFields(r.components).slice(0,1).map(c=>c.name);
   const parts=disp.map(fn=>{const v=pv.values[`${r.name}#${i}#${fn}`];return (v==null||v==="")?null:String(v);}).filter(Boolean);
   return parts.length?esc(parts.join(" · ")):"";
 }
-function isRowFilled(r,i){return (r.components||[]).some(f=>{const v=pv.values[`${r.name}#${i}#${f.name}`];return v!=null&&v!=="";});}
-function primaryRowField(r){if(r.rowDisplay&&r.rowDisplay.length)return r.rowDisplay[0];const f=(r.components||[]).find(c=>c.kind==="field");return f?f.name:null;}
+function isRowFilled(r,i){return flatFields(r.components).some(f=>{const v=pv.values[`${r.name}#${i}#${f.name}`];return v!=null&&v!=="";});}
+function primaryRowField(r){if(r.rowDisplay&&r.rowDisplay.length)return r.rowDisplay[0];const f=flatFields(r.components)[0];return f?f.name:null;}
 function openAddRowModal(r){
   const title=r.rowTitle||"baris";
+  const promptFields=flatFields(r.components).filter(f=>f.promptOnAdd);
   const bg=document.createElement("div");bg.className="pv-modal-bg";
-  bg.innerHTML=`<div class="pv-modal">
-    <h3>Tambah ${esc(title)}</h3>
-    <p class="pv-modal-sub">Masukkan nama/judul untuk ${esc(title)} ini.</p>
-    <input type="text" id="addRowInput" placeholder="${esc(title)}…">
-    <div class="pv-modal-actions"><button class="btn ghost" id="addRowCancel">Batal</button><button class="btn primary" id="addRowConfirm">+ Tambah ${esc(title)}</button></div>
-  </div>`;
+  const fieldsHtml=promptFields.length
+    ?promptFields.map(f=>`<div style="margin-bottom:10px"><label style="display:block;font-size:12.5px;font-weight:500;margin-bottom:5px">${esc(f.label||f.name)}</label><input class="pv-modal-in" data-pf="${esc(f.name)}" placeholder="${esc(f.placeholder||f.label||f.name)}…" style="width:100%;border:1px solid var(--line);border-radius:var(--radius-s);padding:9px 10px;font-size:13px;box-sizing:border-box"></div>`).join("")
+    :`<input type="text" id="addRowInput" placeholder="${esc(title)}…" style="width:100%;border:1px solid var(--line);border-radius:var(--radius-s);padding:9px 10px;font-size:13px;margin-bottom:4px;box-sizing:border-box">`;
+  bg.innerHTML=`<div class="pv-modal"><h3>Tambah ${esc(title)}</h3>${fieldsHtml}<div class="pv-modal-actions"><button class="btn ghost" id="addRowCancel">Batal</button><button class="btn primary" id="addRowConfirm">+ Tambah ${esc(title)}</button></div></div>`;
   document.body.appendChild(bg);
-  const input=bg.querySelector("#addRowInput");input.focus();
+  const firstInput=bg.querySelector("input");if(firstInput)firstInput.focus();
   const close=()=>bg.remove();
   bg.querySelector("#addRowCancel").addEventListener("click",close);
   bg.addEventListener("click",e=>{if(e.target===bg)close();});
   const confirmAdd=()=>{
-    const val=input.value.trim();
     const idx=pv.values[`${r.name}#count`]||0;
     pv.values[`${r.name}#count`]=idx+1;
-    if(val){const pf=primaryRowField(r);if(pf)pv.values[`${r.name}#${idx}#${pf}`]=val;}
+    if(promptFields.length){
+      bg.querySelectorAll("[data-pf]").forEach(el=>{const v=el.value.trim();if(v)pv.values[`${r.name}#${idx}#${el.dataset.pf}`]=v;});
+    }else{
+      const val=bg.querySelector("#addRowInput")?.value.trim();
+      if(val){const pf=primaryRowField(r);if(pf)pv.values[`${r.name}#${idx}#${pf}`]=val;}
+    }
     close();renderPreview();
   };
   bg.querySelector("#addRowConfirm").addEventListener("click",confirmAdd);
-  input.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();confirmAdd();}if(e.key==="Escape")close();});
+  bg.querySelectorAll("input").forEach(inp=>inp.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();confirmAdd();}if(e.key==="Escape")close();}));
 }
 function delRow(rname,idx){
   const key=`${rname}#count`;const count=pv.values[key]||1;const prefix=`${rname}#`;const nv={};
@@ -877,7 +932,11 @@ function delRow(rname,idx){
   nv[key]=Math.max(0,count-1);pv.values=nv;
 }
 function addRowLabel(r){return r.rowTitle?`+ Tambah ${esc(r.rowTitle)}`:"+ Tambah baris";}
-function rowLabel(r,i){return r.rowTitle?`${esc(r.rowTitle)} #${i+1}`:`Baris #${i+1}`;}
+function rowInterp(text,rp){if(!text||!rp)return text;return text.replace(/\{\{([^}]+)\}\}/g,(_,n)=>{const v=pv.values[rp+n.trim()];return v!=null?String(v):`{{${n}}}`});}
+function rowLabel(r,i){
+  if(r.itemLabel){const rp=`${r.name}#${i}#`;return esc(r.itemLabel.replace(/\{\{index\}\}/g,String(i+1)).replace(/\{\{([^}]+)\}\}/g,(_,n)=>{const v=pv.values[rp+n.trim()];return v!=null?String(v):"";}));}
+  return r.rowTitle?`${esc(r.rowTitle)} #${i+1}`:`Baris #${i+1}`;
+}
 function pvRoster(r){
   const count=rosterCount(r);const manual=!r.countFrom;
   if(r.rosterType==="separate"){
@@ -894,7 +953,7 @@ function pvRoster(r){
   // inline
   let h=`<div class="pv-roster" id="pvroster_${esc(r.name)}"><div class="pv-rh">${esc(r.title||r.name)}</div>`;
   if(r.countFrom&&count<=0)h+=`<div class="pv-rowempty">Isi dulu “${esc(labelOfField(r.countFrom))}” untuk menentukan jumlah baris.</div>`;
-  for(let i=0;i<count;i++){h+=`<div class="pv-row"><div class="pv-rownum"><span>${rowLabel(r,i)}</span>${manual?`<button class="pv-del" data-delrow="${esc(r.name)}" data-i="${i}">hapus</button>`:""}</div>`;r.components.forEach(f=>h+=pvNode(f,{r:r.name,i}));h+=`</div>`;}
+  for(let i=0;i<count;i++){const rs=computeRosterRowSkipState(r,i);ROW_SKIP_HIDDEN.set(`${r.name}#${i}`,rs);rs.forEach(n=>{delete pv.values[`${r.name}#${i}#${n}`];});h+=`<div class="pv-row"><div class="pv-rownum"><span>${rowLabel(r,i)}</span>${manual?`<button class="pv-del" data-delrow="${esc(r.name)}" data-i="${i}">hapus</button>`:""}</div>`;r.components.forEach(f=>h+=pvNode(f,{r:r.name,i}));h+=`</div>`;}
   if(manual)h+=`<button class="pv-add" data-addrow="${esc(r.uid)}">${addRowLabel(r)}</button>`;
   return h+`</div>`;
 }
@@ -902,6 +961,7 @@ function renderRosterRowPage(){
   const body=document.getElementById("pvBody");const keep=body.scrollTop;
   const r=findNode(pv.row.uid);if(!r){pv.row=null;return renderPreview();}
   const i=pv.row.index;const parent=pageOf(r.uid);
+  const rs=computeRosterRowSkipState(r,i);ROW_SKIP_HIDDEN.set(`${r.name}#${i}`,rs);rs.forEach(n=>{delete pv.values[`${r.name}#${i}#${n}`];});
   let h=`<div class="pv-page"><button class="btn" id="pvBack" style="margin-bottom:14px">← ${esc(parent?(parent.title||parent.name):"Kembali")}</button><h2 class="pv-h2">${esc(r.title||r.name)} — ${rowLabel(r,i)}</h2>`;
   r.components.forEach(f=>h+=pvNode(f,{r:r.name,i}));
   h+=`<div class="pv-nav"><span></span><button class="btn primary" id="pvBackDone">Simpan baris &amp; kembali</button></div></div>`;
@@ -918,33 +978,47 @@ function pvField(c,row){
   if(c.type==="hidden")return "";
   const rp=row?`${row.r}#${row.i}#`:"";
   if(!evalVisible(c.visibleWhen,rp))return "";
-  if(!row&&SKIP_HIDDEN.has(c.name))return ""; // disembunyikan oleh skip-to field sebelumnya di halaman ini
-  if(c.type==="note")return `<div class="pv-note">${c.html||""}</div>`;
-  if(c.type==="markdown")return `<div class="pv-note pv-md">${mdToHtml(c.markdown||"")}</div>`;
+  if(row?ROW_SKIP_HIDDEN.get(rp.slice(0,-1))?.has(c.name):SKIP_HIDDEN.has(c.name))return ""; // skip-to: halaman atau baris roster
+  if(c.type==="note")return `<div class="pv-note pv-field">${c.html||""}</div>`;
+  if(c.type==="markdown")return `<div class="pv-note pv-field pv-md">${mdToHtml(c.markdown||"")}</div>`;
   const key=row?`${row.r}#${row.i}#${c.name}`:c.name;
-  if(c.type==="calculated"){const r=evalExprSrc(c.calculate,rp);pv.values[key]=(r===undefined?"":r);const lab=`<label class="pv-lab">${esc(c.label||c.name)}</label>`;const hint=c.hint?`<div class="pv-hint">${esc(c.hint)}</div>`:"";return `<div class="pv-field" data-fieldkey="${esc(key)}">${lab}${hint}<div><input class="pv-in" value="${esc(r===undefined||r===""?"—":String(r))}" disabled></div></div>`;}
+  if(c.type==="calculated"){
+    if(c.autofill){
+      if(pvEmpty(pv.values[key])){const r=evalExprSrc(c.calculate,rp);if(r!==undefined&&r!=="")pv.values[key]=String(r);}
+      const val=pv.values[key]??"";const isReq=!!c.required||!!(c.requiredWhen&&evalVisible(c.requiredWhen,rp));const en=evalVisible(c.enableWhen,rp);
+      const lab=`<label class="pv-lab">${esc(rowInterp(c.label||c.name,rp))}${isReq?' <span class="pv-req">*</span>':''}</label>`;const hint=c.hint?`<div class="pv-hint">${esc(rowInterp(c.hint,rp))}</div>`:"";
+      return `<div class="pv-field" data-fieldkey="${esc(key)}">${lab}${hint}<div><input data-k="${esc(key)}" class="pv-in" value="${esc(val)}"${en?"":" disabled"}></div></div>`;
+    }
+    const r=evalExprSrc(c.calculate,rp);pv.values[key]=(r===undefined?"":r);
+    const lab=`<label class="pv-lab">${esc(rowInterp(c.label||c.name,rp))}</label>`;const hint=c.hint?`<div class="pv-hint">${esc(rowInterp(c.hint,rp))}</div>`:"";
+    return `<div class="pv-field" data-fieldkey="${esc(key)}">${lab}${hint}<div><input class="pv-in" value="${esc(r===undefined||r===""?"—":String(r))}" disabled></div></div>`;
+  }
+  if(pvEmpty(pv.values[key])&&clean(c.defaultValue))pv.values[key]=c.defaultValue;
   const val=pv.values[key]??"";
   const isRequired=!!c.required||!!(c.requiredWhen&&evalVisible(c.requiredWhen,rp));
   const enabled=evalVisible(c.enableWhen,rp);
   const dis=enabled?"":" disabled";
-  const lab=`<label class="pv-lab">${esc(c.label||c.name)}${isRequired?' <span class="pv-req">*</span>':''}</label>`;
-  const hint=c.hint?`<div class="pv-hint">${esc(c.hint)}</div>`:"";
+  const rdOnly=c.readOnly?" readonly":"";
+  const disAll=(enabled&&!c.readOnly)?"":" disabled";
+  const lab=`<label class="pv-lab">${esc(rowInterp(c.label||c.name,rp))}${isRequired?' <span class="pv-req">*</span>':''}</label>`;
+  const hint=c.hint?`<div class="pv-hint">${esc(rowInterp(c.hint,rp))}</div>`:"";
   const da=`data-k="${esc(key)}"`;let ctrl="";
-  if(c.type==="textarea")ctrl=`<textarea ${da} class="pv-in" rows="3"${dis}>${esc(val)}</textarea>`;
-  else if(c.type==="text")ctrl=`<input ${da} class="pv-in" value="${esc(val)}" placeholder="${esc(c.placeholder||"")}"${dis}>`;
-  else if(NUMERIC.has(c.type))ctrl=`<input ${da} type="number" class="pv-in" value="${esc(val)}"${c.min!==""&&c.min!=null?` min="${c.min}"`:""}${c.max!==""&&c.max!=null?` max="${c.max}"`:""}${dis} style="width:auto;min-width:160px">${c.unit?`<span class="pv-unit">${esc(c.unit)}</span>`:""}`;
-  else if(c.type==="boolean")ctrl=pvRadios(key,[{value:"true",label:"Ya"},{value:"false",label:"Tidak"}],String(val),dis);
-  else if(c.type==="radio"){const ro=resolveOptions(c,rp);ctrl=optWrap(ro,()=>pvRadios(key,ro.opts,String(val),dis),key);}
-  else if(c.type==="select"){const ro=resolveOptions(c,rp);ctrl=optWrap(ro,()=>`<select ${da} class="pv-in"${dis}><option value="">— pilih —</option>${ro.opts.map(o=>`<option value="${esc(o.value)}"${String(val)===String(o.value)?" selected":""}>${esc(o.label)}</option>`).join("")}</select>`,key);}
-  else if(c.type==="checkbox"||c.type==="multiselect"){const ro=resolveOptions(c,rp);ctrl=optWrap(ro,()=>`<div class="pv-radios">${ro.opts.map(o=>`<label class="pv-opt"><input type="checkbox" data-kc="${esc(key)}" value="${esc(o.value)}"${(Array.isArray(val)&&val.map(String).includes(String(o.value)))?" checked":""}${dis}> ${esc(o.label)}</label>`).join("")}</div>`,key);}
-  else if(c.type==="date")ctrl=`<input ${da} type="date" class="pv-in" value="${esc(val)}" style="width:auto"${dis}>`;
-  else if(c.type==="time")ctrl=`<input ${da} type="time" class="pv-in" value="${esc(val)}" style="width:auto"${dis}>`;
-  else if(c.type==="datetime")ctrl=`<input ${da} type="datetime-local" class="pv-in" value="${esc(val)}" style="width:auto"${dis}>`;
-  else if(c.type==="geopoint")ctrl=`<input ${da} class="pv-in" value="${esc(val)}" placeholder="lat, lng"${dis}>`;
-  else if(c.type==="photo"||c.type==="file")ctrl=`<input type="file" class="pv-in"${c.type==="photo"?' accept="image/*"':''}${dis}>`;
-  else if(c.type==="signature")ctrl=`<div class="pv-sign">Area tanda tangan</div>`;
-  else if(c.type==="barcode")ctrl=`<input ${da} class="pv-in" value="${esc(val)}" placeholder="scan / ketik kode"${dis}>`;
-  else ctrl=`<input ${da} class="pv-in" value="${esc(val)}"${dis}>`;
+  if(c.type==="textarea")ctrl=`<textarea ${da} class="pv-in" rows="3"${dis}${rdOnly}>${esc(val)}</textarea>`;
+  else if(c.type==="text")ctrl=`<input ${da} class="pv-in" value="${esc(val)}" placeholder="${esc(c.placeholder||"")}"${dis}${rdOnly}>`;
+  else if(c.type==="email")ctrl=`<input ${da} type="email" class="pv-in" value="${esc(val)}" placeholder="${esc(c.placeholder||"nama@domain.com")}"${dis}${rdOnly}>`;
+  else if(NUMERIC.has(c.type))ctrl=`<input ${da} type="number" class="pv-in" value="${esc(val)}"${c.min!==""&&c.min!=null?` min="${c.min}"`:""}${c.max!==""&&c.max!=null?` max="${c.max}"`:""}${dis}${rdOnly} style="width:auto;min-width:160px">${c.unit?`<span class="pv-unit">${esc(c.unit)}</span>`:""}`;
+  else if(c.type==="boolean")ctrl=pvRadios(key,[{value:"true",label:"Ya"},{value:"false",label:"Tidak"}],String(val),disAll);
+  else if(c.type==="radio"){const ro=resolveOptions(c,rp);ctrl=optWrap(ro,()=>pvRadios(key,ro.opts,String(val),disAll),key);}
+  else if(c.type==="select"){const ro=resolveOptions(c,rp);ctrl=optWrap(ro,()=>`<select ${da} class="pv-in"${disAll}><option value="">— pilih —</option>${ro.opts.map(o=>`<option value="${esc(o.value)}"${String(val)===String(o.value)?" selected":""}>${esc(o.label)}</option>`).join("")}</select>`,key);}
+  else if(c.type==="checkbox"||c.type==="multiselect"){const ro=resolveOptions(c,rp);ctrl=optWrap(ro,()=>`<div class="pv-radios">${ro.opts.map(o=>`<label class="pv-opt"><input type="checkbox" data-kc="${esc(key)}" value="${esc(o.value)}"${(Array.isArray(val)&&val.map(String).includes(String(o.value)))?" checked":""}${disAll}> ${esc(o.label)}</label>`).join("")}</div>`,key);}
+  else if(c.type==="date")ctrl=`<input ${da} type="date" class="pv-in" value="${esc(val)}" style="width:auto"${dis}${rdOnly}>`;
+  else if(c.type==="time")ctrl=`<input ${da} type="time" class="pv-in" value="${esc(val)}" style="width:auto"${dis}${rdOnly}>`;
+  else if(c.type==="datetime")ctrl=`<input ${da} type="datetime-local" class="pv-in" value="${esc(val)}" style="width:auto"${dis}${rdOnly}>`;
+  else if(c.type==="geopoint")ctrl=`<div class="pv-inbtn"><input ${da} class="pv-in" value="${esc(val)}" placeholder="lat, lng"${dis}${rdOnly}><button type="button" class="pv-smbtn pv-geobtn"${disAll}>📍 Ambil Lokasi</button></div><div class="pv-geomsg"></div>`;
+  else if(c.type==="photo"||c.type==="file")ctrl=`<input type="file" class="pv-in"${c.type==="photo"?' accept="image/*"':''}${disAll}>`;
+  else if(c.type==="signature")ctrl=`<div class="pv-sigwrap"><input type="hidden" ${da}><canvas class="pv-sigpad" width="400" height="140"${(enabled&&!c.readOnly)?"":' data-disabled="1"'}></canvas><div class="pv-sigactions"><button type="button" class="pv-smbtn pv-sigclear"${disAll}>Hapus tanda tangan</button></div></div>`;
+  else if(c.type==="barcode")ctrl=`<div class="pv-inbtn"><input ${da} class="pv-in" value="${esc(val)}" placeholder="scan / ketik kode"${dis}${rdOnly}><button type="button" class="pv-smbtn pv-scanbtn"${disAll}>📷 Pindai</button></div>`;
+  else ctrl=`<input ${da} class="pv-in" value="${esc(val)}"${dis}${rdOnly}>`;
   let vmsg="";
   (c.validations||[]).forEach(v=>{if(!v.test)return;if(pvEmpty(val))return;const r=evalExprSrc(v.test,rp);if(r===undefined)return;if(!r)vmsg+=`<div class="pv-vmsg ${v.severity==="warning"?"warning":"error"}">${esc(textOf(v.message)||"Nilai tidak valid")}</div>`;});
   return `<div class="pv-field" data-fieldkey="${esc(key)}">${lab}${hint}<div>${ctrl}</div>${vmsg}</div>`;
@@ -957,6 +1031,109 @@ function bindPreview(body){
   body.querySelectorAll("[data-addrow]").forEach(b=>b.addEventListener("click",()=>{const r=findNode(b.getAttribute("data-addrow"));if(r)openAddRowModal(r);}));
   body.querySelectorAll("[data-delrow]").forEach(b=>b.addEventListener("click",()=>{delRow(b.getAttribute("data-delrow"),+b.getAttribute("data-i"));renderPreview();}));
   body.querySelectorAll("[data-openrow]").forEach(b=>b.addEventListener("click",()=>{pv.row={uid:b.getAttribute("data-openrow"),index:+b.getAttribute("data-i")};document.getElementById("pvBody").scrollTop=0;renderPreview();}));
+  body.querySelectorAll(".pv-sigpad").forEach(canvas=>wireSignaturePad(canvas));
+  body.querySelectorAll(".pv-geobtn").forEach(btn=>wireGeoButton(btn));
+  body.querySelectorAll(".pv-scanbtn").forEach(btn=>wireScanButton(btn));
+}
+
+/* ---- widget field khusus: tanda tangan, lokasi, pindai barcode (preview) ---- */
+function wireSignaturePad(canvas){
+  if(canvas._wired)return;canvas._wired=true;
+  const hidden=canvas.previousElementSibling;
+  if(!hidden)return;
+  const ctx=canvas.getContext("2d");
+  ctx.lineWidth=2.2;ctx.lineCap="round";ctx.lineJoin="round";ctx.strokeStyle="#13171e";
+  if(hidden.value)loadSignatureImage(canvas,hidden.value);
+  let drawing=false,last=null;
+  const pos=e=>{const r=canvas.getBoundingClientRect();return {x:(e.clientX-r.left)*(canvas.width/r.width),y:(e.clientY-r.top)*(canvas.height/r.height)};};
+  const start=e=>{if(canvas.dataset.disabled==="1")return;e.preventDefault();drawing=true;last=pos(e);};
+  const move=e=>{if(!drawing)return;e.preventDefault();const p=pos(e);ctx.beginPath();ctx.moveTo(last.x,last.y);ctx.lineTo(p.x,p.y);ctx.stroke();last=p;};
+  const end=()=>{
+    if(!drawing)return;drawing=false;
+    hidden.value=canvas.toDataURL("image/png");
+    hidden.dispatchEvent(new Event("change",{bubbles:true}));
+  };
+  canvas.addEventListener("pointerdown",start);
+  canvas.addEventListener("pointermove",move);
+  canvas.addEventListener("pointerup",end);
+  canvas.addEventListener("pointercancel",end);
+  canvas.addEventListener("pointerleave",end);
+  const clearBtn=canvas.parentElement.querySelector(".pv-sigclear");
+  clearBtn?.addEventListener("click",()=>{
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    hidden.value="";
+    hidden.dispatchEvent(new Event("change",{bubbles:true}));
+  });
+}
+function loadSignatureImage(canvas,dataUrl){
+  const ctx=canvas.getContext("2d");
+  const img=new Image();
+  img.onload=()=>{ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0,canvas.width,canvas.height);};
+  img.src=dataUrl;
+}
+function wireGeoButton(btn){
+  if(btn._wired)return;btn._wired=true;
+  btn.addEventListener("click",()=>{
+    const wrap=btn.closest(".pv-field");
+    const msg=wrap?.querySelector(".pv-geomsg");
+    const input=btn.previousElementSibling;
+    if(msg){msg.textContent="";msg.classList.remove("error");}
+    if(!navigator.geolocation){if(msg){msg.textContent="Geolocation tidak didukung browser ini.";msg.classList.add("error");}return;}
+    const orig=btn.textContent;btn.disabled=true;btn.textContent="Mencari…";
+    navigator.geolocation.getCurrentPosition(
+      pos=>{
+        btn.disabled=false;btn.textContent=orig;
+        input.value=`${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`;
+        input.dispatchEvent(new Event("change",{bubbles:true}));
+      },
+      err=>{
+        btn.disabled=false;btn.textContent=orig;
+        if(msg){msg.textContent=err.code===1?"Izin lokasi ditolak.":"Gagal mengambil lokasi: "+err.message;msg.classList.add("error");}
+      },
+      {enableHighAccuracy:true,timeout:15000}
+    );
+  });
+}
+function wireScanButton(btn){
+  if(btn._wired)return;btn._wired=true;
+  if(!("BarcodeDetector" in window)){btn.disabled=true;btn.title="Pemindaian otomatis tidak didukung browser ini — isi manual.";return;}
+  btn.addEventListener("click",()=>openBarcodeScanner(btn.previousElementSibling));
+}
+async function openBarcodeScanner(input){
+  const bg=document.createElement("div");bg.className="pv-modal-bg";
+  bg.innerHTML=`<div class="pv-modal pv-scanmodal">
+    <h3>Pindai Barcode</h3>
+    <p class="pv-modal-sub">Arahkan kamera ke barcode/QR.</p>
+    <video id="scanVideo" autoplay playsinline muted></video>
+    <div class="pv-modal-actions"><button class="btn ghost" id="scanCancel">Batal</button></div>
+  </div>`;
+  document.body.appendChild(bg);
+  const video=bg.querySelector("#scanVideo"),sub=bg.querySelector(".pv-modal-sub");
+  let stream=null,stopped=false;
+  const close=()=>{stopped=true;if(stream)stream.getTracks().forEach(t=>t.stop());bg.remove();};
+  bg.querySelector("#scanCancel").addEventListener("click",close);
+  bg.addEventListener("click",e=>{if(e.target===bg)close();});
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
+    video.srcObject=stream;
+    const detector=new BarcodeDetector();
+    const loop=async()=>{
+      if(stopped)return;
+      try{
+        const codes=await detector.detect(video);
+        if(codes.length){
+          input.value=codes[0].rawValue;
+          input.dispatchEvent(new Event("change",{bubbles:true}));
+          close();
+          return;
+        }
+      }catch(_){}
+      requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+  }catch(e){
+    if(sub)sub.textContent="Tidak bisa mengakses kamera: "+e.message;
+  }
 }
 
 function renderPvSide(){

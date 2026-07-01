@@ -42,6 +42,13 @@ button{font-family:inherit;cursor:pointer}
 /* main split */
 .main{flex:1;display:flex;min-height:0}
 
+/* page sidebar (navigasi halaman, mirip tampilan kuesioner) */
+.page-side{width:200px;flex:none;background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding:13px 11px}
+.page-side-h{font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 4px 9px}
+.page-item{padding:9px 10px;border-radius:var(--radius-s);cursor:pointer;font-size:12.5px;font-weight:500;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.page-item:hover{background:var(--panel-2)}
+.page-item.active{background:var(--accent-soft);color:var(--accent-ink)}
+
 /* list panel */
 .list-panel{width:320px;flex:none;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
 .list-head{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--line);flex:none}
@@ -63,12 +70,13 @@ button{font-family:inherit;cursor:pointer}
 /* detail panel */
 .detail-panel{flex:1;overflow:auto;padding:22px 26px 60px}
 .detail-empty{display:flex;height:100%;align-items:center;justify-content:center;color:var(--muted);font-size:13px;text-align:center}
-.detail-header{display:flex;align-items:center;gap:12px;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.detail-empty[hidden]{display:none}
+.detail-header{display:flex;align-items:center;gap:12px;margin:0 auto 18px;padding-bottom:14px;border-bottom:1px solid var(--line);max-width:680px}
 .dh-num{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--accent-ink);background:var(--accent-soft);padding:4px 10px;border-radius:6px}
 .dh-time{font-size:13px;color:var(--muted)}
 
 /* detail schema rendering */
-.dr-page{margin-bottom:22px;max-width:680px}
+.dr-page{margin:0 auto 22px;max-width:680px}
 .dr-page-title{font-size:16px;font-weight:700;margin:0 0 12px;color:var(--ink)}
 .dr-block{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;margin-bottom:12px}
 .dr-block-title{font-weight:600;font-size:13.5px;margin-bottom:10px;color:var(--ink)}
@@ -86,6 +94,8 @@ button{font-family:inherit;cursor:pointer}
 .dr-row:last-child{margin-bottom:0}
 .dr-row-num{font-family:var(--mono);font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:6px}
 .dr-flat-key{font-family:var(--mono);font-size:11px}
+.detail-nav{display:flex;align-items:center;justify-content:space-between;gap:10px;max-width:680px;margin:18px auto 0;padding-top:14px;border-top:1px solid var(--line)}
+.detail-nav .pg-prog{font-size:12px;color:var(--muted)}
 
 /* misc */
 .loading,.empty-state{padding:28px;text-align:center;color:var(--muted);font-size:13px}
@@ -93,6 +103,7 @@ button{font-family:inherit;cursor:pointer}
 @media(max-width:720px){
   .main{flex-direction:column}
   .list-panel{width:100%;flex:none;max-height:42vh;border-right:none;border-bottom:1px solid var(--line)}
+  .page-side{width:100%;flex:none;max-height:160px;border-right:none;border-bottom:1px solid var(--line)}
   .detail-panel{padding:14px 12px 40px}
   .dr-label{width:120px}
 }
@@ -116,6 +127,10 @@ button{font-family:inherit;cursor:pointer}
         <div class="loading">Memuat…</div>
       </div>
     </div>
+    <aside class="page-side" id="pageSide" hidden>
+      <div class="page-side-h">Daftar Halaman</div>
+      <div id="pageList"></div>
+    </aside>
     <div class="detail-panel" id="detailPanel">
       <div class="detail-empty" id="detailEmpty">Pilih jawaban di sebelah kiri untuk melihat detail.</div>
       <div id="detailContent" hidden></div>
@@ -132,7 +147,7 @@ const H={"Authorization":"Bearer "+TOKEN,"Content-Type":"application/json"};
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const txt=v=>v==null?"":(typeof v==="object"?(v.id||Object.values(v)[0]||""):v);
 
-let SCHEMA=null, RESPONSES=[], TOTAL=0, PAGE=0, SELECTED=null;
+let SCHEMA=null, RESPONSES=[], TOTAL=0, PAGE=0, SELECTED=null, CUR_PAGE=0;
 const PAGE_SIZE=25;
 
 async function api(path,opts){
@@ -214,17 +229,42 @@ function renderList(){
 /* ---- detail ---- */
 function selectResponse(idx){
   SELECTED=idx;
+  CUR_PAGE=0;
   document.querySelectorAll(".resp-card").forEach((c,i)=>c.classList.toggle("active",i===idx));
+  renderDetail();
+}
 
-  const resp=RESPONSES[idx];
+// Tampilan detail jawaban dibuat mirip kuesioner: satu halaman per tampilan,
+// dengan sidebar navigasi halaman (lihat #pageSide) + tombol Sebelumnya/Selanjutnya.
+function renderDetail(){
+  const resp=RESPONSES[SELECTED];
+  if(!resp)return;
   const answers=parseAnswers(resp.answers);
-  const num=PAGE*PAGE_SIZE+idx+1;
+  const num=PAGE*PAGE_SIZE+SELECTED+1;
+  const meta=parseAnswers(resp.meta);
+  const pages=(SCHEMA&&SCHEMA.pages)||[];
+
+  renderPageSide(pages);
+
+  let body;
+  if(SCHEMA&&pages.length){
+    if(CUR_PAGE>=pages.length)CUR_PAGE=pages.length-1;
+    if(CUR_PAGE<0)CUR_PAGE=0;
+    const p=pages[CUR_PAGE];
+    const title=txt(p.title)||p.name||`Halaman ${CUR_PAGE+1}`;
+    body=`<div class="dr-page"><div class="dr-page-title">${esc(title)}</div>${renderNodes(p.components||[],answers,"")}</div>`;
+    body+=`<div class="detail-nav">
+      <button class="btn" id="dnPrev"${CUR_PAGE===0?" disabled":""}>← Sebelumnya</button>
+      <span class="pg-prog">Halaman ${CUR_PAGE+1} / ${pages.length}</span>
+      <button class="btn" id="dnNext"${CUR_PAGE>=pages.length-1?" disabled":""}>Selanjutnya →</button>
+    </div>`;
+  }else{
+    body=`<div class="dr-page">${renderFlatDetail(answers)}</div>`;
+  }
 
   document.getElementById("detailEmpty").hidden=true;
   const dc=document.getElementById("detailContent");
   dc.hidden=false;
-  const meta=parseAnswers(resp.meta);
-  const who=meta.name||meta.email?"":null;
   dc.innerHTML=`
     <div class="detail-header">
       <span class="dh-num">#${num}</span>
@@ -232,14 +272,21 @@ function selectResponse(idx){
       ${meta.name?`<span style="font-size:12.5px;color:var(--accent-ink);font-weight:500">${esc(meta.name)}</span>`:""}
       ${meta.email?`<span style="font-size:12px;color:var(--muted)">${esc(meta.email)}</span>`:""}
     </div>
-    <div>${SCHEMA?renderSchemaDetail(SCHEMA,answers):renderFlatDetail(answers)}</div>`;
+    <div id="detailBody">${body}</div>`;
+
+  dc.querySelector("#dnPrev")?.addEventListener("click",()=>{CUR_PAGE--;renderDetail();document.getElementById("detailPanel").scrollTop=0;});
+  dc.querySelector("#dnNext")?.addEventListener("click",()=>{CUR_PAGE++;renderDetail();document.getElementById("detailPanel").scrollTop=0;});
 }
 
-function renderSchemaDetail(schema,answers){
-  return(schema.pages||[]).map((p,pi)=>{
-    const title=txt(p.title)||p.name||`Halaman ${pi+1}`;
-    return`<div class="dr-page"><div class="dr-page-title">${esc(title)}</div>${renderNodes(p.components||[],answers,"")}</div>`;
-  }).join("");
+function renderPageSide(pages){
+  const side=document.getElementById("pageSide");
+  if(!pages.length){side.hidden=true;return;}
+  side.hidden=false;
+  const list=document.getElementById("pageList");
+  list.innerHTML=pages.map((p,i)=>`<div class="page-item${i===CUR_PAGE?" active":""}" data-pg="${i}">${esc(txt(p.title)||p.name||`Halaman ${i+1}`)}</div>`).join("");
+  list.querySelectorAll(".page-item").forEach(el=>el.addEventListener("click",()=>{
+    CUR_PAGE=+el.dataset.pg;renderDetail();document.getElementById("detailPanel").scrollTop=0;
+  }));
 }
 
 function renderNodes(comps,answers,rp){

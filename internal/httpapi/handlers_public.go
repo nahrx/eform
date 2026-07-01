@@ -137,7 +137,53 @@ func (s *Server) publicSubmit(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "gagal menyimpan jawaban")
 		return
 	}
+	// Hapus draf server setelah submit final berhasil
+	_ = s.st.DeleteDraft(r.Context(), formID, rc.RespondentID)
 	writeJSON(w, http.StatusCreated, map[string]any{"id": resp.ID, "submittedAt": resp.SubmittedAt})
+}
+
+// GET /api/public/forms/{token}/draft — ambil draf tersimpan di server.
+func (s *Server) myDraft(w http.ResponseWriter, r *http.Request) {
+	rc := respondentFrom(r.Context())
+	formID, _, _, ok := s.resolveShare(w, r)
+	if !ok {
+		return
+	}
+	draft, err := s.st.GetDraftByFormAndRespondent(r.Context(), formID, rc.RespondentID)
+	if errors.Is(err, store.ErrNotFound) {
+		writeJSON(w, http.StatusOK, nil)
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "kesalahan server")
+		return
+	}
+	writeJSON(w, http.StatusOK, draft)
+}
+
+// POST /api/public/forms/{token}/draft — simpan draf ke server (upsert).
+func (s *Server) saveDraftHandler(w http.ResponseWriter, r *http.Request) {
+	formID, shareID, _, ok := s.resolveShare(w, r)
+	if !ok {
+		return
+	}
+	rc := respondentFrom(r.Context())
+
+	var in struct {
+		Answers json.RawMessage `json:"answers"`
+		CurPage int             `json:"curPage"`
+	}
+	if err := decodeJSON(r, &in); err != nil || len(in.Answers) == 0 {
+		writeErr(w, http.StatusBadRequest, "format salah atau jawaban kosong")
+		return
+	}
+	sid := shareID
+	draft, err := s.st.UpsertDraft(r.Context(), formID, &sid, rc.RespondentID, in.Answers, in.CurPage)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal menyimpan draf")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"id": draft.ID, "savedAt": draft.SavedAt})
 }
 
 // GET /api/wilayah?prov=&kab=&kec=

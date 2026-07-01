@@ -1,3 +1,6 @@
 perancangan/
 .env
+.env.production
 .claude
+bin/
+docker-compose.override.yml
