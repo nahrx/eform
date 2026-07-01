@@ -3,6 +3,7 @@ package config
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -48,8 +49,8 @@ func Load() *Config {
 	loadDotEnv(env("ENV_FILE", ".env"))
 
 	c := &Config{
-		Port:          env("PORT", "8080"),
-		DatabaseURL:   env("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/eform?sslmode=disable"),
+		Port:        env("PORT", "8080"),
+		DatabaseURL: resolveDBURL(),
 		PublicBaseURL: strings.TrimRight(env("PUBLIC_BASE_URL", "http://localhost:8080"), "/"),
 		WebDir:        env("WEB_DIR", "web"),
 		PublicDir:     env("PUBLIC_DIR", "public"),
@@ -87,6 +88,21 @@ func Load() *Config {
 		}
 	}
 	return c
+}
+
+// resolveDBURL mengembalikan connection string PostgreSQL.
+// Prioritas: DATABASE_URL (jika diset) → rakitan dari POSTGRES_* vars.
+func resolveDBURL() string {
+	if url := os.Getenv("DATABASE_URL"); url != "" {
+		return url
+	}
+	host := env("POSTGRES_HOST", "localhost")
+	port := env("POSTGRES_PORT", "5432")
+	user := env("POSTGRES_USER", "postgres")
+	pass := env("POSTGRES_PASSWORD", "postgres")
+	name := env("POSTGRES_DB", "eform")
+	ssl  := env("POSTGRES_SSLMODE", "disable")
+	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s", user, pass, host, port, name, ssl)
 }
 
 // loadDotEnv memuat file .env (jika ada) memakai joho/godotenv.

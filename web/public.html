@@ -97,6 +97,16 @@ textarea.pv-in{width:100%;resize:vertical;min-height:72px}
 .pv-note{background:linear-gradient(135deg,var(--accent-soft),#ecf7f9);border:1px solid #c3dfe5;border-left:3px solid var(--accent);border-radius:8px;padding:12px 14px;margin-bottom:16px;font-size:13px;line-height:1.55}
 .pv-loading{font-size:12.5px;color:var(--muted);padding:9px 11px;border:1px dashed var(--line);border-radius:7px;background:var(--panel-2)}
 
+/* ---- roster row page header ---- */
+.pv-rrow-hdr{max-width:660px;margin:0 auto 18px;background:linear-gradient(135deg,var(--accent) 0%,#0891b2 100%);border-radius:var(--radius);padding:16px 20px 18px;color:#fff}
+.pv-rrow-bread{display:flex;align-items:center;gap:6px;margin-bottom:10px}
+.pv-rrow-back{border:none;background:rgba(255,255,255,.18);color:#fff;font-size:12px;font-weight:600;cursor:pointer;padding:3px 10px;border-radius:20px;font-family:inherit;transition:background .12s}
+.pv-rrow-back:hover{background:rgba(255,255,255,.3)}
+.pv-rrow-sep{font-size:12px;opacity:.5}
+.pv-rrow-rname{font-size:12px;opacity:.75;font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pv-rrow-num{font-size:11px;font-weight:700;background:rgba(255,255,255,.2);padding:3px 10px;border-radius:20px;letter-spacing:.03em;flex:none}
+.pv-rrow-title{font-size:18px;font-weight:700;line-height:1.3;color:#fff}
+
 /* ---- roster ---- */
 .pv-roster{border:1.5px solid #b5dfc7;border-radius:10px;padding:16px;margin-bottom:16px;background:#f4fcf8}
 .pv-rh{font-weight:700;font-size:13.5px;color:var(--roster);margin-bottom:12px;display:flex;align-items:center;gap:8px}
@@ -1060,11 +1070,12 @@ function renderRosterRow(){
   rowSkip.forEach(n=>{delete answers[rp+n];});
   pending=[];
   const userBar=document.getElementById("pvUserBar")?.outerHTML||"";
-  let html=`${userBar}<div class="pv-page">
-    <button class="btn" id="pvBack" style="margin-bottom:14px">← ${pageTitle}</button>
-    <h2 class="pv-h2">${esc(txt(roster.title)||roster.name)} — ${rowLabel(roster,rowIdx)}</h2>`;
-  (roster.components||[]).forEach(f=>html+=nodeHtml(f,rp));
-  html+=`</div>`;
+  const total=rosterCount(roster);
+  const rosterTitle=esc(txt(roster.title)||roster.name);
+  const hasStructure=(roster.components||[]).some(c=>c.kind==="block"||c.kind==="section");
+  let fieldsHtml=(roster.components||[]).map(f=>nodeHtml(f,rp)).join("");
+  if(!hasStructure&&fieldsHtml)fieldsHtml=`<div class="pv-card">${fieldsHtml}</div>`;
+  let html=`${userBar}<div class="pv-page"><div class="pv-rrow-hdr"><div class="pv-rrow-bread"><button id="pvBack" class="pv-rrow-back">← ${pageTitle}</button><span class="pv-rrow-sep">›</span><span class="pv-rrow-rname">${rosterTitle}</span><span class="pv-rrow-num">Baris ${rowIdx+1} dari ${total}</span></div><div class="pv-rrow-title">${rowLabel(roster,rowIdx)}</div></div>${fieldsHtml}</div>`;
   pvBody.innerHTML=html;
   const navArea=document.getElementById("pvNavArea");
   if(navArea)navArea.innerHTML=`<div class="pv-nav"><span></span><span></span><button class="btn primary" id="pvBackDone">Simpan &amp; kembali</button></div>`;

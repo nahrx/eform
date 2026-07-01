@@ -53,7 +53,12 @@ services:
         condition: service_healthy
     environment:
       PORT: "8080"
-      DATABASE_URL: postgres://${POSTGRES_USER:-eform}:${POSTGRES_PASSWORD:-eform_secret}@db:5432/${POSTGRES_DB:-eform}?sslmode=disable
+      POSTGRES_HOST:     db
+      POSTGRES_PORT:     "5432"
+      POSTGRES_USER:     ${POSTGRES_USER:-eform}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-eform_secret}
+      POSTGRES_DB:       ${POSTGRES_DB:-eform}
+      POSTGRES_SSLMODE:  disable
 
       # JWT — WAJIB diganti di produksi (string panjang acak)
       JWT_SECRET: ${JWT_SECRET:-GANTI_DI_PRODUKSI_PAKAI_STRING_PANJANG_ACAK}
@@ -98,7 +103,12 @@ services:
         condition: service_healthy
     command: ["./eform-seeder", "-file", "./data/wilayah_indonesia.csv"]
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-eform}:${POSTGRES_PASSWORD:-eform_secret}@db:5432/${POSTGRES_DB:-eform}?sslmode=disable
+      POSTGRES_HOST:     db
+      POSTGRES_PORT:     "5432"
+      POSTGRES_USER:     ${POSTGRES_USER:-eform}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-eform_secret}
+      POSTGRES_DB:       ${POSTGRES_DB:-eform}
+      POSTGRES_SSLMODE:  disable
     networks:
       - eform_net
 

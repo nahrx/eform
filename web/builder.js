@@ -612,7 +612,6 @@ document.getElementById("addPage").addEventListener("click",()=>{const p=newPage
 document.getElementById("btnExport").addEventListener("click",()=>{switchTab("json");download(`${state.id||"kuesioner"}.json`,JSON.stringify(serialize(),null,2));});
 document.getElementById("btnImport").addEventListener("click",()=>document.getElementById("fileInput").click());
 document.getElementById("fileInput").addEventListener("change",e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{importJSON(JSON.parse(r.result));}catch(err){alert("JSON tidak valid: "+err.message);}};r.readAsText(f);e.target.value="";});
-document.getElementById("btnExample").addEventListener("click",()=>importJSON(EXAMPLE));
 document.getElementById("btnPreview").addEventListener("click",openPreview);
 document.getElementById("pvClose").addEventListener("click",closePreview);
 document.getElementById("pvMode").addEventListener("change",e=>{pv.mode=e.target.value;pv.page=0;renderPreview();});
@@ -962,9 +961,13 @@ function renderRosterRowPage(){
   const r=findNode(pv.row.uid);if(!r){pv.row=null;return renderPreview();}
   const i=pv.row.index;const parent=pageOf(r.uid);
   const rs=computeRosterRowSkipState(r,i);ROW_SKIP_HIDDEN.set(`${r.name}#${i}`,rs);rs.forEach(n=>{delete pv.values[`${r.name}#${i}#${n}`];});
-  let h=`<div class="pv-page"><button class="btn" id="pvBack" style="margin-bottom:14px">← ${esc(parent?(parent.title||parent.name):"Kembali")}</button><h2 class="pv-h2">${esc(r.title||r.name)} — ${rowLabel(r,i)}</h2>`;
-  r.components.forEach(f=>h+=pvNode(f,{r:r.name,i}));
-  h+=`<div class="pv-nav"><span></span><button class="btn primary" id="pvBackDone">Simpan baris &amp; kembali</button></div></div>`;
+  const pageTitle=esc(parent?(parent.title||parent.name):"Kembali");
+  const rosterTitle=esc(r.title||r.name);
+  const total=rosterCount(r);
+  const hasStructure=(r.components||[]).some(c=>c.kind==="block"||c.kind==="section");
+  let fieldsHtml=r.components.map(f=>pvNode(f,{r:r.name,i})).join("");
+  if(!hasStructure&&fieldsHtml)fieldsHtml=`<div class="pv-card">${fieldsHtml}</div>`;
+  let h=`<div class="pv-page"><div class="pv-rrow-hdr"><div class="pv-rrow-bread"><button id="pvBack" class="pv-rrow-back">← ${pageTitle}</button><span class="pv-rrow-sep">›</span><span class="pv-rrow-rname">${rosterTitle}</span><span class="pv-rrow-num">Baris ${i+1} dari ${total}</span></div><div class="pv-rrow-title">${rowLabel(r,i)}</div></div>${fieldsHtml}<div class="pv-nav"><span></span><button class="btn primary" id="pvBackDone">Simpan baris &amp; kembali</button></div></div>`;
   body.innerHTML=h;bindPreview(body);body.scrollTop=keep;
   body.querySelector("#pvBack")?.addEventListener("click",backFromRow);
   body.querySelector("#pvBackDone")?.addEventListener("click",backFromRow);
