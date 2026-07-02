@@ -10,8 +10,8 @@
   --surface:#eef1f5;--panel:#fff;--panel-2:#f7f9fb;
   --line:#dfe4ea;--line-2:#eef1f5;
   --accent:#0e7490;--accent-ink:#0b5563;--accent-soft:#d6edf1;
-  --roster:#047857;
   --ok:#15803d;--ok-soft:#dcfce7;
+  --warn-soft:#fef9c3;--warn-ink:#854d0e;
   --radius:10px;--radius-s:7px;
   --shadow:0 1px 2px rgba(19,23,30,.06),0 8px 24px -16px rgba(19,23,30,.25);
   --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Inter,sans-serif;
@@ -22,91 +22,75 @@ html,body{height:100%;margin:0}
 body{font-family:var(--sans);color:var(--ink);background:var(--surface);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
 button{font-family:inherit;cursor:pointer}
 
-/* shell */
 .shell{display:flex;flex-direction:column;height:100vh}
 
 /* topbar */
-.topbar{display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line);flex:none;min-height:50px}
-.form-title{font-weight:600;font-size:15px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.topbar{display:flex;align-items:center;gap:8px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line);flex:none;flex-wrap:wrap}
+.form-title{font-weight:600;font-size:15px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:120px}
 .count-badge{font-family:var(--mono);font-size:11px;color:var(--accent);background:var(--accent-soft);padding:3px 9px;border-radius:999px;white-space:nowrap;flex:none}
-
-/* buttons */
-.btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:7px 12px;border-radius:var(--radius-s);font-size:13px;font-weight:500;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:5px;transition:.12s}
+.btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:7px 12px;border-radius:var(--radius-s);font-size:13px;font-weight:500;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:5px;transition:.12s;white-space:nowrap}
 .btn:hover{border-color:#c6cdd6;background:var(--panel-2)}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 .btn.primary:hover{background:var(--accent-ink);border-color:var(--accent-ink)}
-.btn-sm{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:4px 9px;border-radius:5px;font-size:12px;cursor:pointer;font-family:inherit}
+.btn-sm{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:4px 9px;border-radius:5px;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap}
 .btn-sm:hover:not([disabled]){background:var(--panel-2)}
 .btn-sm[disabled]{opacity:.4;cursor:default}
 
-/* main split */
-.main{flex:1;display:flex;min-height:0}
+/* filter bar */
+.filter-bar{display:flex;align-items:center;gap:8px;padding:9px 20px;background:var(--panel-2);border-bottom:1px solid var(--line);flex:none;flex-wrap:wrap}
+.filter-lbl{font-size:12px;color:var(--muted);font-weight:500;white-space:nowrap}
+.filter-sel{font-size:12.5px;padding:5px 8px;border:1px solid var(--line);border-radius:var(--radius-s);background:var(--panel);color:var(--ink);font-family:inherit;max-width:170px}
+.filter-sel:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
+.filter-search{font-size:12.5px;padding:5px 10px;border:1px solid var(--line);border-radius:var(--radius-s);background:var(--panel);color:var(--ink);font-family:inherit;width:190px}
+.filter-search:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
+.filter-search::placeholder{color:var(--muted)}
+.filter-sep{width:1px;height:20px;background:var(--line);flex:none}
+.filter-chip{font-size:11px;color:var(--accent);background:var(--accent-soft);padding:3px 9px;border-radius:999px;font-weight:600;white-space:nowrap}
+.btn-reset{border:none;background:none;color:var(--muted);padding:3px 6px;border-radius:var(--radius-s);font-size:12px;cursor:pointer;font-family:inherit}
+.btn-reset:hover{background:var(--line-2);color:var(--ink)}
 
-/* page sidebar (navigasi halaman, mirip tampilan kuesioner) */
-.page-side{width:200px;flex:none;background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding:13px 11px}
-.page-side-h{font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 4px 9px}
-.page-item{padding:9px 10px;border-radius:var(--radius-s);cursor:pointer;font-size:12.5px;font-weight:500;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.page-item:hover{background:var(--panel-2)}
-.page-item.active{background:var(--accent-soft);color:var(--accent-ink)}
+/* tabel area */
+.tbl-outer{flex:1;overflow:auto;padding:18px 20px}
+.tbl-wrap{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:auto}
+table.resp-tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:600px}
+.resp-tbl th{background:var(--panel-2);font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;padding:10px 13px;border-bottom:1px solid var(--line);white-space:nowrap;text-align:left}
+.resp-tbl th.sortable{cursor:pointer;user-select:none}
+.resp-tbl th.sortable:hover{color:var(--ink-soft)}
+.resp-tbl th.sort-active{color:var(--accent-ink)}
+.sort-ic{margin-left:3px;font-size:10px;opacity:.35}
+.resp-tbl th.sort-active .sort-ic{opacity:1}
+.resp-tbl td{padding:9px 13px;border-bottom:1px solid var(--line-2);vertical-align:middle}
+.resp-tbl tbody tr:last-child td{border-bottom:none}
+.resp-tbl tbody tr:hover td{background:var(--panel-2)}
+.resp-tbl .td-num{font-family:var(--mono);font-size:12px;color:var(--muted);width:48px}
+.resp-tbl .td-status{width:100px}
+.resp-tbl .td-share{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
+.resp-tbl .td-who{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.resp-tbl .td-time{white-space:nowrap;font-size:12px;color:var(--muted)}
+.resp-tbl .td-val{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;color:var(--ink-soft)}
+.resp-tbl .td-act{width:70px;text-align:right}
 
-/* list panel */
-.list-panel{width:320px;flex:none;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
-.list-head{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--line);flex:none}
-.list-h{font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
-.pager{display:flex;align-items:center;gap:5px}
-.pg-info{font-size:11px;color:var(--muted);padding:0 2px}
-.list-scroll{flex:1;overflow:auto;padding:8px}
+/* badge status */
+.st-badge{display:inline-block;font-size:11px;padding:3px 9px;border-radius:999px;font-weight:700}
+.st-submitted{background:var(--ok-soft);color:var(--ok)}
+.st-draft{background:var(--warn-soft);color:var(--warn-ink)}
 
-/* response cards */
-.resp-card{border:1px solid var(--line);border-radius:var(--radius-s);padding:10px 12px;margin-bottom:6px;cursor:pointer;transition:.1s;background:var(--panel)}
-.resp-card:hover{border-color:#c6cdd6;background:var(--panel-2)}
-.resp-card.active{border-color:var(--accent);background:var(--accent-soft)}
-.rc-top{display:flex;align-items:center;gap:8px;margin-bottom:3px}
-.rc-num{font-family:var(--mono);font-size:10.5px;font-weight:700;color:var(--accent-ink);background:rgba(14,116,144,.12);padding:2px 7px;border-radius:4px;flex:none}
-.resp-card.active .rc-num{background:rgba(255,255,255,.55)}
-.rc-time{font-size:11.5px;color:var(--muted)}
-.rc-preview{font-size:12px;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-left:1px}
+/* pager bawah */
+.tbl-foot{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);background:var(--panel-2)}
 
-/* detail panel */
-.detail-panel{flex:1;overflow:auto;padding:22px 26px 60px}
-.detail-empty{display:flex;height:100%;align-items:center;justify-content:center;color:var(--muted);font-size:13px;text-align:center}
-.detail-empty[hidden]{display:none}
-.detail-header{display:flex;align-items:center;gap:12px;margin:0 auto 18px;padding-bottom:14px;border-bottom:1px solid var(--line);max-width:680px}
-.dh-num{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--accent-ink);background:var(--accent-soft);padding:4px 10px;border-radius:6px}
-.dh-time{font-size:13px;color:var(--muted)}
+/* kolom picker */
+.col-wrap{position:relative}
+.col-panel{position:absolute;top:calc(100% + 6px);right:0;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);width:280px;z-index:100;display:none}
+.col-panel.open{display:block}
+.col-panel-h{padding:10px 13px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);border-bottom:1px solid var(--line)}
+.col-list{padding:8px 13px;max-height:220px;overflow-y:auto}
+.col-item{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:13px;cursor:pointer;user-select:none}
+.col-item input[type=checkbox]{accent-color:var(--accent);cursor:pointer;width:14px;height:14px}
+.col-item label{cursor:pointer;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.col-panel-foot{padding:8px 13px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:6px}
+.col-hint{padding:4px 0 2px;font-size:11px;color:var(--muted)}
 
-/* detail schema rendering */
-.dr-page{margin:0 auto 22px;max-width:680px}
-.dr-page-title{font-size:16px;font-weight:700;margin:0 0 12px;color:var(--ink)}
-.dr-block{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;margin-bottom:12px}
-.dr-block-title{font-weight:600;font-size:13.5px;margin-bottom:10px;color:var(--ink)}
-.dr-section{border:1.5px solid var(--line);border-radius:9px;padding:10px 12px;margin-bottom:10px;background:var(--panel-2)}
-.dr-section-title{font-weight:600;font-size:12.5px;color:var(--ink-soft);margin-bottom:8px}
-.dr-field{display:flex;gap:12px;padding:6px 0;border-bottom:1px solid var(--line-2);align-items:baseline}
-.dr-field:last-child{border-bottom:none}
-.dr-label{font-size:12px;color:var(--muted);width:170px;flex:none;line-height:1.4}
-.dr-val{font-size:13px;font-weight:500;color:var(--ink);flex:1;word-break:break-word;line-height:1.4}
-.dr-field.dr-empty .dr-val{color:var(--muted);font-weight:400;font-style:italic}
-.dr-roster{border:1.5px dashed var(--roster);border-radius:9px;padding:12px;margin-bottom:12px;background:#eefaf3}
-.dr-roster-title{font-weight:600;font-size:13px;color:var(--roster);margin-bottom:8px}
-.dr-roster-empty{font-size:12px;color:var(--muted)}
-.dr-row{border:1px solid var(--line);border-radius:7px;background:var(--panel);padding:10px 12px;margin-bottom:8px}
-.dr-row:last-child{margin-bottom:0}
-.dr-row-num{font-family:var(--mono);font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:6px}
-.dr-flat-key{font-family:var(--mono);font-size:11px}
-.detail-nav{display:flex;align-items:center;justify-content:space-between;gap:10px;max-width:680px;margin:18px auto 0;padding-top:14px;border-top:1px solid var(--line)}
-.detail-nav .pg-prog{font-size:12px;color:var(--muted)}
-
-/* misc */
-.loading,.empty-state{padding:28px;text-align:center;color:var(--muted);font-size:13px}
-
-@media(max-width:720px){
-  .main{flex-direction:column}
-  .list-panel{width:100%;flex:none;max-height:42vh;border-right:none;border-bottom:1px solid var(--line)}
-  .page-side{width:100%;flex:none;max-height:160px;border-right:none;border-bottom:1px solid var(--line)}
-  .detail-panel{padding:14px 12px 40px}
-  .dr-label{width:120px}
-}
+.loading,.empty-state{padding:32px;text-align:center;color:var(--muted);font-size:13px}
 </style>
 </head>
 <body>
@@ -115,25 +99,41 @@ button{font-family:inherit;cursor:pointer}
     <a class="btn" href="/admin">← Admin</a>
     <span class="form-title" id="formTitle">Memuat…</span>
     <span class="count-badge" id="countBadge" hidden></span>
-    <button class="btn primary" id="btnCsv" hidden>↓ CSV</button>
-  </header>
-  <div class="main">
-    <div class="list-panel">
-      <div class="list-head">
-        <span class="list-h">Daftar Jawaban</span>
-        <div class="pager" id="pager"></div>
-      </div>
-      <div class="list-scroll" id="listScroll">
-        <div class="loading">Memuat…</div>
+    <div class="col-wrap" id="colWrap" hidden>
+      <button class="btn" id="btnKolom">Kolom ▾</button>
+      <div class="col-panel" id="colPanel">
+        <div class="col-panel-h">Pilih kolom tambahan <span style="font-weight:400">(maks 5)</span></div>
+        <div class="col-list" id="colList"></div>
+        <div class="col-panel-foot">
+          <button class="btn-sm" id="btnColReset">Reset</button>
+          <button class="btn primary btn-sm" id="btnColApply">Terapkan</button>
+        </div>
       </div>
     </div>
-    <aside class="page-side" id="pageSide" hidden>
-      <div class="page-side-h">Daftar Halaman</div>
-      <div id="pageList"></div>
-    </aside>
-    <div class="detail-panel" id="detailPanel">
-      <div class="detail-empty" id="detailEmpty">Pilih jawaban di sebelah kiri untuk melihat detail.</div>
-      <div id="detailContent" hidden></div>
+    <button class="btn primary" id="btnCsv" hidden>↓ CSV</button>
+  </header>
+
+  <div class="filter-bar">
+    <span class="filter-lbl">Status</span>
+    <select class="filter-sel" id="fStatus" onchange="onFilter()">
+      <option value="">Semua</option>
+      <option value="submitted">Terkirim</option>
+      <option value="draft">Draf</option>
+    </select>
+    <div class="filter-sep"></div>
+    <span class="filter-lbl">Share</span>
+    <select class="filter-sel" id="fShare" onchange="onFilter()">
+      <option value="">Semua</option>
+    </select>
+    <div class="filter-sep"></div>
+    <input class="filter-search" id="fSearch" placeholder="Cari nama / email…" oninput="onSearchDebounce()">
+    <span class="filter-chip" id="filterChip" hidden></span>
+    <button class="btn-reset" id="btnReset" onclick="resetFilters()" hidden>✕ Reset</button>
+  </div>
+
+  <div class="tbl-outer">
+    <div class="tbl-wrap" id="tblWrap">
+      <div class="loading">Memuat…</div>
     </div>
   </div>
 </div>
@@ -145,10 +145,17 @@ if(!FORM_ID)location.replace("/admin");
 
 const H={"Authorization":"Bearer "+TOKEN,"Content-Type":"application/json"};
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const txt=v=>v==null?"":(typeof v==="object"?(v.id||Object.values(v)[0]||""):v);
+const txt=v=>v==null?"":(typeof v==="object"?(v.id||Object.values(v)[0]||""):String(v));
 
-let SCHEMA=null, RESPONSES=[], TOTAL=0, PAGE=0, SELECTED=null, CUR_PAGE=0;
-const PAGE_SIZE=25;
+let SCHEMA=null, RESPONSES=[], TOTAL=0, PAGE=0, MY_ROLE="admin";
+const PAGE_SIZE=50;
+const COL_KEY="eform_cols_"+FORM_ID;
+let SEL_COLS=[], ALL_FIELDS=[], SHARE_MAP={};
+
+// state filter & sort
+let SORT_BY="waktu", SORT_DIR="desc";
+let FILTER_STATUS="", FILTER_SHARE="", FILTER_SEARCH="";
+let _searchTimer=null;
 
 async function api(path,opts){
   opts=opts||{};
@@ -162,178 +169,256 @@ async function api(path,opts){
 
 async function init(){
   try{
-    const form=await api("/api/forms/"+FORM_ID);
+    const me=await api("/api/auth/me").catch(()=>({role:"admin"}));
+    MY_ROLE=me.role||"admin";
+
+    const [form,sharesData]=await Promise.all([
+      api("/api/forms/"+FORM_ID),
+      api("/api/forms/"+FORM_ID+"/shares").catch(()=>({shares:[]}))
+    ]);
+    (sharesData.shares||[]).forEach(sh=>{
+      SHARE_MAP[sh.id]=sh.label||(sh.token?"["+sh.token.slice(0,6)+"]":"—");
+    });
     SCHEMA=form.schema;
-    const title=form.title||"Kuesioner";
-    document.title="Jawaban · "+title;
-    document.getElementById("formTitle").textContent=title;
+    document.title="Jawaban · "+(form.title||"Kuesioner");
+    document.getElementById("formTitle").textContent=form.title||"Kuesioner";
     document.getElementById("btnCsv").hidden=false;
     document.getElementById("btnCsv").addEventListener("click",downloadCsv);
+
+    ALL_FIELDS=extractFields(SCHEMA);
+    SEL_COLS=loadColPref();
+    if(MY_ROLE==="superadmin"&&ALL_FIELDS.length){
+      document.getElementById("colWrap").hidden=false;
+      buildColPicker();
+    }
+
+    // Isi dropdown share dari share list
+    buildShareFilter();
+
     await loadPage(0);
   }catch(e){
     document.getElementById("formTitle").textContent="Gagal memuat: "+e.message;
   }
 }
 
-async function loadPage(page){
-  PAGE=page;
-  document.getElementById("listScroll").innerHTML='<div class="loading">Memuat…</div>';
-  try{
-    const data=await api("/api/forms/"+FORM_ID+"/responses?limit="+PAGE_SIZE+"&offset="+(PAGE*PAGE_SIZE));
-    RESPONSES=data.responses||[];
-    TOTAL=data.total||0;
-    const badge=document.getElementById("countBadge");
-    badge.textContent=TOTAL+" jawaban";
-    badge.hidden=false;
-    renderList();
-  }catch(e){
-    document.getElementById("listScroll").innerHTML=`<div class="empty-state">${esc(e.message)}</div>`;
+/* ---- share filter dropdown ---- */
+function buildShareFilter(){
+  const sel=document.getElementById("fShare");
+  Object.entries(SHARE_MAP).forEach(([id,label])=>{
+    const opt=document.createElement("option");
+    opt.value=id; opt.textContent=label;
+    sel.appendChild(opt);
+  });
+}
+
+/* ---- filter events ---- */
+function onFilter(){
+  FILTER_STATUS=document.getElementById("fStatus").value;
+  FILTER_SHARE=document.getElementById("fShare").value;
+  loadPage(0);
+}
+
+function onSearchDebounce(){
+  clearTimeout(_searchTimer);
+  _searchTimer=setTimeout(()=>{
+    FILTER_SEARCH=document.getElementById("fSearch").value.trim();
+    loadPage(0);
+  },350);
+}
+
+function resetFilters(){
+  FILTER_STATUS="";FILTER_SHARE="";FILTER_SEARCH="";
+  document.getElementById("fStatus").value="";
+  document.getElementById("fShare").value="";
+  document.getElementById("fSearch").value="";
+  loadPage(0);
+}
+
+function updateFilterUI(){
+  const active=FILTER_STATUS||FILTER_SHARE||FILTER_SEARCH;
+  const chip=document.getElementById("filterChip");
+  const btnR=document.getElementById("btnReset");
+  if(active){
+    const parts=[];
+    if(FILTER_STATUS)parts.push(FILTER_STATUS==="submitted"?"Terkirim":"Draf");
+    if(FILTER_SHARE)parts.push(esc(SHARE_MAP[FILTER_SHARE]||"Share tertentu"));
+    if(FILTER_SEARCH)parts.push(`"${esc(FILTER_SEARCH)}"`);
+    chip.textContent=parts.join(" · ");chip.hidden=false;btnR.hidden=false;
+  }else{
+    chip.hidden=true;btnR.hidden=true;
   }
 }
 
-/* ---- list ---- */
-function renderList(){
-  const totalPages=Math.ceil(TOTAL/PAGE_SIZE)||1;
+/* ---- sort ---- */
+function toggleSort(col){
+  if(SORT_BY===col)SORT_DIR=SORT_DIR==="asc"?"desc":"asc";
+  else{SORT_BY=col;SORT_DIR=col==="waktu"?"desc":"asc";}
+  loadPage(0);
+}
 
-  // pager
-  const pager=document.getElementById("pager");
-  if(totalPages>1){
-    pager.innerHTML=`<button class="btn-sm" id="pgPrev"${PAGE===0?" disabled":""}>‹</button><span class="pg-info">${PAGE+1}/${totalPages}</span><button class="btn-sm" id="pgNext"${PAGE>=totalPages-1?" disabled":""}>›</button>`;
-    document.getElementById("pgPrev")?.addEventListener("click",()=>loadPage(PAGE-1));
-    document.getElementById("pgNext")?.addEventListener("click",()=>loadPage(PAGE+1));
-  }else{
-    pager.innerHTML="";
+/* ---- load page (server-side) ---- */
+async function loadPage(page){
+  PAGE=page;
+  document.getElementById("tblWrap").innerHTML='<div class="loading">Memuat…</div>';
+  try{
+    const params=new URLSearchParams({
+      limit:PAGE_SIZE,
+      offset:PAGE*PAGE_SIZE,
+      sortBy:SORT_BY,
+      sortDir:SORT_DIR,
+    });
+    if(FILTER_STATUS)params.set("status",FILTER_STATUS);
+    if(FILTER_SHARE)params.set("shareId",FILTER_SHARE);
+    if(FILTER_SEARCH)params.set("search",FILTER_SEARCH);
+
+    const data=await api("/api/forms/"+FORM_ID+"/responses?"+params);
+    RESPONSES=data.responses||[];
+    TOTAL=data.total||0;
+
+    const badge=document.getElementById("countBadge");
+    const isFiltered=FILTER_STATUS||FILTER_SHARE||FILTER_SEARCH;
+    badge.textContent=TOTAL+" jawaban"+(isFiltered?" (difilter)":"");
+    badge.hidden=false;
+    updateFilterUI();
+    renderTable();
+  }catch(e){
+    document.getElementById("tblWrap").innerHTML=`<div class="empty-state">${esc(e.message)}</div>`;
+  }
+}
+
+/* ---- schema field extraction ---- */
+function extractFields(schema){
+  const out=[];
+  function walk(comps,inRoster){
+    for(const c of comps||[]){
+      if(c.kind==="field"){
+        if(!inRoster&&c.type!=="note"&&c.type!=="hidden"&&c.type!=="markdown"&&c.name)
+          out.push({name:c.name,label:txt(c.label)||c.name});
+      }else if(c.kind==="roster"){walk(c.components||[],true);}
+      else if(c.components){walk(c.components,inRoster);}
+    }
+  }
+  for(const p of schema?.pages||[])walk(p.components||[],false);
+  return out;
+}
+
+function loadColPref(){
+  try{const s=localStorage.getItem(COL_KEY);if(s){const a=JSON.parse(s);if(Array.isArray(a))return a.slice(0,5);}}catch{}
+  return [];
+}
+function saveColPref(cols){try{localStorage.setItem(COL_KEY,JSON.stringify(cols));}catch{}}
+
+/* ---- column picker ---- */
+function buildColPicker(){
+  const list=document.getElementById("colList");
+  if(!ALL_FIELDS.length){list.innerHTML='<div class="col-hint">Tidak ada field tersedia.</div>';return;}
+  list.innerHTML=ALL_FIELDS.map(f=>`<label class="col-item">
+    <input type="checkbox" value="${esc(f.name)}" ${SEL_COLS.includes(f.name)?"checked":""}>
+    <label>${esc(f.label)}</label>
+  </label>`).join("");
+  list.querySelectorAll("input[type=checkbox]").forEach(cb=>{
+    cb.addEventListener("change",()=>{
+      if([...list.querySelectorAll("input:checked")].length>5)cb.checked=false;
+    });
+  });
+}
+
+document.getElementById("btnKolom")?.addEventListener("click",e=>{
+  e.stopPropagation();document.getElementById("colPanel").classList.toggle("open");
+});
+document.addEventListener("click",()=>document.getElementById("colPanel")?.classList.remove("open"));
+document.getElementById("colPanel")?.addEventListener("click",e=>e.stopPropagation());
+
+document.getElementById("btnColApply")?.addEventListener("click",()=>{
+  SEL_COLS=[...document.querySelectorAll("#colList input:checked")].map(cb=>cb.value).slice(0,5);
+  saveColPref(SEL_COLS);
+  document.getElementById("colPanel").classList.remove("open");
+  renderTable();
+});
+document.getElementById("btnColReset")?.addEventListener("click",()=>{
+  SEL_COLS=[];saveColPref([]);
+  document.querySelectorAll("#colList input").forEach(cb=>cb.checked=false);
+  document.getElementById("colPanel").classList.remove("open");
+  renderTable();
+});
+
+/* ---- render tabel ---- */
+function sortTh(col,label,cls){
+  const active=SORT_BY===col;
+  const ic=active?(SORT_DIR==="asc"?"↑":"↓"):"↕";
+  return`<th class="sortable${active?" sort-active":""}${cls?" "+cls:""}" onclick="toggleSort('${col}')">${label}<span class="sort-ic">${ic}</span></th>`;
+}
+
+function renderTable(){
+  if(!RESPONSES.length){
+    const msg=FILTER_STATUS||FILTER_SHARE||FILTER_SEARCH
+      ?"Tidak ada jawaban yang cocok dengan filter.":"Belum ada jawaban.";
+    document.getElementById("tblWrap").innerHTML=`<div class="empty-state">${msg}</div>`;
+    return;
   }
 
-  const scroll=document.getElementById("listScroll");
-  if(!RESPONSES.length){scroll.innerHTML='<div class="empty-state">Belum ada jawaban.</div>';return;}
+  const extraCols=SEL_COLS.map(name=>{
+    const f=ALL_FIELDS.find(ff=>ff.name===name);
+    return`<th>${esc(f?f.label:name)}</th>`;
+  }).join("");
 
-  scroll.innerHTML=RESPONSES.map((resp,i)=>{
+  let html=`<table class="resp-tbl"><thead><tr>
+    <th class="td-num">#</th>
+    ${sortTh("status","Status","td-status")}
+    ${sortTh("share","Share","td-share")}
+    ${sortTh("who","Responden","td-who")}
+    ${sortTh("waktu","Waktu","td-time")}
+    ${extraCols}
+    <th class="td-act">Aksi</th>
+  </tr></thead><tbody>`;
+
+  RESPONSES.forEach((resp,i)=>{
     const num=PAGE*PAGE_SIZE+i+1;
     const answers=parseAnswers(resp.answers);
     const meta=parseAnswers(resp.meta);
-    const preview=getPreview(answers);
-    const who=meta.name?`${esc(meta.name)} · ${esc(meta.email||"")}`:esc(meta.email||"");
-    return`<div class="resp-card${SELECTED===i?" active":""}" data-i="${i}">
-      <div class="rc-top"><span class="rc-num">#${num}</span><span class="rc-time">${formatDate(resp.submittedAt)}</span></div>
-      ${who?`<div class="rc-preview" style="color:var(--accent-ink)">${who}</div>`:""}
-      ${preview?`<div class="rc-preview">${esc(preview)}</div>`:""}
-    </div>`;
-  }).join("");
+    const isDraft=resp.status==="draft";
+    const badge=isDraft
+      ?`<span class="st-badge st-draft">Draf</span>`
+      :`<span class="st-badge st-submitted">Terkirim</span>`;
+    const who=meta.name
+      ?`${esc(meta.name)}<br><span style="font-size:11px;color:var(--muted)">${esc(meta.email||"")}</span>`
+      :esc(meta.email||"—");
+    const waktu=formatDate(resp.submittedAt);
+    const shareLabel=resp.shareId
+      ?esc(SHARE_MAP[resp.shareId]||resp.shareId.slice(0,8)+"…")
+      :`<span style="color:var(--muted)">—</span>`;
+    const extraVals=SEL_COLS.map(name=>{
+      const c=findField(SCHEMA,name);
+      const val=c?formatFieldValue(c,answers[name],answers):valStr(answers[name]);
+      return`<td class="td-val" title="${esc(val)}">${esc(truncate(val,40))}</td>`;
+    }).join("");
+    html+=`<tr>
+      <td class="td-num">${num}</td>
+      <td class="td-status">${badge}</td>
+      <td class="td-share" title="${resp.shareId?esc(SHARE_MAP[resp.shareId]||resp.shareId):""}">${shareLabel}</td>
+      <td class="td-who">${who}</td>
+      <td class="td-time">${waktu}</td>
+      ${extraVals}
+      <td class="td-act"><button class="btn-sm" onclick="openView('${esc(resp.id)}')">Lihat</button></td>
+    </tr>`;
+  });
 
-  scroll.querySelectorAll(".resp-card").forEach(card=>
-    card.addEventListener("click",()=>selectResponse(+card.dataset.i))
-  );
+  html+=`</tbody></table>`;
+
+  const totalPages=Math.ceil(TOTAL/PAGE_SIZE)||1;
+  const pager=totalPages>1
+    ?`<div class="tbl-foot">
+        <button class="btn-sm" ${PAGE===0?"disabled":""} onclick="loadPage(${PAGE-1})">‹ Sebelumnya</button>
+        <span>${PAGE+1} / ${totalPages} halaman · ${TOTAL} jawaban</span>
+        <button class="btn-sm" ${PAGE>=totalPages-1?"disabled":""} onclick="loadPage(${PAGE+1})">Berikutnya ›</button>
+      </div>`
+    :`<div class="tbl-foot"><span>${TOTAL} jawaban</span></div>`;
+
+  document.getElementById("tblWrap").innerHTML=html+pager;
 }
 
-/* ---- detail ---- */
-function selectResponse(idx){
-  SELECTED=idx;
-  CUR_PAGE=0;
-  document.querySelectorAll(".resp-card").forEach((c,i)=>c.classList.toggle("active",i===idx));
-  renderDetail();
-}
-
-// Tampilan detail jawaban dibuat mirip kuesioner: satu halaman per tampilan,
-// dengan sidebar navigasi halaman (lihat #pageSide) + tombol Sebelumnya/Selanjutnya.
-function renderDetail(){
-  const resp=RESPONSES[SELECTED];
-  if(!resp)return;
-  const answers=parseAnswers(resp.answers);
-  const num=PAGE*PAGE_SIZE+SELECTED+1;
-  const meta=parseAnswers(resp.meta);
-  const pages=(SCHEMA&&SCHEMA.pages)||[];
-
-  renderPageSide(pages);
-
-  let body;
-  if(SCHEMA&&pages.length){
-    if(CUR_PAGE>=pages.length)CUR_PAGE=pages.length-1;
-    if(CUR_PAGE<0)CUR_PAGE=0;
-    const p=pages[CUR_PAGE];
-    const title=txt(p.title)||p.name||`Halaman ${CUR_PAGE+1}`;
-    body=`<div class="dr-page"><div class="dr-page-title">${esc(title)}</div>${renderNodes(p.components||[],answers,"")}</div>`;
-    body+=`<div class="detail-nav">
-      <button class="btn" id="dnPrev"${CUR_PAGE===0?" disabled":""}>← Sebelumnya</button>
-      <span class="pg-prog">Halaman ${CUR_PAGE+1} / ${pages.length}</span>
-      <button class="btn" id="dnNext"${CUR_PAGE>=pages.length-1?" disabled":""}>Selanjutnya →</button>
-    </div>`;
-  }else{
-    body=`<div class="dr-page">${renderFlatDetail(answers)}</div>`;
-  }
-
-  document.getElementById("detailEmpty").hidden=true;
-  const dc=document.getElementById("detailContent");
-  dc.hidden=false;
-  dc.innerHTML=`
-    <div class="detail-header">
-      <span class="dh-num">#${num}</span>
-      <span class="dh-time">${formatDate(resp.submittedAt)}</span>
-      ${meta.name?`<span style="font-size:12.5px;color:var(--accent-ink);font-weight:500">${esc(meta.name)}</span>`:""}
-      ${meta.email?`<span style="font-size:12px;color:var(--muted)">${esc(meta.email)}</span>`:""}
-    </div>
-    <div id="detailBody">${body}</div>`;
-
-  dc.querySelector("#dnPrev")?.addEventListener("click",()=>{CUR_PAGE--;renderDetail();document.getElementById("detailPanel").scrollTop=0;});
-  dc.querySelector("#dnNext")?.addEventListener("click",()=>{CUR_PAGE++;renderDetail();document.getElementById("detailPanel").scrollTop=0;});
-}
-
-function renderPageSide(pages){
-  const side=document.getElementById("pageSide");
-  if(!pages.length){side.hidden=true;return;}
-  side.hidden=false;
-  const list=document.getElementById("pageList");
-  list.innerHTML=pages.map((p,i)=>`<div class="page-item${i===CUR_PAGE?" active":""}" data-pg="${i}">${esc(txt(p.title)||p.name||`Halaman ${i+1}`)}</div>`).join("");
-  list.querySelectorAll(".page-item").forEach(el=>el.addEventListener("click",()=>{
-    CUR_PAGE=+el.dataset.pg;renderDetail();document.getElementById("detailPanel").scrollTop=0;
-  }));
-}
-
-function renderNodes(comps,answers,rp){
-  return comps.map(c=>renderNode(c,answers,rp)).join("");
-}
-
-function renderNode(c,answers,rp){
-  if(c.kind==="block"){
-    return`<div class="dr-block">${c.title?`<div class="dr-block-title">${esc(txt(c.title))}</div>`:""}${renderNodes(c.components||[],answers,rp)}</div>`;
-  }
-  if(c.kind==="section"){
-    return`<div class="dr-section">${c.title?`<div class="dr-section-title">${esc(txt(c.title))}</div>`:""}${renderNodes(c.components||[],answers,rp)}</div>`;
-  }
-  if(c.kind==="roster")return renderRosterDetail(c,answers);
-  return renderFieldDetail(c,answers,rp);
-}
-
-function renderFieldDetail(c,answers,rp){
-  if(c.type==="note"||c.type==="markdown"||c.type==="hidden")return"";
-  const key=rp+c.name;
-  const label=esc(txt(c.label)||c.name);
-  const display=formatFieldValue(c,answers[key],answers);
-  const empty=display==null||display==="";
-  return`<div class="dr-field${empty?" dr-empty":""}"><span class="dr-label">${label}</span><span class="dr-val">${empty?"—":esc(display)}</span></div>`;
-}
-
-function renderRosterDetail(r,answers){
-  const count=getRosterCount(r,answers);
-  const title=esc(txt(r.title)||r.name);
-  const rowLabel=i=>r.rowTitle?`${esc(txt(r.rowTitle))} #${i+1}`:`Baris #${i+1}`;
-  let html=`<div class="dr-roster"><div class="dr-roster-title">${title}</div>`;
-  if(count<=0){html+=`<div class="dr-roster-empty">Tidak ada data</div>`;}
-  else{
-    for(let i=0;i<count;i++){
-      const rp=`${r.name}#${i}#`;
-      html+=`<div class="dr-row"><div class="dr-row-num">${rowLabel(i)}</div>${renderNodes(r.components||[],answers,rp)}</div>`;
-    }
-  }
-  return html+`</div>`;
-}
-
-function renderFlatDetail(answers){
-  const entries=Object.entries(answers).filter(([k])=>!k.includes("#"));
-  if(!entries.length)return'<div class="empty-state">Tidak ada data</div>';
-  return`<div class="dr-block">`+entries.map(([k,v])=>
-    `<div class="dr-field"><span class="dr-label dr-flat-key">${esc(k)}</span><span class="dr-val">${esc(String(v))}</span></div>`
-  ).join("")+`</div>`;
+function openView(id){
+  window.open("/response-view?form="+encodeURIComponent(FORM_ID)+"&resp="+encodeURIComponent(id),"_blank");
 }
 
 /* ---- helpers ---- */
@@ -341,46 +426,30 @@ function parseAnswers(raw){
   if(typeof raw==="object"&&raw!==null)return raw;
   try{return JSON.parse(raw)||{};}catch{return{};}
 }
-
 function formatDate(iso){
-  return new Date(iso).toLocaleString("id-ID",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});
+  try{return new Date(iso).toLocaleString("id-ID",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});}
+  catch{return iso;}
 }
-
-function getPreview(answers){
-  const parts=[];
-  if(!SCHEMA){
-    for(const[k,v]of Object.entries(answers)){
-      if(parts.length>=3)break;
-      if(!k.includes("#")&&v!=null&&v!=="")parts.push(String(v));
-    }
-    return parts.join(" · ");
-  }
+function truncate(s,n){
+  if(!s)return"";const str=String(s);
+  return str.length>n?str.slice(0,n)+"…":str;
+}
+function valStr(v){
+  if(v==null||v==="")return"";
+  if(Array.isArray(v))return v.join(", ");
+  return String(v);
+}
+function findField(schema,name){
+  let found=null;
   function walk(comps){
-    for(const c of comps){
-      if(parts.length>=3)return;
-      if(c.kind==="field"&&c.type!=="note"&&c.type!=="markdown"&&c.type!=="hidden"&&c.type!=="calculated"){
-        const v=answers[c.name];
-        if(v!=null&&v!==""&&!(Array.isArray(v)&&!v.length))
-          parts.push(Array.isArray(v)?v.join(", "):String(v));
-      }else if(c.components)walk(c.components);
+    for(const c of comps||[]){
+      if(c.kind==="field"&&c.name===name){found=c;return;}
+      if(c.components)walk(c.components);
     }
   }
-  for(const p of SCHEMA.pages||[]){if(parts.length>=3)break;walk(p.components||[]);}
-  return parts.join(" · ");
+  for(const p of schema?.pages||[])if(!found)walk(p.components||[]);
+  return found;
 }
-
-function formatFieldValue(c,val,answers){
-  if(val==null||val==="")return null;
-  if(Array.isArray(val)){
-    if(!val.length)return null;
-    return val.map(v=>getOptionLabel(c,v)).join(", ");
-  }
-  if(c.type==="boolean")return(val==="true"||val===true)?"Ya":"Tidak";
-  if(c.type==="select"||c.type==="radio")return getOptionLabel(c,val);
-  if(c.type==="calculated")return String(val);
-  return String(val);
-}
-
 function getOptionLabel(c,val){
   if(c.optionsRef&&SCHEMA){
     const t=(SCHEMA.referenceData||{})[c.optionsRef];
@@ -389,28 +458,13 @@ function getOptionLabel(c,val){
   if(c.options){const opt=c.options.find(o=>String(o.value)===String(val));if(opt)return txt(opt.label)||String(val);}
   return String(val);
 }
-
-function getRosterCount(r,answers){
-  if(r.countFrom){
-    const cf=Math.floor(Number(answers[r.countFrom]));
-    if(!Number.isFinite(cf)||cf<0)return 0;
-    if(r.max!=null&&r.max!==""&&cf>Number(r.max))return Number(r.max);
-    return cf;
-  }
-  const stored=answers[r.name+"#count"];
-  if(stored!=null){const n=Math.floor(Number(stored));return Number.isFinite(n)&&n>=0?n:0;}
-  // infer dari key yang ada
-  let max=-1;
-  const prefix=r.name+"#";
-  for(const k of Object.keys(answers)){
-    if(k.startsWith(prefix)&&k!==r.name+"#count"){
-      const m=k.slice(prefix.length).match(/^(\d+)#/);
-      if(m)max=Math.max(max,+m[1]);
-    }
-  }
-  return max+1;
+function formatFieldValue(c,val,answers){
+  if(val==null||val==="")return"";
+  if(Array.isArray(val)){if(!val.length)return"";return val.map(v=>getOptionLabel(c,v)).join(", ");}
+  if(c.type==="boolean")return(val==="true"||val===true)?"Ya":"Tidak";
+  if(c.type==="select"||c.type==="radio")return getOptionLabel(c,val);
+  return String(val);
 }
-
 async function downloadCsv(){
   try{
     const r=await fetch("/api/forms/"+FORM_ID+"/responses.csv",{headers:H});

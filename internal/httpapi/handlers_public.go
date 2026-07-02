@@ -7,28 +7,29 @@ import (
 	"time"
 
 	"github.com/bpskaltim/eform-backend/internal/auth"
+	"github.com/bpskaltim/eform-backend/internal/models"
 	"github.com/bpskaltim/eform-backend/internal/store"
 )
 
 // resolveShare memvalidasi token: aktif, belum kedaluwarsa, dan (jika perlu) password cocok.
-func (s *Server) resolveShare(w http.ResponseWriter, r *http.Request) (formID, shareID string, allowResponses bool, ok bool) {
+func (s *Server) resolveShare(w http.ResponseWriter, r *http.Request) (*models.Share, bool) {
 	token := r.PathValue("token")
 	sh, err := s.st.GetShareByToken(r.Context(), token)
 	if errors.Is(err, store.ErrNotFound) {
 		writeErr(w, http.StatusNotFound, "tautan tidak ditemukan")
-		return "", "", false, false
+		return nil, false
 	}
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "kesalahan server")
-		return "", "", false, false
+		return nil, false
 	}
 	if !sh.IsActive {
 		writeErr(w, http.StatusGone, "tautan sudah dinonaktifkan")
-		return "", "", false, false
+		return nil, false
 	}
 	if sh.ExpiresAt != nil && time.Now().After(*sh.ExpiresAt) {
 		writeErr(w, http.StatusGone, "tautan sudah kedaluwarsa")
-		return "", "", false, false
+		return nil, false
 	}
 	if sh.PasswordHash != nil {
 		pw := r.Header.Get("X-Share-Password")
@@ -37,19 +38,19 @@ func (s *Server) resolveShare(w http.ResponseWriter, r *http.Request) (formID, s
 		}
 		if !auth.CheckPassword(*sh.PasswordHash, pw) {
 			writeErr(w, http.StatusUnauthorized, "password tautan salah")
-			return "", "", false, false
+			return nil, false
 		}
 	}
-	return sh.FormID, sh.ID, sh.AllowResponses, true
+	return sh, true
 }
 
 // GET /api/public/forms/{token} — akses skema kuesioner secara publik (tidak perlu login).
 func (s *Server) publicGetForm(w http.ResponseWriter, r *http.Request) {
-	formID, shareID, allowResponses, ok := s.resolveShare(w, r)
+	sh, ok := s.resolveShare(w, r)
 	if !ok {
 		return
 	}
-	f, err := s.st.GetForm(r.Context(), formID)
+	f, err := s.st.GetForm(r.Context(), sh.FormID)
 	if err != nil {
 		writeErr(w, http.StatusNotFound, "kuesioner tidak ditemukan")
 		return
@@ -58,17 +59,18 @@ func (s *Server) publicGetForm(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusForbidden, "kuesioner belum dipublikasikan")
 		return
 	}
-	s.st.IncrementShareView(r.Context(), shareID)
+	s.st.IncrementShareView(r.Context(), sh.ID)
 
-	// Sertakan flag apakah Google OAuth dikonfigurasi agar frontend tahu
 	writeJSON(w, http.StatusOK, map[string]any{
 		"id":             f.ID,
 		"title":          f.Title,
 		"description":    f.Description,
 		"version":        f.Version,
 		"schema":         f.Schema,
-		"allowResponses": allowResponses,
-		"requireAuth":    true, // selalu true: login Google wajib untuk mengisi
+		"allowResponses": sh.AllowResponses,
+		"multiResponse":  sh.MultiResponse,
+		"accessMode":     sh.AccessMode,
+		"requireAuth":    true,
 		"googleEnabled":  s.cfg.GoogleClientID != "",
 	})
 }
@@ -87,13 +89,13 @@ func (s *Server) respondentMe(w http.ResponseWriter, r *http.Request) {
 // GET /api/public/forms/{token}/my-response — jawaban terakhir respondent untuk form ini.
 func (s *Server) myResponse(w http.ResponseWriter, r *http.Request) {
 	rc := respondentFrom(r.Context())
-	formID, _, _, ok := s.resolveShare(w, r)
+	sh, ok := s.resolveShare(w, r)
 	if !ok {
 		return
 	}
-	resp, err := s.st.GetResponseByFormAndRespondent(r.Context(), formID, rc.RespondentID)
+	resp, err := s.st.GetResponseByFormAndRespondent(r.Context(), sh.FormID, rc.RespondentID)
 	if errors.Is(err, store.ErrNotFound) {
-		writeJSON(w, http.StatusOK, nil) // belum pernah mengisi
+		writeJSON(w, http.StatusOK, nil)
 		return
 	}
 	if err != nil {
@@ -103,21 +105,74 @@ func (s *Server) myResponse(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// POST /api/public/forms/{token}/responses — kirim atau perbarui jawaban.
-// Memerlukan JWT respondent (login Google).
-func (s *Server) publicSubmit(w http.ResponseWriter, r *http.Request) {
-	formID, shareID, allowResponses, ok := s.resolveShare(w, r)
+// GET /api/public/forms/{token}/my-responses — semua jawaban respondent (untuk multi-response).
+func (s *Server) myResponses(w http.ResponseWriter, r *http.Request) {
+	rc := respondentFrom(r.Context())
+	sh, ok := s.resolveShare(w, r)
 	if !ok {
 		return
 	}
-	if !allowResponses {
+	resps, err := s.st.ListResponsesByFormAndRespondent(r.Context(), sh.FormID, rc.RespondentID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "kesalahan server")
+		return
+	}
+	if resps == nil {
+		resps = []models.Response{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"responses": resps})
+}
+
+// GET /api/public/forms/{token}/check-access — cek apakah email respondent diizinkan (restricted mode).
+func (s *Server) checkAccess(w http.ResponseWriter, r *http.Request) {
+	rc := respondentFrom(r.Context())
+	sh, ok := s.resolveShare(w, r)
+	if !ok {
+		return
+	}
+	if sh.AccessMode != "restricted" {
+		writeJSON(w, http.StatusOK, map[string]bool{"allowed": true})
+		return
+	}
+	allowed, err := s.st.IsEmailAllowed(r.Context(), sh.ID, rc.Email)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "kesalahan server")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"allowed": allowed})
+}
+
+// POST /api/public/forms/{token}/responses — kirim atau simpan draf jawaban.
+// Body: {answers, draft?: bool, responseId?: string}
+// Memerlukan JWT respondent (login Google).
+func (s *Server) publicSubmit(w http.ResponseWriter, r *http.Request) {
+	sh, ok := s.resolveShare(w, r)
+	if !ok {
+		return
+	}
+	if !sh.AllowResponses {
 		writeErr(w, http.StatusForbidden, "tautan ini tidak menerima jawaban")
 		return
 	}
 	rc := respondentFrom(r.Context())
 
+	// Cek akses jika mode restricted
+	if sh.AccessMode == "restricted" {
+		allowed, err := s.st.IsEmailAllowed(r.Context(), sh.ID, rc.Email)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "kesalahan server")
+			return
+		}
+		if !allowed {
+			writeErr(w, http.StatusForbidden, "email Anda tidak terdaftar dalam daftar akses kuesioner ini")
+			return
+		}
+	}
+
 	var in struct {
-		Answers json.RawMessage `json:"answers"`
+		Answers    json.RawMessage `json:"answers"`
+		Draft      bool            `json:"draft"`
+		ResponseID string          `json:"responseId"`
 	}
 	if err := decodeJSON(r, &in); err != nil || len(in.Answers) == 0 {
 		writeErr(w, http.StatusBadRequest, "jawaban kosong atau format salah")
@@ -131,25 +186,88 @@ func (s *Server) publicSubmit(w http.ResponseWriter, r *http.Request) {
 		"name":       rc.Name,
 	}
 	metaJSON, _ := json.Marshal(meta)
-	sid := shareID
-	resp, err := s.st.UpsertResponse(r.Context(), formID, &sid, rc.RespondentID, in.Answers, metaJSON)
+	sid := sh.ID
+	var resp *models.Response
+	var err error
+
+	if sh.MultiResponse {
+		status := "submitted"
+		if in.Draft {
+			status = "draft"
+		}
+		if in.ResponseID != "" {
+			// Perbarui draf yang ada (harus masih berstatus 'draft' dan milik respondent ini)
+			resp, err = s.st.UpdateMultiResponseDraft(r.Context(), in.ResponseID, rc.RespondentID, sh.FormID, status, in.Answers, metaJSON)
+			if errors.Is(err, store.ErrNotFound) {
+				writeErr(w, http.StatusNotFound, "respons tidak ditemukan atau bukan milik Anda")
+				return
+			}
+		} else {
+			// Buat baris baru — pastikan tidak ada draf aktif yang belum diselesaikan
+			if !in.Draft {
+				hasDraft, chkErr := s.st.HasDraftResponse(r.Context(), sh.FormID, rc.RespondentID)
+				if chkErr != nil {
+					writeErr(w, http.StatusInternalServerError, "kesalahan server")
+					return
+				}
+				if hasDraft {
+					writeErr(w, http.StatusConflict, "Anda masih memiliki draf yang belum diselesaikan — lanjutkan atau batalkan draf tersebut terlebih dahulu")
+					return
+				}
+			}
+			resp, err = s.st.CreateMultiResponseRow(r.Context(), sh.FormID, &sid, rc.RespondentID, status, in.Answers, metaJSON)
+		}
+	} else {
+		// Single-response: upsert (satu respons per respondent)
+		resp, err = s.st.UpsertResponse(r.Context(), sh.FormID, &sid, rc.RespondentID, in.Answers, metaJSON)
+	}
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "gagal menyimpan jawaban")
 		return
 	}
-	// Hapus draf server setelah submit final berhasil
-	_ = s.st.DeleteDraft(r.Context(), formID, rc.RespondentID)
-	writeJSON(w, http.StatusCreated, map[string]any{"id": resp.ID, "submittedAt": resp.SubmittedAt})
+	if !in.Draft {
+		_ = s.st.DeleteDraft(r.Context(), sh.FormID, rc.RespondentID)
+	}
+	code := http.StatusCreated
+	if in.Draft {
+		code = http.StatusOK
+	}
+	writeJSON(w, code, map[string]any{"id": resp.ID, "status": resp.Status, "submittedAt": resp.SubmittedAt})
+}
+
+// POST /api/public/forms/{token}/responses/{responseId}/unsubmit
+// Mengubah respons yang sudah dikirim kembali menjadi draf sehingga bisa diedit.
+func (s *Server) unsubmitResponse(w http.ResponseWriter, r *http.Request) {
+	rc := respondentFrom(r.Context())
+	sh, ok := s.resolveShare(w, r)
+	if !ok {
+		return
+	}
+	if !sh.AllowResponses {
+		writeErr(w, http.StatusForbidden, "tautan ini tidak menerima perubahan jawaban")
+		return
+	}
+	responseID := r.PathValue("responseId")
+	resp, err := s.st.UnsubmitResponse(r.Context(), responseID, rc.RespondentID, sh.FormID)
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "respons tidak ditemukan atau bukan milik Anda")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusConflict, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"id": resp.ID, "status": resp.Status})
 }
 
 // GET /api/public/forms/{token}/draft — ambil draf tersimpan di server.
 func (s *Server) myDraft(w http.ResponseWriter, r *http.Request) {
 	rc := respondentFrom(r.Context())
-	formID, _, _, ok := s.resolveShare(w, r)
+	sh, ok := s.resolveShare(w, r)
 	if !ok {
 		return
 	}
-	draft, err := s.st.GetDraftByFormAndRespondent(r.Context(), formID, rc.RespondentID)
+	draft, err := s.st.GetDraftByFormAndRespondent(r.Context(), sh.FormID, rc.RespondentID)
 	if errors.Is(err, store.ErrNotFound) {
 		writeJSON(w, http.StatusOK, nil)
 		return
@@ -163,7 +281,7 @@ func (s *Server) myDraft(w http.ResponseWriter, r *http.Request) {
 
 // POST /api/public/forms/{token}/draft — simpan draf ke server (upsert).
 func (s *Server) saveDraftHandler(w http.ResponseWriter, r *http.Request) {
-	formID, shareID, _, ok := s.resolveShare(w, r)
+	sh, ok := s.resolveShare(w, r)
 	if !ok {
 		return
 	}
@@ -177,8 +295,8 @@ func (s *Server) saveDraftHandler(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "format salah atau jawaban kosong")
 		return
 	}
-	sid := shareID
-	draft, err := s.st.UpsertDraft(r.Context(), formID, &sid, rc.RespondentID, in.Answers, in.CurPage)
+	sid := sh.ID
+	draft, err := s.st.UpsertDraft(r.Context(), sh.FormID, &sid, rc.RespondentID, in.Answers, in.CurPage)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "gagal menyimpan draf")
 		return

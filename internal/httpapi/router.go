@@ -28,10 +28,16 @@ func (s *Server) Routes() http.Handler {
 	// --- shares ---
 	mux.Handle("POST /api/forms/{id}/shares", s.authMW(s.createShare))
 	mux.Handle("GET /api/forms/{id}/shares", s.authMW(s.listShares))
+	mux.Handle("PATCH /api/shares/{id}", s.authMW(s.updateShare))
 	mux.Handle("DELETE /api/shares/{id}", s.authMW(s.revokeShare))
+	mux.Handle("DELETE /api/shares/{id}/permanent", s.authMW(s.deleteSharePermanent))
+	mux.Handle("GET /api/shares/{id}/allowed-emails", s.authMW(s.listAllowedEmails))
+	mux.Handle("POST /api/shares/{id}/allowed-emails", s.authMW(s.addAllowedEmail))
+	mux.Handle("DELETE /api/share-emails/{id}", s.authMW(s.removeAllowedEmail))
 
 	// --- responses ---
 	mux.Handle("GET /api/forms/{id}/responses", s.authMW(s.listResponses))
+	mux.Handle("GET /api/forms/{id}/responses/{responseId}", s.authMW(s.getResponseDetail))
 	mux.Handle("GET /api/forms/{id}/responses.csv", s.authMW(s.exportResponses))
 
 	// --- users (khusus superadmin) ---
@@ -47,7 +53,10 @@ func (s *Server) Routes() http.Handler {
 	// --- publik: respondent (perlu JWT Google) ---
 	mux.Handle("GET /api/public/me", s.respondentMW(s.respondentMe))
 	mux.Handle("GET /api/public/forms/{token}/my-response", s.respondentMW(s.myResponse))
+	mux.Handle("GET /api/public/forms/{token}/my-responses", s.respondentMW(s.myResponses))
+	mux.Handle("GET /api/public/forms/{token}/check-access", s.respondentMW(s.checkAccess))
 	mux.Handle("POST /api/public/forms/{token}/responses", s.respondentMW(s.publicSubmit))
+	mux.Handle("POST /api/public/forms/{token}/responses/{responseId}/unsubmit", s.respondentMW(s.unsubmitResponse))
 	mux.Handle("GET /api/public/forms/{token}/draft", s.respondentMW(s.myDraft))
 	mux.Handle("POST /api/public/forms/{token}/draft", s.respondentMW(s.saveDraftHandler))
 
@@ -60,7 +69,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /admin", s.page("admin.html"))
 	mux.HandleFunc("GET /builder", s.page("builder.html"))
 	mux.HandleFunc("GET /f/{token}", s.page("public.html"))       // halaman isi kuesioner publik
-	mux.HandleFunc("GET /responses", s.page("responses.html"))    // halaman lihat jawaban
+	mux.HandleFunc("GET /responses", s.page("responses.html"))         // halaman daftar jawaban
+	mux.HandleFunc("GET /response-view", s.page("response-view.html")) // halaman lihat detail jawaban
 	mux.HandleFunc("GET /auth/google/done", s.page("google-done.html")) // landing setelah OAuth
 
 	// aset statis tiap halaman (CSS/JS terpisah dari HTML)

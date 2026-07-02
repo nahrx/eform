@@ -36,6 +36,8 @@ type Share struct {
 	Label          string     `json:"label"`
 	IsActive       bool       `json:"isActive"`
 	AllowResponses bool       `json:"allowResponses"`
+	MultiResponse  bool       `json:"multiResponse"`
+	AccessMode     string     `json:"accessMode"`
 	HasPassword    bool       `json:"hasPassword"`
 	ExpiresAt      *time.Time `json:"expiresAt,omitempty"`
 	ViewCount      int64      `json:"viewCount"`
@@ -44,11 +46,20 @@ type Share struct {
 	PasswordHash *string `json:"-"`
 }
 
+type ShareAllowedEmail struct {
+	ID        string    `json:"id"`
+	ShareID   string    `json:"shareId"`
+	Email     string    `json:"email"`
+	Note      string    `json:"note"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
 type Response struct {
 	ID           string          `json:"id"`
 	FormID       string          `json:"formId"`
 	ShareID      *string         `json:"shareId,omitempty"`
 	RespondentID *string         `json:"respondentId,omitempty"`
+	Status       string          `json:"status"` // 'submitted' | 'draft'
 	Answers      json.RawMessage `json:"answers"`
 	Meta         json.RawMessage `json:"meta,omitempty"`
 	SubmittedAt  time.Time       `json:"submittedAt"`

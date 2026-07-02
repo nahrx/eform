@@ -107,12 +107,20 @@ func (s *Server) updateForm(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) deleteForm(w http.ResponseWriter, r *http.Request) {
-	err := s.st.DeleteForm(r.Context(), r.PathValue("id"))
-	if errors.Is(err, store.ErrNotFound) {
-		writeErr(w, http.StatusNotFound, "kuesioner tidak ditemukan")
+	id := r.PathValue("id")
+	count, err := s.st.CountAllResponsesByForm(r.Context(), id, store.ResponseFilter{})
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal memeriksa data jawaban")
 		return
 	}
-	if err != nil {
+	if count > 0 {
+		writeErr(w, http.StatusConflict, "kuesioner tidak dapat dihapus karena sudah memiliki jawaban")
+		return
+	}
+	if err := s.st.DeleteForm(r.Context(), id); errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "kuesioner tidak ditemukan")
+		return
+	} else if err != nil {
 		writeErr(w, http.StatusInternalServerError, "gagal menghapus")
 		return
 	}
@@ -155,14 +163,19 @@ func (s *Server) createShare(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Label          string `json:"label"`
 		AllowResponses *bool  `json:"allowResponses"`
+		MultiResponse  bool   `json:"multiResponse"`
+		AccessMode     string `json:"accessMode"`
 		Password       string `json:"password"`
-		ExpiresAt      string `json:"expiresAt"` // RFC3339, opsional
+		ExpiresAt      string `json:"expiresAt"`
 	}
 	_ = decodeJSON(r, &in)
 
 	allow := true
 	if in.AllowResponses != nil {
 		allow = *in.AllowResponses
+	}
+	if in.AccessMode != "public" && in.AccessMode != "restricted" {
+		in.AccessMode = "public"
 	}
 	var ph *string
 	if in.Password != "" {
@@ -184,7 +197,7 @@ func (s *Server) createShare(w http.ResponseWriter, r *http.Request) {
 	}
 	uid := userFrom(r.Context()).Subject
 	token := randToken(12)
-	sh, err := s.st.CreateShare(r.Context(), formID, token, in.Label, allow, ph, exp, &uid)
+	sh, err := s.st.CreateShare(r.Context(), formID, token, in.Label, allow, in.MultiResponse, in.AccessMode, ph, exp, &uid)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "gagal membuat share")
 		return
@@ -218,32 +231,164 @@ func (s *Server) revokeShare(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"revoked": true})
 }
 
+func (s *Server) updateShare(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Label          string `json:"label"`
+		AllowResponses *bool  `json:"allowResponses"`
+		MultiResponse  bool   `json:"multiResponse"`
+		AccessMode     string `json:"accessMode"`
+		UpdatePassword bool   `json:"updatePassword"`
+		Password       string `json:"password"` // "" + updatePassword=true → hapus password
+		UpdateExpiry   bool   `json:"updateExpiry"`
+		ExpiresAt      string `json:"expiresAt"` // "" + updateExpiry=true → hapus expiry
+	}
+	if err := decodeJSON(r, &in); err != nil {
+		writeErr(w, http.StatusBadRequest, "format salah")
+		return
+	}
+	allow := true
+	if in.AllowResponses != nil {
+		allow = *in.AllowResponses
+	}
+	if in.AccessMode != "public" && in.AccessMode != "restricted" {
+		in.AccessMode = "public"
+	}
+	var newPH *string
+	if in.UpdatePassword && in.Password != "" {
+		h, err := auth.HashPassword(in.Password)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "gagal memproses password")
+			return
+		}
+		newPH = &h
+	}
+	// UpdatePassword=true & Password="" → newPH stays nil → menghapus password
+	var exp *time.Time
+	if in.UpdateExpiry && in.ExpiresAt != "" {
+		t, err := time.Parse(time.RFC3339, in.ExpiresAt)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "format expiresAt harus RFC3339")
+			return
+		}
+		exp = &t
+	}
+	sh, err := s.st.UpdateShare(r.Context(), r.PathValue("id"), in.Label, allow, in.MultiResponse, in.AccessMode, in.UpdatePassword, newPH, in.UpdateExpiry, exp)
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "share tidak ditemukan")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal memperbarui share")
+		return
+	}
+	writeJSON(w, http.StatusOK, s.shareWithURL(sh))
+}
+
 func (s *Server) shareWithURL(sh *models.Share) map[string]any {
 	return map[string]any{
 		"id": sh.ID, "formId": sh.FormID, "token": sh.Token, "label": sh.Label,
-		"isActive": sh.IsActive, "allowResponses": sh.AllowResponses, "hasPassword": sh.HasPassword,
+		"isActive": sh.IsActive, "allowResponses": sh.AllowResponses,
+		"multiResponse": sh.MultiResponse, "accessMode": sh.AccessMode,
+		"hasPassword": sh.HasPassword,
 		"expiresAt": sh.ExpiresAt, "viewCount": sh.ViewCount, "createdAt": sh.CreatedAt,
 		"shareUrl": s.cfg.PublicBaseURL + "/f/" + sh.Token,
 		"apiUrl":   s.cfg.PublicBaseURL + "/api/public/forms/" + sh.Token,
 	}
 }
 
-/* ---------------- responses ---------------- */
+func (s *Server) deleteSharePermanent(w http.ResponseWriter, r *http.Request) {
+	err := s.st.DeleteShare(r.Context(), r.PathValue("id"))
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "share tidak ditemukan atau masih aktif")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal menghapus share")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"deleted": true})
+}
 
-func (s *Server) listResponses(w http.ResponseWriter, r *http.Request) {
-	formID := r.PathValue("id")
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
-	resp, err := s.st.ListResponsesByForm(r.Context(), formID, limit, offset)
+func (s *Server) listAllowedEmails(w http.ResponseWriter, r *http.Request) {
+	emails, err := s.st.ListShareAllowedEmails(r.Context(), r.PathValue("id"))
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
 		return
 	}
-	count, _ := s.st.CountResponsesByForm(r.Context(), formID)
+	if emails == nil {
+		emails = []models.ShareAllowedEmail{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"emails": emails})
+}
+
+func (s *Server) addAllowedEmail(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Email string `json:"email"`
+		Note  string `json:"note"`
+	}
+	if err := decodeJSON(r, &in); err != nil || strings.TrimSpace(in.Email) == "" {
+		writeErr(w, http.StatusBadRequest, "email tidak boleh kosong")
+		return
+	}
+	e, err := s.st.CreateShareAllowedEmail(r.Context(), r.PathValue("id"), strings.TrimSpace(strings.ToLower(in.Email)), in.Note)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal menambah email")
+		return
+	}
+	writeJSON(w, http.StatusCreated, e)
+}
+
+func (s *Server) removeAllowedEmail(w http.ResponseWriter, r *http.Request) {
+	err := s.st.DeleteShareAllowedEmail(r.Context(), r.PathValue("id"))
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "email tidak ditemukan")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal menghapus email")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"deleted": true})
+}
+
+/* ---------------- responses ---------------- */
+
+func (s *Server) listResponses(w http.ResponseWriter, r *http.Request) {
+	formID := r.PathValue("id")
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	offset, _ := strconv.Atoi(q.Get("offset"))
+	f := store.ResponseFilter{
+		Status:  q.Get("status"),
+		ShareID: q.Get("shareId"),
+		Search:  strings.TrimSpace(q.Get("search")),
+		SortBy:  q.Get("sortBy"),
+		SortDir: q.Get("sortDir"),
+	}
+	resp, err := s.st.ListAllResponsesByForm(r.Context(), formID, f, limit, offset)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		return
+	}
+	count, _ := s.st.CountAllResponsesByForm(r.Context(), formID, f)
 	if resp == nil {
 		resp = []models.Response{}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"responses": resp, "total": count})
+}
+
+func (s *Server) getResponseDetail(w http.ResponseWriter, r *http.Request) {
+	formID := r.PathValue("id")
+	resp, err := s.st.GetResponseByID(r.Context(), r.PathValue("responseId"))
+	if errors.Is(err, store.ErrNotFound) || (err == nil && resp.FormID != formID) {
+		writeErr(w, http.StatusNotFound, "jawaban tidak ditemukan")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (s *Server) exportResponses(w http.ResponseWriter, r *http.Request) {

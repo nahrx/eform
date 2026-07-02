@@ -11,6 +11,8 @@ const LABELS={text:"Teks singkat",email:"Email",textarea:"Teks panjang",number:"
 const CHOICE=new Set(["select","multiselect","radio","checkbox"]);
 const NUMERIC=new Set(["number","integer","decimal","currency","range","rating"]);
 const TEXTY=new Set(["text","textarea"]);
+const DATETIME=new Set(["date","time","datetime"]);
+const DT_INPUT_TYPE={date:"date",time:"time",datetime:"datetime-local"};
 
 /* ===================== EXPRESSION ENGINE ===================== */
 const Expr=(function(){
@@ -529,6 +531,7 @@ function fieldForm(c){const t=c.type;let html=headBar(t,c.name);
   if(t==="markdown")html+=`<div class="field"><label>Keterangan (Markdown)</label><textarea class="ctrl" data-k="markdown" rows="6" placeholder="# Petunjuk Pengisian&#10;&#10;Isi sesuai **kondisi sebenarnya**. Lihat:&#10;- poin pertama&#10;- poin kedua&#10;&#10;> Catatan penting.">${esc(c.markdown||"")}</textarea><div class="help" style="margin-left:0;margin-top:4px">Mendukung: # judul, **tebal**, *miring*, \`kode\`, list (- / 1.), &gt; kutipan, [teks](url), --- garis.</div></div>`;
   if(t==="calculated")html+=`<div class="field"><label>Rumus (calculate)</label><textarea class="ctrl" data-k="calculate" placeholder="\${a}+\${b}">${esc(c.calculate||"")}</textarea></div><label class="check" style="margin-top:6px"><input type="checkbox" data-k="autofill" ${c.autofill?"checked":""}> Autofill — isi otomatis tapi bisa diedit</label>`;
   if(NUMERIC.has(t))html+=`<div class="row3">${mini("min","Min",c.min)}${mini("max","Maks",c.max)}${mini("step","Step",c.step)}</div><div class="field"><label>Satuan</label><input class="ctrl" data-k="unit" value="${esc(c.unit||"")}"></div>`;
+  if(DATETIME.has(t)){const it=DT_INPUT_TYPE[t];html+=`<div class="row2">${mini("min","Dari",c.min,it)}${mini("max","Sampai",c.max,it)}</div>`;}
   if(TEXTY.has(t))html+=`<div class="row2">${mini("maxLength","Maks karakter",c.maxLength,"number")}<div class="field"><label>Placeholder</label><input class="ctrl" data-k="placeholder" value="${esc(c.placeholder||"")}"></div></div><div class="field"><label>Pola (regex)</label><input class="ctrl mono" data-k="pattern" value="${esc(c.pattern||"")}"></div>`;
   if(CHOICE.has(t))html+=optionsBlock(c);
   const dvHtml=(()=>{
@@ -545,7 +548,7 @@ function fieldForm(c){const t=c.type;let html=headBar(t,c.name);
   html+=validationsBlock(c); return html;
 }
 function headBar(kind,name){const cat=CAT_OF[kind]||"node";const colorVar=({page:"--page",block:"--block",section:"--section",roster:"--roster"})[kind]||CAT_VAR[cat];const pasteBtn=clipboard?`<button class="icon-btn" id="pasteBtn" title="Tempel ${esc(clipboard.kind)} yang disalin">📥</button>`:"";return `<div style="display:flex;align-items:center;gap:9px;margin-bottom:14px"><span style="width:4px;height:30px;border-radius:2px;background:var(${colorVar})"></span><div><div style="font-family:var(--mono);font-size:11px;color:var(${colorVar});font-weight:700;text-transform:uppercase">${kind}</div><div style="font-size:11px;color:var(--muted)">${esc(name)}</div></div><button class="icon-btn" id="copyBtn" title="Salin" style="margin-left:auto">📋</button><button class="icon-btn" id="dupBtn" title="Duplikat">⧉</button>${pasteBtn}<button class="icon-btn danger" id="delBtn" title="Hapus">🗑</button></div>`;}
-function mini(k,l,v,type){return `<div class="field"><label>${l}</label><input class="ctrl" ${type==="number"?'type="number" step="1" min="0" inputmode="numeric"':''} data-k="${k}" value="${esc(v??"")}"></div>`;}
+function mini(k,l,v,type){const attrs=type==="number"?'type="number" step="1" min="0" inputmode="numeric"':(type?`type="${esc(type)}"`:'');return `<div class="field"><label>${l}</label><input class="ctrl" ${attrs} data-k="${k}" value="${esc(v??"")}"></div>`;}
 function cond(k,l,v){return `<div class="field"><label>${l}</label><textarea class="ctrl" data-k="${k}" placeholder="\${field} == nilai">${esc(v||"")}</textarea></div>`;}
 function optionsBlock(c){
   const mode=c.optionSource||(c.optionsApi&&c.optionsApi.url?"api":(c.optionsRef?"ref":"manual"));
@@ -1137,9 +1140,7 @@ function pvField(c,row){
   else if(c.type==="radio"){const ro=resolveOptions(c,rp);ctrl=optWrap(ro,()=>pvRadios(key,ro.opts,String(val),disAll),key);}
   else if(c.type==="select"){const ro=resolveOptions(c,rp);ctrl=optWrap(ro,()=>`<select ${da} class="pv-in"${disAll}><option value="">— pilih —</option>${ro.opts.map(o=>`<option value="${esc(o.value)}"${String(val)===String(o.value)?" selected":""}>${esc(o.label)}</option>`).join("")}</select>`,key);}
   else if(c.type==="checkbox"||c.type==="multiselect"){const ro=resolveOptions(c,rp);ctrl=optWrap(ro,()=>`<div class="pv-radios">${ro.opts.map(o=>`<label class="pv-opt"><input type="checkbox" data-kc="${esc(key)}" value="${esc(o.value)}"${(Array.isArray(val)&&val.map(String).includes(String(o.value)))?" checked":""}${disAll}> ${esc(o.label)}</label>`).join("")}</div>`,key);}
-  else if(c.type==="date")ctrl=`<input ${da} type="date" class="pv-in" value="${esc(val)}" style="width:auto"${dis}${rdOnly}>`;
-  else if(c.type==="time")ctrl=`<input ${da} type="time" class="pv-in" value="${esc(val)}" style="width:auto"${dis}${rdOnly}>`;
-  else if(c.type==="datetime")ctrl=`<input ${da} type="datetime-local" class="pv-in" value="${esc(val)}" style="width:auto"${dis}${rdOnly}>`;
+  else if(DATETIME.has(c.type))ctrl=`<input ${da} type="${DT_INPUT_TYPE[c.type]}" class="pv-in" value="${esc(val)}"${clean(c.min)?` min="${esc(c.min)}"`:""}${clean(c.max)?` max="${esc(c.max)}"`:""} style="width:auto"${dis}${rdOnly}>`;
   else if(c.type==="geopoint")ctrl=`<div class="pv-inbtn"><input ${da} class="pv-in" value="${esc(val)}" placeholder="lat, lng"${dis}${rdOnly}><button type="button" class="pv-smbtn pv-geobtn"${disAll}>📍 Ambil Lokasi</button></div><div class="pv-geomsg"></div>`;
   else if(c.type==="photo"||c.type==="file"){
     const isPhoto=c.type==="photo";

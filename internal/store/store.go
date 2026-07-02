@@ -4,12 +4,22 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/bpskaltim/eform-backend/internal/models"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// ResponseFilter parameter untuk filter dan sort daftar jawaban admin.
+type ResponseFilter struct {
+	Status  string // 'submitted'|'draft'|'' (kosong = semua)
+	ShareID string // uuid string atau '' (kosong = semua)
+	Search  string // pencarian parsial pada meta.name / meta.email
+	SortBy  string // 'waktu'|'status'|'share'|'who'
+	SortDir string // 'asc'|'desc'
+}
 
 var ErrNotFound = errors.New("data tidak ditemukan")
 
@@ -182,15 +192,18 @@ func (s *Store) SlugExists(ctx context.Context, slug string) (bool, error) {
 
 /* ---------------- shares ---------------- */
 
-func (s *Store) CreateShare(ctx context.Context, formID, token, label string, allowResponses bool, passwordHash *string, expiresAt *time.Time, createdBy *string) (*models.Share, error) {
+func (s *Store) CreateShare(ctx context.Context, formID, token, label string, allowResponses, multiResponse bool, accessMode string, passwordHash *string, expiresAt *time.Time, createdBy *string) (*models.Share, error) {
+	if accessMode == "" {
+		accessMode = "public"
+	}
 	sh := &models.Share{}
 	var ph *string
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO form_shares(form_id,token,label,allow_responses,password_hash,expires_at,created_by)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7)
-		 RETURNING id,form_id,token,label,is_active,allow_responses,password_hash,expires_at,view_count,created_at`,
-		formID, token, label, allowResponses, passwordHash, expiresAt, createdBy,
-	).Scan(&sh.ID, &sh.FormID, &sh.Token, &sh.Label, &sh.IsActive, &sh.AllowResponses, &ph, &sh.ExpiresAt, &sh.ViewCount, &sh.CreatedAt)
+		`INSERT INTO form_shares(form_id,token,label,allow_responses,multi_response,access_mode,password_hash,expires_at,created_by)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+		 RETURNING id,form_id,token,label,is_active,allow_responses,multi_response,access_mode,password_hash,expires_at,view_count,created_at`,
+		formID, token, label, allowResponses, multiResponse, accessMode, passwordHash, expiresAt, createdBy,
+	).Scan(&sh.ID, &sh.FormID, &sh.Token, &sh.Label, &sh.IsActive, &sh.AllowResponses, &sh.MultiResponse, &sh.AccessMode, &ph, &sh.ExpiresAt, &sh.ViewCount, &sh.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +213,7 @@ func (s *Store) CreateShare(ctx context.Context, formID, token, label string, al
 
 func (s *Store) ListSharesByForm(ctx context.Context, formID string) ([]models.Share, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id,form_id,token,label,is_active,allow_responses,password_hash,expires_at,view_count,created_at
+		`SELECT id,form_id,token,label,is_active,allow_responses,multi_response,access_mode,password_hash,expires_at,view_count,created_at
 		 FROM form_shares WHERE form_id=$1 ORDER BY created_at DESC`, formID)
 	if err != nil {
 		return nil, err
@@ -210,7 +223,7 @@ func (s *Store) ListSharesByForm(ctx context.Context, formID string) ([]models.S
 	for rows.Next() {
 		sh := models.Share{}
 		var ph *string
-		if err := rows.Scan(&sh.ID, &sh.FormID, &sh.Token, &sh.Label, &sh.IsActive, &sh.AllowResponses, &ph, &sh.ExpiresAt, &sh.ViewCount, &sh.CreatedAt); err != nil {
+		if err := rows.Scan(&sh.ID, &sh.FormID, &sh.Token, &sh.Label, &sh.IsActive, &sh.AllowResponses, &sh.MultiResponse, &sh.AccessMode, &ph, &sh.ExpiresAt, &sh.ViewCount, &sh.CreatedAt); err != nil {
 			return nil, err
 		}
 		sh.HasPassword = ph != nil
@@ -222,9 +235,9 @@ func (s *Store) ListSharesByForm(ctx context.Context, formID string) ([]models.S
 func (s *Store) GetShareByToken(ctx context.Context, token string) (*models.Share, error) {
 	sh := &models.Share{}
 	err := s.pool.QueryRow(ctx,
-		`SELECT id,form_id,token,label,is_active,allow_responses,password_hash,expires_at,view_count,created_at
+		`SELECT id,form_id,token,label,is_active,allow_responses,multi_response,access_mode,password_hash,expires_at,view_count,created_at
 		 FROM form_shares WHERE token=$1`, token,
-	).Scan(&sh.ID, &sh.FormID, &sh.Token, &sh.Label, &sh.IsActive, &sh.AllowResponses, &sh.PasswordHash, &sh.ExpiresAt, &sh.ViewCount, &sh.CreatedAt)
+	).Scan(&sh.ID, &sh.FormID, &sh.Token, &sh.Label, &sh.IsActive, &sh.AllowResponses, &sh.MultiResponse, &sh.AccessMode, &sh.PasswordHash, &sh.ExpiresAt, &sh.ViewCount, &sh.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -246,8 +259,104 @@ func (s *Store) RevokeShare(ctx context.Context, id string) error {
 	return nil
 }
 
+// UpdateShare memperbarui konfigurasi share yang masih aktif.
+// updatePassword=true  → password_hash diubah ke passwordHash (nil berarti hapus password).
+// updateExpiry=true    → expires_at diubah ke expiresAt (nil berarti hapus expiry).
+func (s *Store) UpdateShare(ctx context.Context, id, label string, allowResponses, multiResponse bool, accessMode string, updatePassword bool, passwordHash *string, updateExpiry bool, expiresAt *time.Time) (*models.Share, error) {
+	if accessMode != "public" && accessMode != "restricted" {
+		accessMode = "public"
+	}
+	sh := &models.Share{}
+	var ph *string
+	err := s.pool.QueryRow(ctx, `
+		UPDATE form_shares SET
+		  label=$2,
+		  allow_responses=$3,
+		  multi_response=$4,
+		  access_mode=$5,
+		  password_hash = CASE WHEN $6 THEN $7 ELSE password_hash END,
+		  expires_at    = CASE WHEN $8 THEN $9 ELSE expires_at END
+		WHERE id=$1
+		RETURNING id,form_id,token,label,is_active,allow_responses,multi_response,access_mode,password_hash,expires_at,view_count,created_at`,
+		id, label, allowResponses, multiResponse, accessMode,
+		updatePassword, passwordHash,
+		updateExpiry, expiresAt,
+	).Scan(&sh.ID, &sh.FormID, &sh.Token, &sh.Label, &sh.IsActive, &sh.AllowResponses, &sh.MultiResponse, &sh.AccessMode, &ph, &sh.ExpiresAt, &sh.ViewCount, &sh.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	sh.HasPassword = ph != nil
+	return sh, nil
+}
+
 func (s *Store) IncrementShareView(ctx context.Context, id string) {
 	_, _ = s.pool.Exec(ctx, `UPDATE form_shares SET view_count = view_count + 1 WHERE id=$1`, id)
+}
+
+// DeleteShare menghapus permanen share yang sudah dicabut (is_active=false).
+func (s *Store) DeleteShare(ctx context.Context, id string) error {
+	ct, err := s.pool.Exec(ctx, `DELETE FROM form_shares WHERE id=$1 AND is_active=false`, id)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+/* ---------------- share allowed emails ---------------- */
+
+func (s *Store) CreateShareAllowedEmail(ctx context.Context, shareID, email, note string) (*models.ShareAllowedEmail, error) {
+	e := &models.ShareAllowedEmail{}
+	err := s.pool.QueryRow(ctx,
+		`INSERT INTO share_allowed_emails(share_id,email,note) VALUES ($1,$2,$3)
+		 ON CONFLICT (share_id,email) DO UPDATE SET note=EXCLUDED.note
+		 RETURNING id,share_id,email,note,created_at`,
+		shareID, email, note,
+	).Scan(&e.ID, &e.ShareID, &e.Email, &e.Note, &e.CreatedAt)
+	return e, err
+}
+
+func (s *Store) ListShareAllowedEmails(ctx context.Context, shareID string) ([]models.ShareAllowedEmail, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT id,share_id,email,note,created_at FROM share_allowed_emails WHERE share_id=$1 ORDER BY created_at`, shareID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []models.ShareAllowedEmail
+	for rows.Next() {
+		e := models.ShareAllowedEmail{}
+		if err := rows.Scan(&e.ID, &e.ShareID, &e.Email, &e.Note, &e.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) DeleteShareAllowedEmail(ctx context.Context, id string) error {
+	ct, err := s.pool.Exec(ctx, `DELETE FROM share_allowed_emails WHERE id=$1`, id)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) IsEmailAllowed(ctx context.Context, shareID, email string) (bool, error) {
+	var exists bool
+	err := s.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM share_allowed_emails WHERE share_id=$1 AND lower(email)=lower($2))`,
+		shareID, email,
+	).Scan(&exists)
+	return exists, err
 }
 
 /* ---------------- responses ---------------- */
@@ -261,11 +370,213 @@ func (s *Store) CreateResponse(ctx context.Context, formID string, shareID *stri
 	}
 	r := &models.Response{}
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO form_responses(form_id,share_id,answers,meta) VALUES ($1,$2,$3,$4)
-		 RETURNING id,form_id,share_id,respondent_id,answers,meta,submitted_at`,
+		`INSERT INTO form_responses(form_id,share_id,answers,meta,status) VALUES ($1,$2,$3,$4,'submitted')
+		 RETURNING id,form_id,share_id,respondent_id,status,answers,meta,submitted_at`,
 		formID, shareID, answers, meta,
-	).Scan(&r.ID, &r.FormID, &r.ShareID, &r.RespondentID, &r.Answers, &r.Meta, &r.SubmittedAt)
+	).Scan(&r.ID, &r.FormID, &r.ShareID, &r.RespondentID, &r.Status, &r.Answers, &r.Meta, &r.SubmittedAt)
 	return r, err
+}
+
+// CreateMultiResponseRow menyimpan baris baru di form_responses dengan status tertentu ('submitted' atau 'draft').
+func (s *Store) CreateMultiResponseRow(ctx context.Context, formID string, shareID *string, respondentID, status string, answers, meta json.RawMessage) (*models.Response, error) {
+	if len(answers) == 0 {
+		answers = json.RawMessage(`{}`)
+	}
+	if len(meta) == 0 {
+		meta = json.RawMessage(`{}`)
+	}
+	r := &models.Response{}
+	err := s.pool.QueryRow(ctx,
+		`INSERT INTO form_responses(form_id,share_id,respondent_id,status,answers,meta) VALUES ($1,$2,$3,$4,$5,$6)
+		 RETURNING id,form_id,share_id,respondent_id,status,answers,meta,submitted_at`,
+		formID, shareID, respondentID, status, answers, meta,
+	).Scan(&r.ID, &r.FormID, &r.ShareID, &r.RespondentID, &r.Status, &r.Answers, &r.Meta, &r.SubmittedAt)
+	return r, err
+}
+
+// GetResponseByID mengambil satu respons berdasarkan ID-nya.
+// Jika tidak ditemukan di form_responses, cari di response_drafts (draf single-response).
+func (s *Store) GetResponseByID(ctx context.Context, id string) (*models.Response, error) {
+	r := &models.Response{}
+	err := s.pool.QueryRow(ctx,
+		`SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at
+		 FROM form_responses WHERE id=$1`, id,
+	).Scan(&r.ID, &r.FormID, &r.ShareID, &r.RespondentID, &r.Status, &r.Answers, &r.Meta, &r.SubmittedAt)
+	if !errors.Is(err, pgx.ErrNoRows) {
+		if err != nil {
+			return nil, err
+		}
+		return r, nil
+	}
+	// Fallback: cari di response_drafts (draf form single-response)
+	err2 := s.pool.QueryRow(ctx,
+		`SELECT id,form_id,share_id,respondent_id,answers,'{}'::jsonb,saved_at
+		 FROM response_drafts WHERE id=$1`, id,
+	).Scan(&r.ID, &r.FormID, &r.ShareID, &r.RespondentID, &r.Answers, &r.Meta, &r.SubmittedAt)
+	if errors.Is(err2, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err2 != nil {
+		return nil, err2
+	}
+	r.Status = "draft"
+	return r, nil
+}
+
+// ListAllResponsesByForm mengembalikan semua respons (form_responses + response_drafts) untuk tampilan admin,
+// dengan dukungan filter status/shareId/search dan sort dinamis.
+func (s *Store) ListAllResponsesByForm(ctx context.Context, formID string, f ResponseFilter, limit, offset int) ([]models.Response, error) {
+	if limit <= 0 || limit > 1000 {
+		limit = 50
+	}
+	// Validasi sort column terhadap allowlist untuk mencegah SQL injection
+	sortCol := map[string]string{
+		"waktu":  "submitted_at",
+		"status": "status",
+		"share":  "share_id",
+		"who":    "meta->>'name'",
+	}[f.SortBy]
+	if sortCol == "" {
+		sortCol = "submitted_at"
+	}
+	sortDir := "DESC"
+	if f.SortDir == "asc" {
+		sortDir = "ASC"
+	}
+	searchArg := ""
+	if f.Search != "" {
+		searchArg = "%" + f.Search + "%"
+	}
+	q := fmt.Sprintf(`
+		SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at FROM (
+		  SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at
+		    FROM form_responses WHERE form_id=$1
+		  UNION ALL
+		  SELECT id,form_id,share_id,respondent_id,'draft'::text,answers,'{}'::jsonb,saved_at
+		    FROM response_drafts WHERE form_id=$1
+		) combined
+		WHERE ($2='' OR status=$2)
+		  AND ($3='' OR share_id::text=$3)
+		  AND ($4='' OR meta->>'name' ILIKE $4 OR meta->>'email' ILIKE $4)
+		ORDER BY %s %s NULLS LAST
+		LIMIT $5 OFFSET $6`, sortCol, sortDir)
+	rows, err := s.pool.Query(ctx, q, formID, f.Status, f.ShareID, searchArg, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []models.Response
+	for rows.Next() {
+		r := models.Response{}
+		if err := rows.Scan(&r.ID, &r.FormID, &r.ShareID, &r.RespondentID, &r.Status, &r.Answers, &r.Meta, &r.SubmittedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// CountAllResponsesByForm menghitung semua respons (semua status + response_drafts) sesuai filter.
+func (s *Store) CountAllResponsesByForm(ctx context.Context, formID string, f ResponseFilter) (int64, error) {
+	searchArg := ""
+	if f.Search != "" {
+		searchArg = "%" + f.Search + "%"
+	}
+	var n int64
+	err := s.pool.QueryRow(ctx, `
+		SELECT count(*) FROM (
+		  SELECT status,share_id,meta FROM form_responses WHERE form_id=$1
+		  UNION ALL
+		  SELECT 'draft'::text,share_id,'{}'::jsonb FROM response_drafts WHERE form_id=$1
+		) combined
+		WHERE ($2='' OR status=$2)
+		  AND ($3='' OR share_id::text=$3)
+		  AND ($4='' OR meta->>'name' ILIKE $4 OR meta->>'email' ILIKE $4)`,
+		formID, f.Status, f.ShareID, searchArg,
+	).Scan(&n)
+	return n, err
+}
+
+// HasDraftResponse mengembalikan true jika responden masih memiliki draf aktif untuk form ini.
+func (s *Store) HasDraftResponse(ctx context.Context, formID, respondentID string) (bool, error) {
+	var exists bool
+	err := s.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM form_responses WHERE form_id=$1 AND respondent_id=$2 AND status='draft')`,
+		formID, respondentID,
+	).Scan(&exists)
+	return exists, err
+}
+
+// UpdateMultiResponseDraft memperbarui jawaban draf yang ada.
+// newStatus='draft'     → update jawaban saja.
+// newStatus='submitted' → update jawaban + submitted_at=now().
+// Hanya berhasil jika baris masih berstatus 'draft' dan milik respondentID pada formID yang sama.
+func (s *Store) UpdateMultiResponseDraft(ctx context.Context, id, respondentID, formID, newStatus string, answers, meta json.RawMessage) (*models.Response, error) {
+	if len(answers) == 0 {
+		answers = json.RawMessage(`{}`)
+	}
+	if len(meta) == 0 {
+		meta = json.RawMessage(`{}`)
+	}
+	r := &models.Response{}
+	err := s.pool.QueryRow(ctx, `
+		UPDATE form_responses SET
+		  answers=$5, meta=$6, status=$4,
+		  submitted_at = CASE WHEN $4='submitted' THEN now() ELSE submitted_at END
+		WHERE id=$1 AND respondent_id=$2 AND form_id=$3 AND status='draft'
+		RETURNING id,form_id,share_id,respondent_id,status,answers,meta,submitted_at`,
+		id, respondentID, formID, newStatus, answers, meta,
+	).Scan(&r.ID, &r.FormID, &r.ShareID, &r.RespondentID, &r.Status, &r.Answers, &r.Meta, &r.SubmittedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return r, err
+}
+
+// UnsubmitResponse mengubah status respons dari 'submitted' kembali ke 'draft' sehingga bisa diedit.
+// Gagal jika sudah ada draf lain dari responden yang sama untuk form yang sama.
+func (s *Store) UnsubmitResponse(ctx context.Context, id, respondentID, formID string) (*models.Response, error) {
+	var draftExists bool
+	_ = s.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM form_responses WHERE form_id=$1 AND respondent_id=$2 AND status='draft' AND id!=$3)`,
+		formID, respondentID, id,
+	).Scan(&draftExists)
+	if draftExists {
+		return nil, errors.New("sudah ada draf lain — selesaikan atau batalkan draf tersebut terlebih dahulu")
+	}
+	r := &models.Response{}
+	err := s.pool.QueryRow(ctx,
+		`UPDATE form_responses SET status='draft'
+		 WHERE id=$1 AND respondent_id=$2 AND form_id=$3 AND status='submitted'
+		 RETURNING id,form_id,share_id,respondent_id,status,answers,meta,submitted_at`,
+		id, respondentID, formID,
+	).Scan(&r.ID, &r.FormID, &r.ShareID, &r.RespondentID, &r.Status, &r.Answers, &r.Meta, &r.SubmittedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return r, err
+}
+
+// ListResponsesByFormAndRespondent mengembalikan semua jawaban responden untuk form ini (multi-response).
+func (s *Store) ListResponsesByFormAndRespondent(ctx context.Context, formID, respondentID string) ([]models.Response, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at
+		 FROM form_responses WHERE form_id=$1 AND respondent_id=$2
+		 ORDER BY submitted_at DESC`,
+		formID, respondentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []models.Response
+	for rows.Next() {
+		r := models.Response{}
+		if err := rows.Scan(&r.ID, &r.FormID, &r.ShareID, &r.RespondentID, &r.Status, &r.Answers, &r.Meta, &r.SubmittedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }
 
 // UpsertResponse menyimpan jawaban yang terikat ke respondent.
@@ -279,14 +590,14 @@ func (s *Store) UpsertResponse(ctx context.Context, formID string, shareID *stri
 	}
 	r := &models.Response{}
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO form_responses(form_id,share_id,respondent_id,answers,meta)
-		 VALUES ($1,$2,$3,$4,$5)
+		`INSERT INTO form_responses(form_id,share_id,respondent_id,status,answers,meta)
+		 VALUES ($1,$2,$3,'submitted',$4,$5)
 		 ON CONFLICT (form_id,respondent_id) WHERE respondent_id IS NOT NULL
-		 DO UPDATE SET share_id=EXCLUDED.share_id, answers=EXCLUDED.answers,
+		 DO UPDATE SET share_id=EXCLUDED.share_id, status='submitted', answers=EXCLUDED.answers,
 		               meta=EXCLUDED.meta, submitted_at=now()
-		 RETURNING id,form_id,share_id,respondent_id,answers,meta,submitted_at`,
+		 RETURNING id,form_id,share_id,respondent_id,status,answers,meta,submitted_at`,
 		formID, shareID, respondentID, answers, meta,
-	).Scan(&r.ID, &r.FormID, &r.ShareID, &r.RespondentID, &r.Answers, &r.Meta, &r.SubmittedAt)
+	).Scan(&r.ID, &r.FormID, &r.ShareID, &r.RespondentID, &r.Status, &r.Answers, &r.Meta, &r.SubmittedAt)
 	return r, err
 }
 
@@ -294,10 +605,10 @@ func (s *Store) UpsertResponse(ctx context.Context, formID string, shareID *stri
 func (s *Store) GetResponseByFormAndRespondent(ctx context.Context, formID, respondentID string) (*models.Response, error) {
 	r := &models.Response{}
 	err := s.pool.QueryRow(ctx,
-		`SELECT id,form_id,share_id,respondent_id,answers,meta,submitted_at
-		 FROM form_responses WHERE form_id=$1 AND respondent_id=$2`,
+		`SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at
+		 FROM form_responses WHERE form_id=$1 AND respondent_id=$2 AND status='submitted'`,
 		formID, respondentID,
-	).Scan(&r.ID, &r.FormID, &r.ShareID, &r.RespondentID, &r.Answers, &r.Meta, &r.SubmittedAt)
+	).Scan(&r.ID, &r.FormID, &r.ShareID, &r.RespondentID, &r.Status, &r.Answers, &r.Meta, &r.SubmittedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -322,8 +633,8 @@ func (s *Store) ListResponsesByForm(ctx context.Context, formID string, limit, o
 		limit = 200
 	}
 	rows, err := s.pool.Query(ctx,
-		`SELECT id,form_id,share_id,respondent_id,answers,meta,submitted_at
-		 FROM form_responses WHERE form_id=$1 ORDER BY submitted_at DESC LIMIT $2 OFFSET $3`,
+		`SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at
+		 FROM form_responses WHERE form_id=$1 AND status='submitted' ORDER BY submitted_at DESC LIMIT $2 OFFSET $3`,
 		formID, limit, offset)
 	if err != nil {
 		return nil, err
@@ -332,7 +643,7 @@ func (s *Store) ListResponsesByForm(ctx context.Context, formID string, limit, o
 	var out []models.Response
 	for rows.Next() {
 		r := models.Response{}
-		if err := rows.Scan(&r.ID, &r.FormID, &r.ShareID, &r.RespondentID, &r.Answers, &r.Meta, &r.SubmittedAt); err != nil {
+		if err := rows.Scan(&r.ID, &r.FormID, &r.ShareID, &r.RespondentID, &r.Status, &r.Answers, &r.Meta, &r.SubmittedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
@@ -342,7 +653,7 @@ func (s *Store) ListResponsesByForm(ctx context.Context, formID string, limit, o
 
 func (s *Store) CountResponsesByForm(ctx context.Context, formID string) (int64, error) {
 	var n int64
-	err := s.pool.QueryRow(ctx, `SELECT count(*) FROM form_responses WHERE form_id=$1`, formID).Scan(&n)
+	err := s.pool.QueryRow(ctx, `SELECT count(*) FROM form_responses WHERE form_id=$1 AND status='submitted'`, formID).Scan(&n)
 	return n, err
 }
 

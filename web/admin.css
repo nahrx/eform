@@ -11,7 +11,7 @@
   th,td{text-align:left;padding:11px 14px;font-size:13.5px;border-bottom:1px solid var(--line);vertical-align:middle}
   th{background:#f8fafc;font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted)}
   tr:last-child td{border-bottom:none}
-  .tag{font-size:11px;padding:3px 8px;border-radius:999px;font-weight:700}
+  .tag{font-size:11px;padding:3px 8px;border-radius:999px;font-weight:700;background:#e2e8f0;color:#475569}
   .tag.published{background:#dcfce7;color:var(--ok)} .tag.draft{background:#fef9c3;color:#854d0e} .tag.archived{background:#e2e8f0;color:#475569}
   .acts{display:flex;gap:6px;flex-wrap:wrap}
   .acts .btn{padding:5px 9px;font-size:12px}
@@ -25,3 +25,16 @@
   input,select{padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px}
   .muted{color:var(--muted);font-size:12px}
   a{color:var(--accent)}
+  /* email management */
+  .email-sect{border-top:1px solid var(--line);margin-top:10px;padding-top:10px}
+  .email-sect-h{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:6px}
+  .email-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+  .email-tbl td{padding:4px 6px;border-bottom:1px solid var(--line)}
+  .email-tbl tr:last-child td{border-bottom:none}
+  .btn-xs{padding:3px 8px;font-size:11px}
+  /* edit inline */
+  .share-edit{border-top:1px solid var(--line);margin-top:10px;padding-top:10px}
+  .edit-row{display:flex;align-items:center;gap:8px;margin:7px 0;font-size:13px}
+  .edit-lbl{min-width:90px;font-size:12px;font-weight:600;color:var(--muted);flex:none}
+  .btn-sm{padding:5px 12px;font-size:12.5px}
+  :root{--panel:#fff;--panel-2:#f8fafc;--surface:#f1f5f9;--radius:9px;--bad:#b91c1c}

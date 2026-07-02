@@ -59,14 +59,6 @@
     }).catch(function (e) { toast(e.message, true); });
   }
 
-  function doShare() {
-    if (!currentId) { toast("simpan dulu sebelum membagikan", true); return; }
-    api("/api/forms/" + currentId + "/shares", { method: "POST", body: JSON.stringify({ allowResponses: true }) })
-      .then(function (s) {
-        prompt("Tautan publik (salin):\n\nPastikan kuesioner sudah dipublikasikan dari halaman Admin.", s.shareUrl);
-      }).catch(function (e) { toast(e.message, true); });
-  }
-
   function doLogout() {
     localStorage.removeItem("eform_token");
     localStorage.removeItem("eform_user");
@@ -99,7 +91,6 @@
 
     // Wire tombol
     on("btnSave",   "click", doSave);
-    on("btnShare",  "click", doShare);
     on("btnLogout", "click", doLogout);
 
     // Toggle dropdown profil

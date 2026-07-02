@@ -24,7 +24,21 @@
   <div class="dlg-b">
     <div class="muted" id="shareNote"></div>
     <div class="row"><input id="shareLabel" placeholder="Label (opsional, mis. 'Petugas Lapangan')" style="flex:1"></div>
-    <div class="row"><label class="muted"><input type="checkbox" id="shareAllow" checked> Terima jawaban publik</label></div>
+    <div class="row"><label class="muted"><input type="checkbox" id="shareAllow" checked> Terima jawaban</label></div>
+    <div class="row"><label class="muted"><input type="checkbox" id="shareMulti"> Izinkan multi-respons (satu akun bisa kirim lebih dari satu jawaban)</label></div>
+    <div class="row" style="gap:16px">
+      <label class="muted"><input type="radio" name="shareAccess" id="shareAccessPublic" value="public" checked> Publik (siapa saja bisa mengisi)</label>
+      <label class="muted"><input type="radio" name="shareAccess" id="shareAccessRestricted" value="restricted"> Terbatas (hanya akun terdaftar)</label>
+    </div>
+    <div id="restrictedSection" style="display:none;border:1px solid var(--line);border-radius:var(--radius);padding:12px;margin:4px 0 8px;background:var(--surface)">
+      <div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--muted)">Akun yang diizinkan mengisi</div>
+      <div class="row" style="gap:6px">
+        <input id="newEmailInput" type="email" placeholder="email@contoh.com" style="flex:2">
+        <input id="newEmailNote" placeholder="Catatan (opsional)" style="flex:2">
+        <button class="btn" id="btnAddNewEmail" type="button">+ Tambah</button>
+      </div>
+      <div id="newEmailList" style="margin-top:8px"></div>
+    </div>
     <div class="row"><input id="sharePw" type="text" placeholder="Password (opsional)" style="flex:1"></div>
     <button class="btn primary" id="makeShare">Buat tautan share</button>
     <div id="shareList" style="margin-top:14px"></div>
