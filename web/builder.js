@@ -127,9 +127,9 @@ function mdToHtml(src){
 }
 
 /* ---- containment rules: parentKind -> allowed childKind ---- */
-const ACCEPT={page:["block"],block:["section","roster","field"],section:["section","field","roster"],roster:["section","field"]};
+const ACCEPT={page:["block"],block:["section","roster","field"],section:["section","field","roster"],roster:["block","section","field"]};
 
-let state=blankState(); let selected=null; let view={type:"page",uid:null};
+let state=blankState(); let selected=null; let selectedSet=new Set(); let view={type:"page",uid:null};
 const collapsed={sb1:false,sb2:false};
 
 function blankState(){
@@ -192,14 +192,14 @@ function pasteNode(){
     const cur=selected?pageOf(selected):(view.type==="page"?findNode(view.uid):null);
     const idx=cur?state.pages.indexOf(cur):state.pages.length-1;
     state.pages.splice(idx+1,0,copy);
-    selected=copy.uid;view={type:"page",uid:copy.uid};render();return;
+    selected=copy.uid;selectedSet=new Set([copy.uid]);view={type:"page",uid:copy.uid};render();return;
   }
 
   const target=selected?findNode(selected):null;
   // 1) coba tempel DI DALAM target bila menerima kind ini
   if(target&&kindAccepted(target.kind,clipboard.kind)){
     target.components=target.components||[];target.components.push(copy);
-    selected=copy.uid;render();return;
+    selected=copy.uid;selectedSet=new Set([copy.uid]);render();return;
   }
   // 2) coba tempel sebagai SIBLING setelah target
   if(target){
@@ -207,13 +207,13 @@ function pasteNode(){
     const arr=parentArrayOf(target.uid);
     if(arr&&kindAccepted(ownerKind,clipboard.kind)){
       const i=arr.indexOf(target);arr.splice(i+1,0,copy);
-      selected=copy.uid;render();return;
+      selected=copy.uid;selectedSet=new Set([copy.uid]);render();return;
     }
   }
   // 3) fallback: belum ada target tapi sedang melihat halaman & clipboard berisi block
   if(!target&&view.type==="page"&&clipboard.kind==="block"){
     const pg=findNode(view.uid);
-    if(pg){pg.components=pg.components||[];pg.components.push(copy);selected=copy.uid;render();return;}
+    if(pg){pg.components=pg.components||[];pg.components.push(copy);selected=copy.uid;selectedSet=new Set([copy.uid]);render();return;}
   }
   alert("Tidak ada lokasi yang cocok untuk elemen ini. Pilih dulu section/block/halaman tujuan, lalu tempel.");
 }
@@ -244,7 +244,7 @@ function renderPages(){
     row.className="pg"+(view.type==="page"&&view.uid===p.uid?" active":""); row.draggable=true; row.dataset.uid=p.uid;
     row.innerHTML=`<span class="pt">${esc(p.title||p.name)}</span><button class="px" title="Hapus halaman">×</button>`;
     row.addEventListener("click",e=>{if(e.target.classList.contains("px"))return;openPage(p.uid);select(p.uid);});
-    row.querySelector(".px").addEventListener("click",ev=>{ev.stopPropagation();if(state.pages.length<=1){alert("Minimal satu halaman.");return;}if(confirm("Hapus halaman ini?")){removeNode(p.uid);view={type:"page",uid:state.pages[0].uid};selected=null;render();}});
+    row.querySelector(".px").addEventListener("click",ev=>{ev.stopPropagation();if(state.pages.length<=1){alert("Minimal satu halaman.");return;}if(confirm("Hapus halaman ini?")){removeNode(p.uid);view={type:"page",uid:state.pages[0].uid};selected=null;selectedSet=new Set();render();}});
     row.addEventListener("dragstart",e=>{e.stopPropagation();dnd.payload={mode:"page",id:p.uid};row.classList.add("dragging");});
     row.addEventListener("dragend",()=>row.classList.remove("dragging"));
     row.addEventListener("dragover",e=>{if(dnd.payload&&dnd.payload.mode==="page"){e.preventDefault();}});
@@ -279,7 +279,7 @@ function renderCanvas(){
     head.querySelector("#backBtn").addEventListener("click",()=>{openPage(pg.uid);select(r.uid);render();});
     const wrap=document.createElement("div");wrap.className="roster-inline";
     wrap.appendChild(nodeHead(r,"roster",`Roster: ${r.title||r.name}`));
-    wrap.appendChild(dropzone(r,["section","field"],"Seret Section atau field — diulang tiap baris"));
+    wrap.appendChild(dropzone(r,["block","section","field"],"Seret Block, Section, atau field — diulang tiap baris"));
     stage.appendChild(wrap); return;
   }
   const page=findNode(view.uid);
@@ -292,9 +292,9 @@ function nodeHead(node,kind,placeholder){
   h.innerHTML=`<span class="tag ${kind}">${kind}</span><input class="ti" value="${esc(node.title||"")}" placeholder="${esc(placeholder||"judul "+kind+" (opsional)")}">
     <button class="icon-btn" data-a="sel" title="Atur">⚙</button><button class="icon-btn danger" data-a="del" title="Hapus">🗑</button>`;
   h.querySelector(".ti").addEventListener("input",e=>{node.title=e.target.value;runValidation();renderPages();});
-  h.querySelector('[data-a="sel"]').addEventListener("click",e=>{e.stopPropagation();select(node.uid);});
-  h.querySelector('[data-a="del"]').addEventListener("click",e=>{e.stopPropagation();if(confirm(`Hapus ${kind} ini beserta isinya?`)){removeNode(node.uid);selected=null;render();}});
-  h.addEventListener("click",e=>{if(!e.target.closest("input,button"))select(node.uid);});
+  h.querySelector('[data-a="sel"]').addEventListener("click",e=>{e.stopPropagation();select(node.uid,e.ctrlKey||e.metaKey||e.shiftKey);});
+  h.querySelector('[data-a="del"]').addEventListener("click",e=>{e.stopPropagation();if(confirm(`Hapus ${kind} ini beserta isinya?`)){removeNode(node.uid);selected=null;selectedSet=new Set();render();}});
+  h.addEventListener("click",e=>{if(!e.target.closest("input,button"))select(node.uid,e.ctrlKey||e.metaKey||e.shiftKey);});
   return h;
 }
 
@@ -310,33 +310,33 @@ function dropzone(owner,accept,emptyText){
 
 function renderNode(n){
   if(n.kind==="block"){
-    const el=document.createElement("div");el.className="block"+(selected===n.uid?" sel":"");el.dataset.uid=n.uid;el.draggable=true;
+    const el=document.createElement("div");el.className="block"+(selectedSet.has(n.uid)?" sel":"");el.dataset.uid=n.uid;el.draggable=true;
     el.appendChild(nodeHead(n,"block"));
     el.appendChild(dropzone(n,["section","roster","field"],"Seret Section, Roster, atau field ke dalam block"));
     wireDrag(el,n); return el;
   }
   if(n.kind==="section"){
-    const el=document.createElement("div");el.className="section"+(selected===n.uid?" sel":"");el.dataset.uid=n.uid;el.draggable=true;
+    const el=document.createElement("div");el.className="section"+(selectedSet.has(n.uid)?" sel":"");el.dataset.uid=n.uid;el.draggable=true;
     el.appendChild(nodeHead(n,"section"));
     el.appendChild(dropzone(n,["section","field","roster"],"Seret Section, field, atau Roster ke dalam section"));
     wireDrag(el,n); return el;
   }
   if(n.kind==="roster"){
     if(n.rosterType==="separate"){
-      const el=document.createElement("div");el.className="roster-link"+(selected===n.uid?" sel":"");el.dataset.uid=n.uid;el.draggable=true;
+      const el=document.createElement("div");el.className="roster-link"+(selectedSet.has(n.uid)?" sel":"");el.dataset.uid=n.uid;el.draggable=true;
       el.innerHTML=`<span class="ri">⊞</span><div class="rt"><b>${esc(n.title||n.name)}</b><span>Roster subhalaman · ${(n.components||[]).length} field${n.countFrom?" · ×"+esc(n.countFrom):""}</span></div><span class="go">buka →</span>`;
-      el.addEventListener("click",e=>{if(e.target.closest(".go")||!e.target.closest("button")){ if(e.detail===2){view={type:"roster",uid:n.uid};} select(n.uid);} render();});
+      el.addEventListener("click",e=>{if(e.target.closest(".go")||!e.target.closest("button")){ if(e.detail===2){view={type:"roster",uid:n.uid};} select(n.uid,e.ctrlKey||e.metaKey||e.shiftKey);} render();});
       el.querySelector(".go").addEventListener("click",e=>{e.stopPropagation();view={type:"roster",uid:n.uid};select(n.uid);render();});
       wireDrag(el,n); return el;
     }
-    const el=document.createElement("div");el.className="roster-inline"+(selected===n.uid?" sel":"");el.dataset.uid=n.uid;el.draggable=true;
+    const el=document.createElement("div");el.className="roster-inline"+(selectedSet.has(n.uid)?" sel":"");el.dataset.uid=n.uid;el.draggable=true;
     el.appendChild(nodeHead(n,"roster",`Roster inline: ${n.title||n.name}`));
-    el.appendChild(dropzone(n,["section","field"],"Seret Section atau field — diulang tiap baris"));
+    el.appendChild(dropzone(n,["block","section","field"],"Seret Block, Section, atau field — diulang tiap baris"));
     wireDrag(el,n); return el;
   }
   // field card
   const cat=CAT_OF[n.type];
-  const el=document.createElement("div");el.className="card"+(selected===n.uid?" sel":"");el.dataset.uid=n.uid;el.draggable=true;el.style.setProperty("--cat",`var(${CAT_VAR[cat]})`);
+  const el=document.createElement("div");el.className="card"+(selectedSet.has(n.uid)?" sel":"");el.dataset.uid=n.uid;el.draggable=true;el.style.setProperty("--cat",`var(${CAT_VAR[cat]})`);
   const badges=[`<span class="badge nm">${esc(n.name||"?")}</span>`];
   if(n.skips&&n.skips.length)badges.push(`<span class="badge skip">skip →</span>`);
   if(n.optionSource==="api"||(n.optionsApi&&n.optionsApi.url))badges.push(`<span class="badge">API</span>`);
@@ -346,7 +346,7 @@ function renderNode(n){
   if(n.visibleWhen)badges.push(`<span class="badge">⊘ kondisi</span>`);
   const lbl=(n.type==="note"||n.type==="markdown")?`<span style="color:var(--ink-soft)">${esc(((n.type==="markdown"?(n.markdown||""):String(n.html||"").replace(/<[^>]+>/g," ")).replace(/[#>*`_-]/g," ").trim().slice(0,70))||"(keterangan kosong)")}</span>`:(n.label?esc(n.label):`<span class="empty">tanpa label</span>`);
   el.innerHTML=`<div class="crail"></div><div class="body"><div class="top"><span class="ty">${n.type}</span>${n.required?'<span class="req">＊</span>':''}</div><div class="lbl">${lbl}</div><div class="meta">${badges.join("")}</div></div><div class="grip">⋮⋮</div>`;
-  el.querySelector(".body").addEventListener("click",()=>select(n.uid));
+  el.querySelector(".body").addEventListener("click",e=>select(n.uid,e.ctrlKey||e.metaKey||e.shiftKey));
   wireDrag(el,n); return el;
 }
 
@@ -354,10 +354,23 @@ function renderNode(n){
 const dnd={payload:null}; let placeholder=null;
 function clearPlaceholder(){if(placeholder&&placeholder.parentNode)placeholder.parentNode.removeChild(placeholder);placeholder=null;}
 function wireDrag(el,n){
-  el.addEventListener("dragstart",e=>{e.stopPropagation();dnd.payload={mode:"move",id:n.uid};el.classList.add("dragging");e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("text/plain","move");});
+  el.addEventListener("dragstart",e=>{
+    e.stopPropagation();
+    if(selectedSet.has(n.uid)&&selectedSet.size>1){
+      dnd.payload={mode:"move-multi",ids:filterTopLevel([...selectedSet]),primaryId:n.uid};
+    }else{
+      dnd.payload={mode:"move",id:n.uid};
+    }
+    el.classList.add("dragging");e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("text/plain","move");
+  });
   el.addEventListener("dragend",()=>{el.classList.remove("dragging");clearPlaceholder();});
 }
-function draggedKind(){if(!dnd.payload)return null;if(dnd.payload.mode==="new"){const t=dnd.payload.type;return t==="__block"?"block":t==="__section"?"section":t.startsWith("__roster")?"roster":"field";}const node=findNode(dnd.payload.id);return node?node.kind:null;}
+function draggedKind(){
+  if(!dnd.payload)return null;
+  if(dnd.payload.mode==="new"){const t=dnd.payload.type;return t==="__block"?"block":t==="__section"?"section":t.startsWith("__roster")?"roster":"field";}
+  if(dnd.payload.mode==="move-multi"){const node=findNode(dnd.payload.primaryId);return node?node.kind:null;}
+  const node=findNode(dnd.payload.id);return node?node.kind:null;
+}
 function wireDropzone(dz,owner,accept){
   dz.addEventListener("dragover",e=>{
     if(!dnd.payload||dnd.payload.mode==="page")return;
@@ -365,6 +378,7 @@ function wireDropzone(dz,owner,accept){
     const k=draggedKind();
     if(!accept.includes(k)){dz.classList.add("reject");dz.classList.remove("over");clearPlaceholder();return;}
     if(dnd.payload.mode==="move"){const dragged=findNode(dnd.payload.id);if(dragged&&nodeContains(dragged,owner.uid))return;}
+    if(dnd.payload.mode==="move-multi"){if(dnd.payload.ids.every(id=>{const nd=findNode(id);return nd&&nodeContains(nd,owner.uid);}))return;}
     dz.classList.remove("reject");dz.classList.add("over");
     if(!placeholder){placeholder=document.createElement("div");placeholder.className="placeholder";}
     const after=childAfter(dz,e.clientY); if(after==null)dz.appendChild(placeholder);else dz.insertBefore(placeholder,after);
@@ -377,7 +391,27 @@ function wireDropzone(dz,owner,accept){
     const k=draggedKind();
     if(!accept.includes(k)){clearPlaceholder();dnd.payload=null;return;}
     const arr=owner.components; const index=phIndex(dz,arr); clearPlaceholder();
-    if(dnd.payload.mode==="new"){const node=newFromType(dnd.payload.type);arr.splice(index,0,node);selected=node.uid;}
+    if(dnd.payload.mode==="new"){const node=newFromType(dnd.payload.type);arr.splice(index,0,node);selected=node.uid;selectedSet=new Set([node.uid]);}
+    else if(dnd.payload.mode==="move-multi"){
+      // Kumpulkan node yang valid untuk dipindah ke dropzone ini
+      const docOrder=allNodes();
+      const toMove=dnd.payload.ids
+        .map(id=>({node:findNode(id),src:parentArrayOf(id)}))
+        .filter(({node,src})=>node&&src&&accept.includes(node.kind)&&!nodeContains(node,owner.uid))
+        .sort((a,b)=>docOrder.indexOf(a.node)-docOrder.indexOf(b.node));
+      if(toMove.length>0){
+        let ins=index;
+        // Hapus dari sumber (descending per array agar index tidak bergeser)
+        const bySrc=new Map();
+        toMove.forEach(item=>{if(!bySrc.has(item.src))bySrc.set(item.src,[]);bySrc.get(item.src).push(item);});
+        bySrc.forEach((items,srcArr)=>{
+          items.sort((a,b)=>srcArr.indexOf(b.node)-srcArr.indexOf(a.node));
+          items.forEach(({node})=>{const i=srcArr.indexOf(node);if(i>=0){srcArr.splice(i,1);if(srcArr===arr&&i<ins)ins--;}});
+        });
+        // Sisipkan di tujuan dengan urutan dokumen asli
+        toMove.forEach(({node},off)=>arr.splice(ins+off,0,node));
+      }
+    }
     else{const id=dnd.payload.id,dragged=findNode(id),src=parentArrayOf(id);
       if(dragged&&src&&!nodeContains(dragged,owner.uid)){const from=src.indexOf(dragged);src.splice(from,1);let ins=index;if(src===arr&&from<index)ins--;arr.splice(ins,0,dragged);}}
     dnd.payload=null;render();
@@ -386,11 +420,61 @@ function wireDropzone(dz,owner,accept){
 function childAfter(dz,y){const items=[...dz.children].filter(c=>c!==placeholder&&(c.classList.contains("card")||c.classList.contains("block")||c.classList.contains("section")||c.classList.contains("roster-inline")||c.classList.contains("roster-link")));for(const c of items){const r=c.getBoundingClientRect();if(y<r.top+r.height/2)return c;}return null;}
 function phIndex(dz,arr){const kids=[...dz.children].filter(c=>c===placeholder||c.dataset&&c.dataset.uid);const i=kids.indexOf(placeholder);return i<0?arr.length:i;}
 function nodeContains(node,targetUid){if(node.uid===targetUid)return true;return (node.components||[]).some(c=>nodeContains(c,targetUid));}
+// Dari sekumpulan uid, buang yang merupakan keturunan dari uid lain dalam kumpulan yang sama
+function filterTopLevel(ids){const s=new Set(ids);return ids.filter(id=>{const n=findNode(id);if(!n)return false;for(const oid of s){if(oid===id)continue;const on=findNode(oid);if(on&&nodeContains(on,id))return false;}return true;});}
+function duplicateSelected(){
+  const topIds=filterTopLevel([...selectedSet]);
+  const docOrder=allNodes();
+  const items=topIds
+    .map(id=>({node:findNode(id),arr:parentArrayOf(id)}))
+    .filter(x=>x.node&&x.arr)
+    .sort((a,b)=>docOrder.indexOf(a.node)-docOrder.indexOf(b.node));
+  if(!items.length)return;
+  const newSet=new Set();
+  // Proses descending per array agar index tidak bergeser
+  const byArr=new Map();
+  items.forEach(item=>{if(!byArr.has(item.arr))byArr.set(item.arr,[]);byArr.get(item.arr).push(item);});
+  byArr.forEach((its,arr)=>{
+    its.sort((a,b)=>arr.indexOf(b.node)-arr.indexOf(a.node));
+    its.forEach(({node})=>{
+      const copy=JSON.parse(JSON.stringify(node));reuid(copy);copy.name=uniqueCopyName(node.name);
+      const i=arr.indexOf(node);arr.splice(i+1,0,copy);newSet.add(copy.uid);
+    });
+  });
+  selected=[...newSet].at(-1);selectedSet=newSet;render();
+}
 
 /* ===================== SELECTION & INSPECTOR ===================== */
-function select(id){selected=id;const n=findNode(id);if(n&&view.type==="page"){const pg=pageOf(id);if(pg&&pg.uid!==view.uid)view={type:"page",uid:pg.uid};}switchTab("props");render();}
+function select(id,multi=false){
+  if(multi&&id){
+    if(selectedSet.has(id)){selectedSet.delete(id);selected=selectedSet.size>0?[...selectedSet].at(-1):null;}
+    else{selectedSet.add(id);selected=id;}
+  }else{
+    selectedSet=new Set(id?[id]:[]);selected=id;
+    const n=findNode(id);if(n&&view.type==="page"){const pg=pageOf(id);if(pg&&pg.uid!==view.uid)view={type:"page",uid:pg.uid};}
+  }
+  switchTab("props");render();
+}
 function renderInspector(){
-  const pane=document.getElementById("paneProps");const n=selected?findNode(selected):null;
+  const pane=document.getElementById("paneProps");
+  if(selectedSet.size>1){
+    pane.innerHTML=`<div style="padding:16px 12px">
+      <div style="font-weight:600;font-size:13px;margin-bottom:8px">${selectedSet.size} item dipilih</div>
+      <div class="help" style="margin-left:0;margin-bottom:14px">
+        <b>Ctrl/Shift+Klik</b> untuk tambah/kurangi pilihan.<br>
+        <b>Seret</b> salah satu item untuk memindahkan semua.<br>
+        <b>Delete</b> untuk menghapus semua.
+      </div>
+      <button class="btn" id="dupAllBtn" style="width:100%;margin-bottom:8px">⧉ Duplikat semua (${selectedSet.size})</button>
+      <button class="btn danger" id="delAllBtn" style="width:100%;margin-bottom:8px">🗑 Hapus semua (${selectedSet.size})</button>
+      <button class="btn ghost" id="clearSelBtn" style="width:100%">Batalkan pilihan</button>
+    </div>`;
+    pane.querySelector("#dupAllBtn").addEventListener("click",()=>duplicateSelected());
+    pane.querySelector("#delAllBtn").addEventListener("click",()=>{if(confirm(`Hapus ${selectedSet.size} item yang dipilih?`)){[...selectedSet].forEach(uid=>removeNode(uid));selected=null;selectedSet=new Set();render();}});
+    pane.querySelector("#clearSelBtn").addEventListener("click",()=>{selected=null;selectedSet=new Set();render();});
+    return;
+  }
+  const n=selected?findNode(selected):null;
   if(!n){pane.innerHTML=instrumentForm();wireInstrument(pane);return;}
   if(n.kind==="page")pane.innerHTML=navForm(n,"page");
   else if(n.kind==="block")pane.innerHTML=navForm(n,"block");
@@ -492,8 +576,8 @@ function validationsBlock(c){let rows=(c.validations||[]).map((v,i)=>`<div class
 
 function wireForm(pane,node){
   pane.querySelectorAll("[data-k]").forEach(inp=>{const h=()=>{node[inp.dataset.k]=inp.type==="checkbox"?inp.checked:inp.value;softUpdate();};inp.addEventListener("input",h);inp.addEventListener("change",h);});
-  pane.querySelector("#delBtn")?.addEventListener("click",()=>{if(confirm("Hapus ini?")){removeNode(node.uid);selected=null;render();}});
-  pane.querySelector("#dupBtn")?.addEventListener("click",()=>{const arr=parentArrayOf(node.uid),i=arr.indexOf(node),copy=JSON.parse(JSON.stringify(node));reuid(copy);copy.name=uniqueCopyName(node.name);arr.splice(i+1,0,copy);selected=copy.uid;render();});
+  pane.querySelector("#delBtn")?.addEventListener("click",()=>{if(confirm("Hapus ini?")){removeNode(node.uid);selected=null;selectedSet=new Set();render();}});
+  pane.querySelector("#dupBtn")?.addEventListener("click",()=>{const arr=parentArrayOf(node.uid),i=arr.indexOf(node),copy=JSON.parse(JSON.stringify(node));reuid(copy);copy.name=uniqueCopyName(node.name);arr.splice(i+1,0,copy);selected=copy.uid;selectedSet=new Set([copy.uid]);render();});
   pane.querySelector("#copyBtn")?.addEventListener("click",()=>{copyNode(node);render();});
   pane.querySelector("#pasteBtn")?.addEventListener("click",()=>{pasteNode();});
   pane.querySelectorAll("#rtSeg button").forEach(b=>b.addEventListener("click",()=>{node.rosterType=b.dataset.rt;render();}));
@@ -619,15 +703,38 @@ document.addEventListener("keydown",e=>{
   if(e.key==="Escape"&&!document.getElementById("preview").hidden){closePreview();return;}
   const at=document.activeElement,tag=at&&at.tagName;
   if(tag==="INPUT"||tag==="TEXTAREA"||(at&&at.isContentEditable))return; // jangan ganggu copy-paste teks biasa
+  if(e.key==="Escape"&&selectedSet.size>0){selected=null;selectedSet=new Set();render();return;}
+  if((e.key==="Delete"||e.key==="Backspace")&&selectedSet.size>0&&document.getElementById("preview").hidden){
+    e.preventDefault();
+    if(selectedSet.size>1){
+      if(confirm(`Hapus ${selectedSet.size} item yang dipilih?`)){[...selectedSet].forEach(uid=>removeNode(uid));selected=null;selectedSet=new Set();render();}
+    }else if(selected){
+      if(confirm("Hapus ini?")){removeNode(selected);selected=null;selectedSet=new Set();render();}
+    }
+    return;
+  }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="c"&&selected){const n=findNode(selected);if(n){copyNode(n);render();e.preventDefault();}}
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="v"&&clipboard){pasteNode();e.preventDefault();}
 });
-document.querySelector(".canvas").addEventListener("click",e=>{if(e.target.classList.contains("canvas")||e.target.closest(".cv-head")&&!e.target.closest("button")){selected=null;render();}});
+document.querySelector(".canvas").addEventListener("click",e=>{if(e.target.classList.contains("canvas")||e.target.closest(".cv-head")&&!e.target.closest("button")){selected=null;selectedSet=new Set();render();}});
 
 /* ===================== PREVIEW (Lihat Kuesioner) ===================== */
 let pv={values:{},page:0,mode:"section",row:null};
-function openPreview(){pv={values:{},page:0,mode:state.settings.navigation.mode==="scroll"?"scroll":"section",row:null,apiCache:{}};const sel=document.getElementById("pvMode");if(sel)sel.value=pv.mode;document.getElementById("preview").hidden=false;renderPreview();}
-function closePreview(){document.getElementById("preview").hidden=true;}
+function openPreview(){pv={values:{},page:0,mode:state.settings.navigation.mode==="scroll"?"scroll":"section",row:null,apiCache:{}};const sel=document.getElementById("pvMode");if(sel)sel.value=pv.mode;document.getElementById("preview").hidden=false;renderPreview();setupSidebarToggle(document.getElementById("pvSide"));}
+function closePreview(){document.getElementById("preview").hidden=true;const s=document.getElementById("pvSide");if(s){s.classList.remove("open","collapsed");}document.getElementById("pvSideBd")?.classList.remove("show");}
+function setupSidebarToggle(side){
+  const tog=document.getElementById("pvSideTog");
+  const bd=document.getElementById("pvSideBd");
+  if(!tog||!side)return;
+  tog.replaceWith(tog.cloneNode(true)); // hapus listener lama
+  const newTog=document.getElementById("pvSideTog");
+  const mobile=()=>window.innerWidth<=680;
+  newTog.addEventListener("click",()=>{
+    if(mobile()){const open=side.classList.toggle("open");if(bd)bd.classList.toggle("show",open);}
+    else{side.classList.toggle("collapsed");}
+  });
+  if(bd){bd.replaceWith(bd.cloneNode(true));document.getElementById("pvSideBd").addEventListener("click",()=>{side.classList.remove("open");document.getElementById("pvSideBd").classList.remove("show");});}
+}
 function coerceVal(v){if(v==="true")return true;if(v==="false")return false;if(typeof v==="string"&&v.trim()!==""&&!isNaN(Number(v)))return Number(v);return v;}
 function refResolve(name,rowPrefix){
   name=String(name).trim();
@@ -750,6 +857,8 @@ function fieldEffectiveSkipTargetRp(f,rp){
   return null;
 }
 // Hitung field dalam satu baris roster yang harus disembunyikan karena skip-to.
+// Target "__end" berarti akhiri sisa baris ini (field setelahnya di baris yang
+// sama disembunyikan; baris roster lain tidak terpengaruh).
 function computeRosterRowSkipState(roster,rowIdx){
   const rp=`${roster.name}#${rowIdx}#`;
   const allRowFields=flatFields(roster.components);
@@ -758,11 +867,12 @@ function computeRosterRowSkipState(roster,rowIdx){
   let skipActive=false,skipTarget=null;
   for(const f of allRowFields){
     if(skipActive){
-      if(f.name===skipTarget){skipActive=false;skipTarget=null;}
+      if(skipTarget&&f.name===skipTarget){skipActive=false;skipTarget=null;}
       else{hidden.add(f.name);continue;}
     }
     const t=fieldEffectiveSkipTargetRp(f,rp);
-    if(t&&allNames.has(t)&&t!==f.name){skipActive=true;skipTarget=t;}
+    if(t==="__end"){skipActive=true;skipTarget=null;}
+    else if(t&&allNames.has(t)&&t!==f.name){skipActive=true;skipTarget=t;}
   }
   return hidden;
 }
@@ -842,22 +952,29 @@ function focusPvField(key){
 }
 function renderPreview(){
   const body=document.getElementById("pvBody");const keep=body.scrollTop;
+  const navArea=document.getElementById("pvNavArea");
   document.getElementById("pvTitle").textContent=textOf(state.title)||"Kuesioner";
   if(pv.row){renderRosterRowPage();renderPvSide();return;}
   const pages=visiblePages();
-  if(!pages.length){body.innerHTML=`<div class="pv-empty">Belum ada halaman untuk ditampilkan.</div>`;renderPvSide();return;}
-  let html="";
-  if(pv.mode==="scroll"){SKIP_HIDDEN=new Set();ROW_SKIP_HIDDEN=new Map();pages.forEach(p=>html+=pvPage(p));}
-  else{if(pv.page>=pages.length)pv.page=pages.length-1;const p=pages[pv.page];
+  if(!pages.length){body.innerHTML=`<div class="pv-empty">Belum ada halaman untuk ditampilkan.</div>`;if(navArea)navArea.innerHTML="";renderPvSide();return;}
+  if(pv.mode==="scroll"){
+    SKIP_HIDDEN=new Set();ROW_SKIP_HIDDEN=new Map();
+    let h="";pages.forEach(p=>h+=pvPage(p));
+    body.innerHTML=h;if(navArea)navArea.innerHTML="";
+  } else {
+    if(pv.page>=pages.length)pv.page=pages.length-1;const p=pages[pv.page];
     SKIP_HIDDEN=computePageSkipState(p).hidden;
     SKIP_HIDDEN.forEach(name=>{delete pv.values[name];});
     ROW_SKIP_HIDDEN=new Map();
-    html+=pvPage(p);
-    const pct=pages.length>1?Math.round(((pv.page+1)/pages.length)*100):100;
-    html+=`<div class="pv-nav-err" id="pvNavErr"></div><div class="pv-nav">${pv.page>0?`<button class="btn" id="pvPrev">← Sebelumnya</button>`:`<span></span>`}<div class="pv-prog-wrap"><div class="pv-progbar-track"><div class="pv-progbar" style="width:${pct}%"></div></div><span class="pv-prog">Halaman ${pv.page+1} / ${pages.length}</span></div>${pv.page<pages.length-1?`<button class="btn primary" id="pvNext">Lanjut →</button>`:`<button class="btn primary" id="pvDone">Selesai</button>`}</div>`;}
-  body.innerHTML=html;bindPreview(body);body.scrollTop=keep;renderPvSide();
-  body.querySelector("#pvPrev")?.addEventListener("click",()=>{pv.page--;body.scrollTop=0;renderPreview();});
-  body.querySelector("#pvNext")?.addEventListener("click",()=>{
+    body.innerHTML=pvPage(p);
+    if(navArea){
+      const pct=pages.length>1?Math.round(((pv.page+1)/pages.length)*100):100;
+      navArea.innerHTML=`<div class="pv-nav-err" id="pvNavErr"></div><div class="pv-nav">${pv.page>0?`<button class="btn" id="pvPrev">← Sebelumnya</button>`:`<span></span>`}<div class="pv-prog-wrap"><div class="pv-progbar-track"><div class="pv-progbar" style="width:${pct}%"></div></div><span class="pv-prog">Halaman ${pv.page+1} / ${pages.length}</span></div>${pv.page<pages.length-1?`<button class="btn primary" id="pvNext">Lanjut →</button>`:`<button class="btn primary" id="pvDone">Selesai</button>`}</div>`;
+    }
+  }
+  bindPreview(body);body.scrollTop=keep;renderPvSide();
+  document.getElementById("pvPrev")?.addEventListener("click",()=>{pv.page--;body.scrollTop=0;renderPreview();});
+  document.getElementById("pvNext")?.addEventListener("click",()=>{
     const curP=pages[pv.page];
     const gate=validateCurrentPage(curP);
     if(!gate.ok){const err=document.getElementById("pvNavErr");if(err)err.textContent="Lengkapi pertanyaan wajib / perbaiki isian yang tidak valid sebelum melanjutkan.";focusPvField(gate.key);return;}
@@ -866,7 +983,7 @@ function renderPreview(){
     if(idx!=null){clearSkippedPages(pages,pv.page,idx);pv.page=idx;body.scrollTop=0;renderPreview();return;}
     pv.page++;body.scrollTop=0;renderPreview();
   });
-  body.querySelector("#pvDone")?.addEventListener("click",()=>{
+  document.getElementById("pvDone")?.addEventListener("click",()=>{
     const curP=pages[pv.page];
     const gate=validateCurrentPage(curP);
     if(!gate.ok){const err=document.getElementById("pvNavErr");if(err)err.textContent="Lengkapi pertanyaan wajib / perbaiki isian yang tidak valid sebelum mengirim.";focusPvField(gate.key);return;}
@@ -876,14 +993,14 @@ function renderPreview(){
 function pvPage(p){let h=`<div class="pv-page" id="pvpage_${esc(p.name)}"><h2 class="pv-h2">${esc(p.title||p.name)}</h2>`;p.components.forEach(c=>h+=pvNode(c,null));return h+`</div>`;}
 function pvNode(c,row){
   const rp=row?`${row.r}#${row.i}#`:"";
-  if(c.kind==="block"){if(!evalVisible(c.visibleWhen,rp))return "";let h=`<div class="pv-card">`;if(c.title)h+=`<div class="pv-bt">${esc(c.title)}</div>`;c.components.forEach(x=>h+=pvNode(x,row));return h+`</div>`;}
-  if(c.kind==="section"){if(!evalVisible(c.visibleWhen,rp))return "";let h=`<div class="pv-sec">`;if(c.title)h+=`<div class="pv-st">${esc(c.title)}</div>`;c.components.forEach(x=>h+=pvNode(x,row));return h+`</div>`;}
+  if(c.kind==="block"){if(!evalVisible(c.visibleWhen,rp))return "";const inner=(c.components||[]).map(x=>pvNode(x,row)).join("");if(!inner)return "";let h=`<div class="pv-card">`;if(c.title)h+=`<div class="pv-bt">${esc(rowInterp(c.title,rp))}</div>`;return h+inner+`</div>`;}
+  if(c.kind==="section"){if(!evalVisible(c.visibleWhen,rp))return "";const inner=(c.components||[]).map(x=>pvNode(x,row)).join("");if(!inner)return "";let h=`<div class="pv-sec">`;if(c.title)h+=`<div class="pv-st">${esc(rowInterp(c.title,rp))}</div>`;return h+inner+`</div>`;}
   if(c.kind==="roster"){if(!evalVisible(c.visibleWhen,rp))return "";return pvRoster(c);}
   return pvField(c,row);
 }
 function rosterCount(r){
   if(r.countFrom){let cf=Number(pv.values[r.countFrom]);if(!Number.isFinite(cf)||cf<0)cf=0;cf=Math.floor(cf);if(r.max!==""&&r.max!=null&&cf>Number(r.max))cf=Number(r.max);return cf;}
-  const k=`${r.name}#count`;if(pv.values[k]==null)pv.values[k]=Number(r.min)||1;return pv.values[k];
+  const k=`${r.name}#count`;if(pv.values[k]==null)pv.values[k]=Number(r.min)||0;return pv.values[k];
 }
 function labelOfField(name){const n=allNodes().find(x=>x.kind==="field"&&x.name===name);return n?(n.label||n.name):name;}
 function flatFields(comps){const out=[];function go(a){(a||[]).forEach(c=>{c.kind==="field"?out.push(c):c.components&&go(c.components);});}go(comps);return out;}
@@ -931,9 +1048,12 @@ function delRow(rname,idx){
   nv[key]=Math.max(0,count-1);pv.values=nv;
 }
 function addRowLabel(r){return r.rowTitle?`+ Tambah ${esc(r.rowTitle)}`:"+ Tambah baris";}
-function rowInterp(text,rp){if(!text||!rp)return text;return text.replace(/\{\{([^}]+)\}\}/g,(_,n)=>{const v=pv.values[rp+n.trim()];return v!=null?String(v):`{{${n}}}`});}
+// Interpolasi nilai field lain dalam baris roster ke teks label/hint/itemLabel.
+// Mendukung dua sintaks: {{nama}} dan ${nama} (dipakai campur di berbagai tempat).
+const INTERP_RE=/\{\{\s*([^}]+?)\s*\}\}|\$\{\s*([^}]+?)\s*\}/g;
+function rowInterp(text,rp){if(!text||!rp)return text;return text.replace(INTERP_RE,(_,a,b)=>{const n=(a||b).trim();const v=pv.values[rp+n];return v!=null?String(v):`{{${n}}}`});}
 function rowLabel(r,i){
-  if(r.itemLabel){const rp=`${r.name}#${i}#`;return esc(r.itemLabel.replace(/\{\{index\}\}/g,String(i+1)).replace(/\{\{([^}]+)\}\}/g,(_,n)=>{const v=pv.values[rp+n.trim()];return v!=null?String(v):"";}));}
+  if(r.itemLabel){const rp=`${r.name}#${i}#`;return esc(r.itemLabel.replace(/\{\{\s*index\s*\}\}|\$\{\s*index\s*\}/g,String(i+1)).replace(INTERP_RE,(_,a,b)=>{const v=pv.values[rp+(a||b).trim()];return v!=null?String(v):"";}));}
   return r.rowTitle?`${esc(r.rowTitle)} #${i+1}`:`Baris #${i+1}`;
 }
 function pvRoster(r){
@@ -967,10 +1087,13 @@ function renderRosterRowPage(){
   const hasStructure=(r.components||[]).some(c=>c.kind==="block"||c.kind==="section");
   let fieldsHtml=r.components.map(f=>pvNode(f,{r:r.name,i})).join("");
   if(!hasStructure&&fieldsHtml)fieldsHtml=`<div class="pv-card">${fieldsHtml}</div>`;
-  let h=`<div class="pv-page"><div class="pv-rrow-hdr"><div class="pv-rrow-bread"><button id="pvBack" class="pv-rrow-back">← ${pageTitle}</button><span class="pv-rrow-sep">›</span><span class="pv-rrow-rname">${rosterTitle}</span><span class="pv-rrow-num">Baris ${i+1} dari ${total}</span></div><div class="pv-rrow-title">${rowLabel(r,i)}</div></div>${fieldsHtml}<div class="pv-nav"><span></span><button class="btn primary" id="pvBackDone">Simpan baris &amp; kembali</button></div></div>`;
-  body.innerHTML=h;bindPreview(body);body.scrollTop=keep;
-  body.querySelector("#pvBack")?.addEventListener("click",backFromRow);
-  body.querySelector("#pvBackDone")?.addEventListener("click",backFromRow);
+  let h=`<div class="pv-page"><div class="pv-rrow-hdr"><div class="pv-rrow-bread"><button id="pvBack" class="pv-rrow-back">← ${pageTitle}</button><span class="pv-rrow-sep">›</span><span class="pv-rrow-rname">${rosterTitle}</span><span class="pv-rrow-num">Baris ${i+1} dari ${total}</span></div><div class="pv-rrow-title">${rowLabel(r,i)}</div></div>${fieldsHtml}</div>`;
+  body.innerHTML=h;
+  const navArea=document.getElementById("pvNavArea");
+  if(navArea)navArea.innerHTML=`<div class="pv-nav"><span></span><button class="btn primary" id="pvBackDone">Simpan baris &amp; kembali</button></div>`;
+  bindPreview(body);body.scrollTop=keep;
+  document.getElementById("pvBack")?.addEventListener("click",backFromRow);
+  document.getElementById("pvBackDone")?.addEventListener("click",backFromRow);
 }
 function backFromRow(){
   const r=findNode(pv.row.uid);const parent=r?pageOf(r.uid):null;const rname=r?r.name:"";pv.row=null;
@@ -1018,7 +1141,11 @@ function pvField(c,row){
   else if(c.type==="time")ctrl=`<input ${da} type="time" class="pv-in" value="${esc(val)}" style="width:auto"${dis}${rdOnly}>`;
   else if(c.type==="datetime")ctrl=`<input ${da} type="datetime-local" class="pv-in" value="${esc(val)}" style="width:auto"${dis}${rdOnly}>`;
   else if(c.type==="geopoint")ctrl=`<div class="pv-inbtn"><input ${da} class="pv-in" value="${esc(val)}" placeholder="lat, lng"${dis}${rdOnly}><button type="button" class="pv-smbtn pv-geobtn"${disAll}>📍 Ambil Lokasi</button></div><div class="pv-geomsg"></div>`;
-  else if(c.type==="photo"||c.type==="file")ctrl=`<input type="file" class="pv-in"${c.type==="photo"?' accept="image/*"':''}${disAll}>`;
+  else if(c.type==="photo"||c.type==="file"){
+    const isPhoto=c.type==="photo";
+    const disClass=(enabled&&!c.readOnly)?"":" pv-photolabel-dis";
+    ctrl=`<div class="pv-photowrap"><input type="hidden" ${da} value="${esc(val)}"><label class="pv-photolabel${disClass}"><input type="file" class="pv-photofile"${isPhoto?' accept="image/*" capture="environment"':''}${disAll}>${isPhoto?'📷 Ambil / Pilih Foto':'📎 Pilih File'}</label><div class="pv-photopreview" hidden></div></div>`;
+  }
   else if(c.type==="signature")ctrl=`<div class="pv-sigwrap"><input type="hidden" ${da}><canvas class="pv-sigpad" width="400" height="140"${(enabled&&!c.readOnly)?"":' data-disabled="1"'}></canvas><div class="pv-sigactions"><button type="button" class="pv-smbtn pv-sigclear"${disAll}>Hapus tanda tangan</button></div></div>`;
   else if(c.type==="barcode")ctrl=`<div class="pv-inbtn"><input ${da} class="pv-in" value="${esc(val)}" placeholder="scan / ketik kode"${dis}${rdOnly}><button type="button" class="pv-smbtn pv-scanbtn"${disAll}>📷 Pindai</button></div>`;
   else ctrl=`<input ${da} class="pv-in" value="${esc(val)}"${dis}${rdOnly}>`;
@@ -1026,17 +1153,30 @@ function pvField(c,row){
   (c.validations||[]).forEach(v=>{if(!v.test)return;if(pvEmpty(val))return;const r=evalExprSrc(v.test,rp);if(r===undefined)return;if(!r)vmsg+=`<div class="pv-vmsg ${v.severity==="warning"?"warning":"error"}">${esc(textOf(v.message)||"Nilai tidak valid")}</div>`;});
   return `<div class="pv-field" data-fieldkey="${esc(key)}">${lab}${hint}<div>${ctrl}</div>${vmsg}</div>`;
 }
+function snapScroll(fkey,top0){
+  if(!fkey||top0==null)return;
+  const pvBody=document.getElementById("pvBody");if(!pvBody)return;
+  const nf=pvBody.querySelector(`.pv-field[data-fieldkey="${CSS.escape(fkey)}"]`);
+  if(!nf)return;
+  const delta=Math.round(nf.getBoundingClientRect().top-top0);
+  if(delta)pvBody.scrollTop+=delta;
+}
 function pvRadios(key,opts,val,dis){dis=dis||"";return `<div class="pv-radios">${opts.map(o=>`<label class="pv-opt"><input type="radio" name="r_${esc(key)}" data-kr="${esc(key)}" value="${esc(o.value)}"${String(val)===String(o.value)?" checked":""}${dis}> ${esc(o.label)}</label>`).join("")}</div>`;}
 function bindPreview(body){
-  body.querySelectorAll("[data-k]").forEach(inp=>{const key=inp.getAttribute("data-k");inp.addEventListener("input",()=>{pv.values[key]=inp.value;});inp.addEventListener("change",()=>{pv.values[key]=inp.value;renderPreview();});});
-  body.querySelectorAll("[data-kr]").forEach(inp=>inp.addEventListener("change",()=>{pv.values[inp.getAttribute("data-kr")]=inp.value;renderPreview();}));
-  body.querySelectorAll("[data-kc]").forEach(inp=>inp.addEventListener("change",()=>{const key=inp.getAttribute("data-kc");const arr=Array.isArray(pv.values[key])?pv.values[key]:[];const v=inp.value;if(inp.checked){if(!arr.includes(v))arr.push(v);}else{const idx=arr.indexOf(v);if(idx>=0)arr.splice(idx,1);}pv.values[key]=arr;renderPreview();}));
+  body.querySelectorAll("[data-k]").forEach(inp=>{
+    const key=inp.getAttribute("data-k");
+    inp.addEventListener("input",()=>{pv.values[key]=inp.value;});
+    inp.addEventListener("change",e=>{pv.values[key]=inp.value;const f=e.target.closest(".pv-field"),fkey=f?.dataset?.fieldkey,top0=fkey?f.getBoundingClientRect().top:null;renderPreview();snapScroll(fkey,top0);});
+  });
+  body.querySelectorAll("[data-kr]").forEach(inp=>inp.addEventListener("change",e=>{pv.values[inp.getAttribute("data-kr")]=inp.value;const f=e.target.closest(".pv-field"),fkey=f?.dataset?.fieldkey,top0=fkey?f.getBoundingClientRect().top:null;renderPreview();snapScroll(fkey,top0);}));
+  body.querySelectorAll("[data-kc]").forEach(inp=>inp.addEventListener("change",e=>{const key=inp.getAttribute("data-kc");const arr=Array.isArray(pv.values[key])?pv.values[key]:[];const v=inp.value;if(inp.checked){if(!arr.includes(v))arr.push(v);}else{const idx=arr.indexOf(v);if(idx>=0)arr.splice(idx,1);}pv.values[key]=arr;const f=e.target.closest(".pv-field"),fkey=f?.dataset?.fieldkey,top0=fkey?f.getBoundingClientRect().top:null;renderPreview();snapScroll(fkey,top0);}));
   body.querySelectorAll("[data-addrow]").forEach(b=>b.addEventListener("click",()=>{const r=findNode(b.getAttribute("data-addrow"));if(r)openAddRowModal(r);}));
   body.querySelectorAll("[data-delrow]").forEach(b=>b.addEventListener("click",()=>{delRow(b.getAttribute("data-delrow"),+b.getAttribute("data-i"));renderPreview();}));
   body.querySelectorAll("[data-openrow]").forEach(b=>b.addEventListener("click",()=>{pv.row={uid:b.getAttribute("data-openrow"),index:+b.getAttribute("data-i")};document.getElementById("pvBody").scrollTop=0;renderPreview();}));
   body.querySelectorAll(".pv-sigpad").forEach(canvas=>wireSignaturePad(canvas));
   body.querySelectorAll(".pv-geobtn").forEach(btn=>wireGeoButton(btn));
   body.querySelectorAll(".pv-scanbtn").forEach(btn=>wireScanButton(btn));
+  body.querySelectorAll(".pv-photowrap").forEach(wrap=>wirePhotoField(wrap));
 }
 
 /* ---- widget field khusus: tanda tangan, lokasi, pindai barcode (preview) ---- */
@@ -1137,6 +1277,40 @@ async function openBarcodeScanner(input){
   }catch(e){
     if(sub)sub.textContent="Tidak bisa mengakses kamera: "+e.message;
   }
+}
+
+function wirePhotoField(wrap){
+  if(wrap._wired)return;wrap._wired=true;
+  const hidden=wrap.querySelector("input[type=hidden]");
+  const fileInput=wrap.querySelector(".pv-photofile");
+  const preview=wrap.querySelector(".pv-photopreview");
+  if(!hidden||!fileInput||!preview)return;
+  if(hidden.value)showPhotoPreview(preview,hidden.value,fileInput.disabled);
+  fileInput.addEventListener("change",()=>{
+    const f=fileInput.files[0];if(!f)return;
+    const reader=new FileReader();
+    reader.onload=e=>{
+      hidden.value=e.target.result;
+      hidden.dispatchEvent(new Event("change",{bubbles:true}));
+      showPhotoPreview(preview,e.target.result,false);
+    };
+    reader.readAsDataURL(f);
+  });
+  preview.addEventListener("click",e=>{
+    if(!e.target.classList.contains("pv-photoclear"))return;
+    hidden.value="";fileInput.value="";
+    preview.hidden=true;preview.innerHTML="";
+    hidden.dispatchEvent(new Event("change",{bubbles:true}));
+  });
+}
+function showPhotoPreview(preview,dataUrl,disabled){
+  const isImage=dataUrl.startsWith("data:image");
+  const dis=disabled?" disabled":"";
+  if(isImage)
+    preview.innerHTML=`<img class="pv-photoimg" src="${dataUrl}"><button type="button" class="pv-smbtn pv-photoclear"${dis}>Hapus foto</button>`;
+  else
+    preview.innerHTML=`<span style="font-size:12.5px;color:var(--ink-soft)">File dipilih</span><button type="button" class="pv-smbtn pv-photoclear"${dis}>Hapus</button>`;
+  preview.hidden=false;
 }
 
 function renderPvSide(){

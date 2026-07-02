@@ -80,6 +80,7 @@
 
 <div id="preview" class="pv" hidden>
   <div class="pv-bar">
+    <button class="pv-side-tog" id="pvSideTog" title="Daftar halaman">☰</button>
     <span class="pv-title" id="pvTitle">Kuesioner</span>
     <span class="pv-badge">PREVIEW</span>
     <select class="pv-modesel" id="pvMode" title="Mode navigasi">
@@ -88,9 +89,13 @@
     </select>
     <button class="btn" id="pvClose" style="margin-left:auto">Tutup ✕</button>
   </div>
+  <div id="pvSideBd" class="pv-side-bd"></div>
   <div class="pv-main">
     <aside class="pv-side" id="pvSide"></aside>
-    <div class="pv-body" id="pvBody"></div>
+    <div class="pv-content">
+      <div class="pv-body" id="pvBody"></div>
+      <div id="pvNavArea" class="pv-nav-area"></div>
+    </div>
   </div>
 </div>
 

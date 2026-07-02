@@ -29,11 +29,19 @@ input,select,textarea{font-family:inherit;font-size:13.5px;color:var(--ink)}
 .pv-title{font-weight:700;font-size:15px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pv-brand{font-family:var(--mono);font-size:10.5px;color:var(--muted);flex:none;white-space:nowrap}
 .pv-main{flex:1;display:flex;min-height:0}
-.pv-side{width:230px;flex:none;background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding:14px 12px}
+.pv-side{width:230px;flex:none;background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding:14px 12px;transition:width .2s ease,padding .2s ease}
+.pv-side.collapsed{width:0;padding:0;overflow:hidden;border-right-color:transparent}
 .pv-side-h{font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 4px 10px}
+.pv-side-tog{border:none;background:transparent;color:var(--ink-soft);padding:5px 8px;border-radius:6px;cursor:pointer;font-size:18px;line-height:1;flex:none;transition:background .12s}
+.pv-side-tog:hover{background:var(--panel-2);color:var(--ink)}
+.pv-side-bd{display:none;position:fixed;inset:0;background:rgba(19,23,30,.35);z-index:59;cursor:pointer}
 .pv-pg{padding:9px 10px;border-radius:var(--radius-s);cursor:pointer;font-size:12.5px;font-weight:500;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:background .1s}
 .pv-pg:hover{background:var(--panel-2)}
 .pv-pg.active{background:var(--accent-soft);color:var(--accent-ink);font-weight:600}
+.pv-subpg{display:flex;align-items:center;gap:7px;padding:7px 10px 7px 22px;border-radius:var(--radius-s);cursor:pointer;font-size:11.5px;color:var(--ink-soft);margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pv-subpg:hover{background:var(--panel-2)}
+.pv-subpg .pv-ri{color:#059669;flex:none}
+.pv-subpg.active{background:#d8f3e5;color:#059669;font-weight:600}
 .pv-content{flex:1;display:flex;flex-direction:column;min-height:0;min-width:0}
 .pv-body{flex:1;overflow:auto;padding:28px 20px 36px}
 
@@ -80,6 +88,13 @@ input,select,textarea{font-family:inherit;font-size:13.5px;color:var(--ink)}
 .pv-sigpad{width:100%;max-width:400px;height:140px;border:1.5px solid var(--line);border-radius:var(--radius-s);background:#fafcff;touch-action:none;cursor:crosshair}
 .pv-sigpad[data-disabled="1"]{cursor:not-allowed;opacity:.6}
 .pv-sigactions{display:flex}
+.pv-photowrap{display:flex;flex-direction:column;gap:8px}
+.pv-photolabel{display:inline-flex;align-items:center;gap:6px;cursor:pointer;background:var(--panel);border:1.5px dashed var(--line);border-radius:var(--radius-s);padding:10px 16px;font-size:13px;font-weight:500;color:var(--ink-soft);transition:.12s;user-select:none}
+.pv-photolabel:hover:not(.pv-photolabel-dis){border-color:var(--accent);background:var(--accent-soft);color:var(--ink)}
+.pv-photolabel.pv-photolabel-dis{opacity:.5;cursor:not-allowed}
+.pv-photofile{display:none}
+.pv-photopreview{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap}
+.pv-photoimg{max-width:240px;max-height:180px;border-radius:var(--radius-s);border:1.5px solid var(--line);object-fit:cover;display:block}
 .pv-scanmodal video{width:100%;max-width:340px;border-radius:var(--radius-s);background:#000;margin-bottom:14px}
 .pv-field-err{outline:2px solid var(--bad);outline-offset:4px;border-radius:8px;transition:outline-color .2s}
 textarea.pv-in{width:100%;resize:vertical;min-height:72px}
@@ -206,7 +221,10 @@ textarea.pv-in{width:100%;resize:vertical;min-height:72px}
 .pv-err-fix:hover{background:var(--bad);color:#fff}
 
 @media(max-width:700px){
-  .pv-side{display:none}
+  .pv-side{position:fixed;inset:0 auto 0 0;z-index:60;width:260px;padding:14px 12px;overflow:auto;transform:translateX(-100%);transition:transform .22s ease;box-shadow:none;border-right:1px solid var(--line)}
+  .pv-side.open{transform:translateX(0);box-shadow:4px 0 24px rgba(19,23,30,.18)}
+  .pv-side.collapsed{width:260px!important;padding:14px 12px!important;overflow:auto!important;transform:translateX(-100%)}
+  .pv-side-bd.show{display:block}
   .pv-body{padding:18px 14px 60px}
   .pv-card{padding:16px}
   .pv-nav{padding:11px 0 14px}
@@ -609,6 +627,12 @@ function fieldHtml(c,rp){
     ctrl=`<div class="pv-inbtn"><input type="text" data-k="${ke}" class="pv-in" placeholder="scan / ketik kode"${dis}${rdOnly}><button type="button" class="pv-smbtn pv-scanbtn"${disAll}>📷 Pindai</button></div>`;
   else if(c.type==="signature")
     ctrl=`<div class="pv-sigwrap"><input type="hidden" data-k="${ke}"><canvas class="pv-sigpad" width="400" height="140"${(enabled&&!c.readOnly)?"":' data-disabled="1"'}></canvas><div class="pv-sigactions"><button type="button" class="pv-smbtn pv-sigclear"${disAll}>Hapus tanda tangan</button></div></div>`;
+  else if(c.type==="photo"||c.type==="file"){
+    const isPhoto=c.type==="photo";
+    const disClass=(!enabled||c.readOnly)?' pv-photolabel-dis':'';
+    const dis2=(!enabled||c.readOnly)?' disabled':'';
+    ctrl=`<div class="pv-photowrap"><input type="hidden" data-k="${ke}"><label class="pv-photolabel${disClass}"><input type="file" class="pv-photofile"${isPhoto?' accept="image/*" capture="environment"':''}${dis2}>${isPhoto?'📷 Ambil / Pilih Foto':'📎 Pilih File'}</label><div class="pv-photopreview" hidden></div></div>`;
+  }
   else
     ctrl=`<input type="text" data-k="${ke}" class="pv-in" placeholder="${esc(c.placeholder||"")}"${dis}${rdOnly}>`;
   let vmsg="";
@@ -628,11 +652,15 @@ function nodeHtml(c,rp){
   rp=rp||"";
   if(c.kind==="block"){
     if(!evalVisible(c.visibleWhen,rp))return"";
-    return`<div class="pv-card">${c.title?`<div class="pv-bt">${esc(txt(c.title))}</div>`:""}${(c.components||[]).map(x=>nodeHtml(x,rp)).join("")}</div>`;
+    const inner=(c.components||[]).map(x=>nodeHtml(x,rp)).join("");
+    if(!inner)return"";
+    return`<div class="pv-card">${c.title?`<div class="pv-bt">${esc(rowInterp(txt(c.title),rp))}</div>`:""}${inner}</div>`;
   }
   if(c.kind==="section"){
     if(!evalVisible(c.visibleWhen,rp))return"";
-    return`<div class="pv-sec">${c.title?`<div class="pv-st">${esc(txt(c.title))}</div>`:""}${(c.components||[]).map(x=>nodeHtml(x,rp)).join("")}</div>`;
+    const inner=(c.components||[]).map(x=>nodeHtml(x,rp)).join("");
+    if(!inner)return"";
+    return`<div class="pv-sec">${c.title?`<div class="pv-st">${esc(rowInterp(txt(c.title),rp))}</div>`:""}${inner}</div>`;
   }
   if(c.kind==="roster"){
     if(!evalVisible(c.visibleWhen,rp))return"";
@@ -651,7 +679,7 @@ function rosterCount(r){
   }
   const stored=answers[r.name+"#count"];
   if(stored!=null)return Math.max(0,Math.floor(Number(stored))||0);
-  return Number(r.min)||1;
+  return Number(r.min)||0;
 }
 function flatRosterFields(r){const out=[];function go(a){(a||[]).forEach(c=>{c.kind==="field"?out.push(c):c.components&&go(c.components);});}go(r.components);return out;}
 function rowSummary(r,i){
@@ -660,9 +688,12 @@ function rowSummary(r,i){
 }
 function hasRowData(r,i){return flatRosterFields(r).some(c=>{const v=answers[`${r.name}#${i}#${c.name}`];return v!=null&&v!==""&&!(Array.isArray(v)&&!v.length);});}
 function addRowLabel(r){return r.rowTitle?`+ Tambah ${esc(txt(r.rowTitle))}`:"+ Tambah baris";}
-function rowInterp(text,rp){if(!text||!rp)return text;return text.replace(/\{\{([^}]+)\}\}/g,(_,n)=>{const v=answers[rp+n.trim()];return v!=null?String(v):"";});}
+// Interpolasi nilai field lain dalam baris roster ke teks label/hint/itemLabel.
+// Mendukung dua sintaks: {{nama}} dan ${nama} (dipakai campur di berbagai tempat).
+const INTERP_RE=/\{\{\s*([^}]+?)\s*\}\}|\$\{\s*([^}]+?)\s*\}/g;
+function rowInterp(text,rp){if(!text||!rp)return text;return text.replace(INTERP_RE,(_,a,b)=>{const v=answers[rp+(a||b).trim()];return v!=null?String(v):"";});}
 function rowLabel(r,i){
-  if(r.itemLabel){const rp=`${r.name}#${i}#`;return esc(txt(r.itemLabel).replace(/\{\{index\}\}/g,String(i+1)).replace(/\{\{([^}]+)\}\}/g,(_,n)=>{const v=answers[rp+n.trim()];return v!=null?String(v):"";}));}
+  if(r.itemLabel){const rp=`${r.name}#${i}#`;return esc(txt(r.itemLabel).replace(/\{\{\s*index\s*\}\}|\$\{\s*index\s*\}/g,String(i+1)).replace(INTERP_RE,(_,a,b)=>{const v=answers[rp+(a||b).trim()];return v!=null?String(v):"";}));}
   return r.rowTitle?`${esc(txt(r.rowTitle))} #${i+1}`:`Baris #${i+1}`;
 }
 function rosterHtml(r){
@@ -796,6 +827,8 @@ function fieldEffectiveSkipTargetRp(f,rp){
   return null;
 }
 // Hitung field dalam satu baris roster yang harus disembunyikan karena skip-to.
+// Target "__end" berarti akhiri sisa baris ini (field setelahnya di baris yang
+// sama disembunyikan; baris roster lain tidak terpengaruh).
 function computeRosterRowSkipState(roster,rowIdx){
   const rp=`${roster.name}#${rowIdx}#`;
   const allRowFields=flatRosterFields(roster);
@@ -804,11 +837,12 @@ function computeRosterRowSkipState(roster,rowIdx){
   let skipActive=false,skipTarget=null;
   for(const f of allRowFields){
     if(skipActive){
-      if(f.name===skipTarget){skipActive=false;skipTarget=null;}
+      if(skipTarget&&f.name===skipTarget){skipActive=false;skipTarget=null;}
       else{hidden.add(f.name);continue;}
     }
     const t=fieldEffectiveSkipTargetRp(f,rp);
-    if(t&&allNames.has(t)&&t!==f.name){skipActive=true;skipTarget=t;}
+    if(t==="__end"){skipActive=true;skipTarget=null;}
+    else if(t&&allNames.has(t)&&t!==f.name){skipActive=true;skipTarget=t;}
   }
   return hidden;
 }
@@ -969,7 +1003,6 @@ function render(meta){
   PAGES=SCHEMA.pages||[];
   const title=txt(meta.title||txt(SCHEMA.title)||"Kuesioner");
   document.title=title;
-  const sideHtml=PAGES.map((p,i)=>({p,i})).filter(({p})=>evalVisible(p.visibleWhen,"")).map(({p,i})=>`<div class="pv-pg" data-pg="${i}">${esc(txt(p.title)||p.name||`Halaman ${i+1}`)}</div>`).join("");
   const userBar=RESP_USER?`
     <div class="pv-ubar">
       ${RESP_USER.picture?`<img class="pv-uavatar" src="${esc(RESP_USER.picture)}" referrerpolicy="no-referrer">`:`<div class="pv-uavatar"></div>`}
@@ -982,10 +1015,11 @@ function render(meta){
       <button id="draftNoteClose" title="Tutup">×</button>
     </div>`:"";
   setRoot(`<div class="pv">
-    <div class="pv-bar"><span class="pv-title">${esc(title)}</span><span class="pv-brand">eForm · BPS Kaltim</span></div>
+    <div class="pv-bar"><button class="pv-side-tog" id="pvSideTog" title="Daftar halaman">☰</button><span class="pv-title">${esc(title)}</span><span class="pv-brand">eForm · BPS Kaltim</span></div>
+    <div id="pvSideBd" class="pv-side-bd"></div>
     ${draftNote}
     <div class="pv-main">
-      <aside class="pv-side"><div class="pv-side-h">Daftar Halaman</div>${sideHtml}</aside>
+      <aside class="pv-side" id="pvSide"></aside>
       <div class="pv-content">
         <div class="pv-body" id="pvBody"><div id="pvUserBar">${userBar}</div></div>
         <div id="pvNavArea" class="pv-nav-area"></div>
@@ -993,7 +1027,7 @@ function render(meta){
     </div>
   </div>`);
   document.getElementById("draftNoteClose")?.addEventListener("click",()=>{document.getElementById("draftNote")?.remove();});
-  document.querySelectorAll(".pv-pg").forEach(el=>el.addEventListener("click",()=>goToPage(+el.dataset.pg)));
+  setupSidebarToggle(document.getElementById("pvSide"));
   curPage=0;rosterView=null;
   goToPage(0);
   // Jaring pengaman: simpan draf berkala supaya ketikan yang belum sempat
@@ -1011,16 +1045,62 @@ function saveAnswers(){
   cbKeys.forEach(key=>{answers[key]=[...document.querySelectorAll(`[data-kc="${CSS.escape(key)}"]:checked`)].map(el=>el.value);});
   saveDraft();
 }
+function setupSidebarToggle(side){
+  const tog=document.getElementById("pvSideTog");
+  const bd=document.getElementById("pvSideBd");
+  if(!tog||!side)return;
+  const mobile=()=>window.innerWidth<=700;
+  tog.addEventListener("click",()=>{
+    if(mobile()){const open=side.classList.toggle("open");if(bd)bd.classList.toggle("show",open);}
+    else{side.classList.toggle("collapsed");}
+  });
+  if(bd)bd.addEventListener("click",()=>{side.classList.remove("open");bd.classList.remove("show");});
+}
 function goToPage(idx){
   saveAnswers();rosterView=null;
   idx=Math.max(0,Math.min(idx,PAGES.length-1));
   curPage=nearestVisibleIndex(idx);
-  updateSidebarActive();renderCurrentPage();
+  renderSidebar();renderCurrentPage();
   const pvBody=document.getElementById("pvBody");if(pvBody)pvBody.scrollTop=0;
 }
-function updateSidebarActive(){
-  const activeIdx=rosterView?rosterView.pageIdx:curPage;
-  document.querySelectorAll(".pv-pg").forEach((el,i)=>el.classList.toggle("active",i===activeIdx));
+function separateRostersInPage(p){
+  const out=[];
+  (function go(comps){(comps||[]).forEach(c=>{
+    if(c.kind==="roster"&&c.rosterType==="separate")out.push(c);
+    if(c.components)go(c.components);
+  });})(p.components||[]);
+  return out;
+}
+/* Pertahankan posisi elemen yang baru dijawab di viewport meski konten berubah */
+function snapScroll(fkey,top0){
+  if(!fkey||top0==null)return;
+  const pvBody=document.getElementById("pvBody");if(!pvBody)return;
+  const nf=pvBody.querySelector(`.pv-field[data-fieldkey="${CSS.escape(fkey)}"]`);
+  if(!nf)return;
+  const delta=Math.round(nf.getBoundingClientRect().top-top0);
+  if(delta)pvBody.scrollTop+=delta;
+}
+function renderSidebar(){
+  const side=document.getElementById("pvSide");if(!side)return;
+  const activePageIdx=rosterView?rosterView.pageIdx:curPage;
+  const activeRosterName=rosterView?rosterView.roster.name:null;
+  let html=`<div class="pv-side-h">Daftar Halaman</div>`;
+  PAGES.forEach((p,i)=>{
+    if(!isPageVisible(i))return;
+    const isActivePage=i===activePageIdx&&!activeRosterName;
+    html+=`<div class="pv-pg${isActivePage?" active":""}" data-pg="${i}">${esc(txt(p.title)||p.name||`Halaman ${i+1}`)}</div>`;
+    separateRostersInPage(p).forEach(r=>{
+      const isActiveRoster=r.name===activeRosterName;
+      html+=`<div class="pv-subpg${isActiveRoster?" active":""}" data-pg="${i}" data-roster="${esc(r.name)}"><span class="pv-ri">⊞</span><span>${esc(txt(r.title)||r.name)}</span></div>`;
+    });
+  });
+  side.innerHTML=html;
+  side.querySelectorAll(".pv-pg").forEach(el=>el.addEventListener("click",()=>goToPage(+el.dataset.pg)));
+  side.querySelectorAll(".pv-subpg").forEach(el=>el.addEventListener("click",()=>{
+    const pgIdx=+el.dataset.pg,rname=el.dataset.roster;
+    goToPage(pgIdx);
+    setTimeout(()=>{const el2=document.getElementById("pvroster_"+rname);if(el2)el2.scrollIntoView({behavior:"smooth",block:"start"});},40);
+  }));
 }
 function renderCurrentPage(){
   // Catatan: TIDAK reset scroll di sini — fungsi ini juga dipanggil untuk
@@ -1028,6 +1108,7 @@ function renderCurrentPage(){
   // tidak melompat balik ke atas halaman. Reset scroll hanya di goToPage().
   const pvBody=document.getElementById("pvBody");
   if(!pvBody||!PAGES.length)return;
+  renderSidebar();
   const p=PAGES[curPage],isLast=nextVisibleIndex(curPage)===-1;
   const vis=visiblePageIdx(),posInVis=vis.indexOf(curPage)+1,totalVis=vis.length;
   SKIP_HIDDEN=computePageSkipState(p).hidden;
@@ -1059,10 +1140,12 @@ function renderCurrentPage(){
 /* ---- roster row subhalaman ---- */
 function openRosterRow(rname,rowIdx){
   saveAnswers();const roster=findRoster(rname);if(!roster)return;
-  rosterView={roster,rowIdx,pageIdx:curPage};updateSidebarActive();renderRosterRow();
+  rosterView={roster,rowIdx,pageIdx:curPage};renderSidebar();renderRosterRow();
+  const pvBody=document.getElementById("pvBody");if(pvBody)pvBody.scrollTop=0;
 }
 function renderRosterRow(){
-  const pvBody=document.getElementById("pvBody");if(!pvBody||!rosterView)return;pvBody.scrollTop=0;
+  const pvBody=document.getElementById("pvBody");if(!pvBody||!rosterView)return;
+  const keepScroll=pvBody.scrollTop;
   const {roster,rowIdx,pageIdx}=rosterView,rp=`${roster.name}#${rowIdx}#`;
   const pageTitle=esc(txt(PAGES[pageIdx].title)||PAGES[pageIdx].name||"Kembali");
   const rowSkip=computeRosterRowSkipState(roster,rowIdx);
@@ -1076,13 +1159,13 @@ function renderRosterRow(){
   let fieldsHtml=(roster.components||[]).map(f=>nodeHtml(f,rp)).join("");
   if(!hasStructure&&fieldsHtml)fieldsHtml=`<div class="pv-card">${fieldsHtml}</div>`;
   let html=`${userBar}<div class="pv-page"><div class="pv-rrow-hdr"><div class="pv-rrow-bread"><button id="pvBack" class="pv-rrow-back">← ${pageTitle}</button><span class="pv-rrow-sep">›</span><span class="pv-rrow-rname">${rosterTitle}</span><span class="pv-rrow-num">Baris ${rowIdx+1} dari ${total}</span></div><div class="pv-rrow-title">${rowLabel(roster,rowIdx)}</div></div>${fieldsHtml}</div>`;
-  pvBody.innerHTML=html;
+  pvBody.innerHTML=html;pvBody.scrollTop=keepScroll;
   const navArea=document.getElementById("pvNavArea");
   if(navArea)navArea.innerHTML=`<div class="pv-nav"><span></span><span></span><button class="btn primary" id="pvBackDone">Simpan &amp; kembali</button></div>`;
   restoreAnswers();resolveOptions();wireFieldWidgets();
-  document.querySelectorAll("[data-k]").forEach(el=>el.addEventListener("change",()=>{saveAnswers();renderRosterRow();}));
-  document.querySelectorAll("[data-kr]").forEach(el=>el.addEventListener("change",()=>{saveAnswers();renderRosterRow();}));
-  const backFn=()=>{saveAnswers();const rname=rosterView.roster.name;rosterView=null;updateSidebarActive();renderCurrentPage();setTimeout(()=>{const el=document.getElementById("pvroster_"+rname);if(el)el.scrollIntoView({behavior:"smooth",block:"center"});},40);};
+  document.querySelectorAll("[data-k]").forEach(el=>el.addEventListener("change",e=>{const f=e.target.closest(".pv-field"),fkey=f?.dataset?.fieldkey,top0=fkey?f.getBoundingClientRect().top:null;saveAnswers();renderRosterRow();if(fkey&&top0!=null)setTimeout(()=>snapScroll(fkey,top0),0);}));
+  document.querySelectorAll("[data-kr]").forEach(el=>el.addEventListener("change",e=>{const f=e.target.closest(".pv-field"),fkey=f?.dataset?.fieldkey,top0=fkey?f.getBoundingClientRect().top:null;saveAnswers();renderRosterRow();if(fkey&&top0!=null)setTimeout(()=>snapScroll(fkey,top0),0);}));
+  const backFn=()=>{saveAnswers();const rname=rosterView.roster.name;rosterView=null;renderSidebar();renderCurrentPage();setTimeout(()=>{const el=document.getElementById("pvroster_"+rname);if(el)el.scrollIntoView({behavior:"smooth",block:"center"});},40);};
   document.getElementById("pvBack")?.addEventListener("click",backFn);
   document.getElementById("pvBackDone")?.addEventListener("click",backFn);
 }
@@ -1125,12 +1208,21 @@ function bindPageEvents(){
   }));
   const cfFields=new Set();
   (PAGES[curPage]?.components||[]).forEach(function walk(c){if(c.kind==="roster"&&c.countFrom)cfFields.add(c.countFrom);(c.components||[]).forEach(walk);});
-  cfFields.forEach(fname=>{const el=document.querySelector(`[data-k="${fname}"]`);if(el)el.addEventListener("change",()=>{saveAnswers();renderCurrentPage();});});
-  // Re-render hidup saat field apa pun berubah, supaya visibleWhen/enableWhen/skip-to
-  // langsung berefek tanpa menunggu pindah halaman (select/radio CHOICE diwire terpisah
-  // di resolveOptions karena baru ada di DOM setelah fetch opsi selesai).
-  document.querySelectorAll("[data-k]").forEach(el=>el.addEventListener("change",()=>{saveAnswers();renderCurrentPage();}));
-  document.querySelectorAll("[data-kr]").forEach(el=>el.addEventListener("change",()=>{saveAnswers();renderCurrentPage();}));
+  // Re-render hidup saat field berubah. Setelah render, kembalikan fokus ke elemen
+  // yang aktif sebelumnya agar navigasi tab tidak terputus.
+  const rerenderPage=(e)=>{
+    const src=e?.target;
+    const fk=src?.dataset?.k;
+    const fkr=src?.dataset?.kr;
+    const field=src?.closest(".pv-field");
+    const fkey=field?.dataset?.fieldkey;
+    const top0=fkey?field.getBoundingClientRect().top:null;
+    saveAnswers();renderCurrentPage();
+    (fk?document.querySelector(`[data-k="${CSS.escape(fk)}"]`):fkr?document.querySelector(`[data-kr="${CSS.escape(fkr)}"]`):null)?.focus();
+    snapScroll(fkey,top0);
+  };
+  document.querySelectorAll("[data-k]").forEach(el=>el.addEventListener("change",rerenderPage));
+  document.querySelectorAll("[data-kr]").forEach(el=>el.addEventListener("change",rerenderPage));
   wireFieldWidgets();
 }
 
@@ -1139,6 +1231,7 @@ function wireFieldWidgets(){
   document.querySelectorAll(".pv-sigpad").forEach(canvas=>wireSignaturePad(canvas));
   document.querySelectorAll(".pv-geobtn").forEach(btn=>wireGeoButton(btn));
   document.querySelectorAll(".pv-scanbtn").forEach(btn=>wireScanButton(btn));
+  document.querySelectorAll(".pv-photowrap").forEach(wrap=>wirePhotoField(wrap));
 }
 
 function wireSignaturePad(canvas){
@@ -1240,6 +1333,41 @@ async function openBarcodeScanner(input){
   }catch(e){
     if(sub)sub.textContent="Tidak bisa mengakses kamera: "+e.message;
   }
+}
+
+/* ---- foto / file upload ---- */
+function wirePhotoField(wrap){
+  if(wrap._wired)return;wrap._wired=true;
+  const hidden=wrap.querySelector("input[type=hidden]");
+  const fileInput=wrap.querySelector(".pv-photofile");
+  const preview=wrap.querySelector(".pv-photopreview");
+  if(!hidden||!fileInput||!preview)return;
+  if(hidden.value)showPhotoPreview(preview,hidden.value,fileInput.disabled);
+  fileInput.addEventListener("change",()=>{
+    const f=fileInput.files[0];if(!f)return;
+    const reader=new FileReader();
+    reader.onload=e=>{
+      hidden.value=e.target.result;
+      hidden.dispatchEvent(new Event("change",{bubbles:true}));
+      showPhotoPreview(preview,e.target.result,false);
+    };
+    reader.readAsDataURL(f);
+  });
+  preview.addEventListener("click",e=>{
+    if(!e.target.classList.contains("pv-photoclear"))return;
+    hidden.value="";fileInput.value="";
+    preview.hidden=true;preview.innerHTML="";
+    hidden.dispatchEvent(new Event("change",{bubbles:true}));
+  });
+}
+function showPhotoPreview(preview,dataUrl,disabled){
+  const isImage=dataUrl.startsWith("data:image");
+  const dis=disabled?" disabled":"";
+  if(isImage)
+    preview.innerHTML=`<img class="pv-photoimg" src="${dataUrl}"><button type="button" class="pv-smbtn pv-photoclear"${dis}>Hapus foto</button>`;
+  else
+    preview.innerHTML=`<span style="font-size:12.5px;color:var(--ink-soft)">File dipilih</span><button type="button" class="pv-smbtn pv-photoclear"${dis}>Hapus</button>`;
+  preview.hidden=false;
 }
 
 /* ---- async options ---- */
