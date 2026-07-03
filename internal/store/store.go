@@ -749,6 +749,368 @@ func (s *Store) DeleteDraft(ctx context.Context, formID, respondentID string) er
 	return err
 }
 
+/* ---------------- viewers ---------------- */
+
+// ListViewers mengembalikan semua user dengan role='viewer'.
+func (s *Store) ListViewers(ctx context.Context) ([]models.User, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT id,username,email,role,is_active,created_at,updated_at FROM users
+		 WHERE role='viewer' ORDER BY username`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []models.User
+	for rows.Next() {
+		u := models.User{}
+		var em *string
+		if err := rows.Scan(&u.ID, &u.Username, &em, &u.Role, &u.IsActive, &u.CreatedAt, &u.UpdatedAt); err != nil {
+			return nil, err
+		}
+		if em != nil {
+			u.Email = *em
+		}
+		out = append(out, u)
+	}
+	if out == nil {
+		out = []models.User{}
+	}
+	return out, rows.Err()
+}
+
+// DeleteUser menghapus user secara permanen (dimaksudkan untuk viewer).
+func (s *Store) DeleteUser(ctx context.Context, id string) error {
+	ct, err := s.pool.Exec(ctx, `DELETE FROM users WHERE id=$1`, id)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// CreateViewerPermission memberikan akses viewer ke satu kuesioner.
+func (s *Store) CreateViewerPermission(ctx context.Context, viewerID, formID, respondentAccess string, visibleFields []string, createdBy *string) (*models.ViewerFormPermission, error) {
+	p := &models.ViewerFormPermission{}
+	err := s.pool.QueryRow(ctx,
+		`INSERT INTO viewer_form_permissions(viewer_id,form_id,respondent_access,visible_fields,created_by)
+		 VALUES ($1,$2,$3,$4,$5)
+		 RETURNING id,viewer_id,form_id,respondent_access,visible_fields,created_by,created_at`,
+		viewerID, formID, respondentAccess, visibleFields, createdBy,
+	).Scan(&p.ID, &p.ViewerID, &p.FormID, &p.RespondentAccess, &p.VisibleFields, &p.CreatedBy, &p.CreatedAt)
+	return p, err
+}
+
+// GetViewerPermission mengambil permission viewer-form, atau ErrNotFound.
+func (s *Store) GetViewerPermission(ctx context.Context, viewerID, formID string) (*models.ViewerFormPermission, error) {
+	p := &models.ViewerFormPermission{}
+	err := s.pool.QueryRow(ctx,
+		`SELECT id,viewer_id,form_id,respondent_access,visible_fields,created_by,created_at
+		 FROM viewer_form_permissions WHERE viewer_id=$1 AND form_id=$2`,
+		viewerID, formID,
+	).Scan(&p.ID, &p.ViewerID, &p.FormID, &p.RespondentAccess, &p.VisibleFields, &p.CreatedBy, &p.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return p, err
+}
+
+// GetViewerPermissionByID mengambil permission berdasarkan ID-nya.
+func (s *Store) GetViewerPermissionByID(ctx context.Context, permID string) (*models.ViewerFormPermission, error) {
+	p := &models.ViewerFormPermission{}
+	err := s.pool.QueryRow(ctx,
+		`SELECT id,viewer_id,form_id,respondent_access,visible_fields,created_by,created_at
+		 FROM viewer_form_permissions WHERE id=$1`, permID,
+	).Scan(&p.ID, &p.ViewerID, &p.FormID, &p.RespondentAccess, &p.VisibleFields, &p.CreatedBy, &p.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return p, err
+}
+
+// ListFormViewerPermissions mengembalikan semua permission viewer untuk satu kuesioner (dengan join username).
+func (s *Store) ListFormViewerPermissions(ctx context.Context, formID string) ([]models.ViewerFormPermission, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT p.id, p.viewer_id, p.form_id, p.respondent_access, p.visible_fields,
+		        p.created_by, p.created_at, u.username,
+		        (SELECT count(*) FROM viewer_allowed_respondents WHERE permission_id=p.id)
+		 FROM viewer_form_permissions p
+		 JOIN users u ON u.id=p.viewer_id
+		 WHERE p.form_id=$1
+		 ORDER BY p.created_at`, formID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []models.ViewerFormPermission
+	for rows.Next() {
+		p := models.ViewerFormPermission{}
+		if err := rows.Scan(&p.ID, &p.ViewerID, &p.FormID, &p.RespondentAccess, &p.VisibleFields,
+			&p.CreatedBy, &p.CreatedAt, &p.ViewerUsername, &p.AllowedCount); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	if out == nil {
+		out = []models.ViewerFormPermission{}
+	}
+	return out, rows.Err()
+}
+
+// ListViewerForms mengembalikan semua kuesioner yang bisa diakses viewer (dengan join judul form).
+func (s *Store) ListViewerForms(ctx context.Context, viewerID string) ([]models.ViewerFormPermission, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT p.id, p.viewer_id, p.form_id, p.respondent_access, p.visible_fields,
+		        p.created_by, p.created_at, f.title
+		 FROM viewer_form_permissions p
+		 JOIN forms f ON f.id=p.form_id
+		 WHERE p.viewer_id=$1
+		 ORDER BY f.title`, viewerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []models.ViewerFormPermission
+	for rows.Next() {
+		p := models.ViewerFormPermission{}
+		if err := rows.Scan(&p.ID, &p.ViewerID, &p.FormID, &p.RespondentAccess, &p.VisibleFields,
+			&p.CreatedBy, &p.CreatedAt, &p.FormTitle); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	if out == nil {
+		out = []models.ViewerFormPermission{}
+	}
+	return out, rows.Err()
+}
+
+// UpdateViewerPermission memperbarui respondent_access dan visible_fields.
+func (s *Store) UpdateViewerPermission(ctx context.Context, permID, respondentAccess string, visibleFields []string) (*models.ViewerFormPermission, error) {
+	p := &models.ViewerFormPermission{}
+	err := s.pool.QueryRow(ctx,
+		`UPDATE viewer_form_permissions SET respondent_access=$2, visible_fields=$3
+		 WHERE id=$1
+		 RETURNING id,viewer_id,form_id,respondent_access,visible_fields,created_by,created_at`,
+		permID, respondentAccess, visibleFields,
+	).Scan(&p.ID, &p.ViewerID, &p.FormID, &p.RespondentAccess, &p.VisibleFields, &p.CreatedBy, &p.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return p, err
+}
+
+// DeleteViewerPermission mencabut akses viewer ke kuesioner.
+func (s *Store) DeleteViewerPermission(ctx context.Context, permID string) error {
+	ct, err := s.pool.Exec(ctx, `DELETE FROM viewer_form_permissions WHERE id=$1`, permID)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// AddViewerAllowedRespondent menambahkan satu responden ke daftar yang diizinkan.
+func (s *Store) AddViewerAllowedRespondent(ctx context.Context, permID, respondentID string) (*models.ViewerAllowedRespondent, error) {
+	ar := &models.ViewerAllowedRespondent{}
+	err := s.pool.QueryRow(ctx,
+		`INSERT INTO viewer_allowed_respondents(permission_id,respondent_id)
+		 VALUES ($1,$2)
+		 ON CONFLICT (permission_id,respondent_id) DO NOTHING
+		 RETURNING id,permission_id,respondent_id,created_at`,
+		permID, respondentID,
+	).Scan(&ar.ID, &ar.PermissionID, &ar.RespondentID, &ar.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return ar, err
+}
+
+// RemoveViewerAllowedRespondent menghapus satu responden dari daftar yang diizinkan.
+func (s *Store) RemoveViewerAllowedRespondent(ctx context.Context, id string) error {
+	ct, err := s.pool.Exec(ctx, `DELETE FROM viewer_allowed_respondents WHERE id=$1`, id)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// ListViewerAllowedRespondents mengembalikan semua responden yang diizinkan (dengan join email/nama).
+func (s *Store) ListViewerAllowedRespondents(ctx context.Context, permID string) ([]models.ViewerAllowedRespondent, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT ar.id, ar.permission_id, ar.respondent_id, r.email, r.name, ar.created_at
+		 FROM viewer_allowed_respondents ar
+		 JOIN respondents r ON r.id=ar.respondent_id
+		 WHERE ar.permission_id=$1
+		 ORDER BY r.name`, permID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []models.ViewerAllowedRespondent
+	for rows.Next() {
+		ar := models.ViewerAllowedRespondent{}
+		if err := rows.Scan(&ar.ID, &ar.PermissionID, &ar.RespondentID, &ar.Email, &ar.Name, &ar.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, ar)
+	}
+	if out == nil {
+		out = []models.ViewerAllowedRespondent{}
+	}
+	return out, rows.Err()
+}
+
+// ListFormRespondents mengembalikan semua responden yang pernah mengirim jawaban ke kuesioner ini.
+func (s *Store) ListFormRespondents(ctx context.Context, formID string) ([]models.Respondent, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT DISTINCT r.id, r.google_id, r.email, r.name, r.picture, r.created_at, r.updated_at
+		 FROM respondents r
+		 JOIN form_responses fr ON fr.respondent_id=r.id
+		 WHERE fr.form_id=$1 AND fr.status='submitted'
+		 ORDER BY r.name`, formID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []models.Respondent
+	for rows.Next() {
+		r := models.Respondent{}
+		if err := rows.Scan(&r.ID, &r.GoogleID, &r.Email, &r.Name, &r.Picture, &r.CreatedAt, &r.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	if out == nil {
+		out = []models.Respondent{}
+	}
+	return out, rows.Err()
+}
+
+// ListViewerResponses mengembalikan jawaban yang boleh dilihat viewer (hanya status='submitted').
+// Jika respondent_access='selected', hanya tampilkan responden dalam daftar yang diizinkan.
+func (s *Store) ListViewerResponses(ctx context.Context, viewerID, formID string, f ResponseFilter, limit, offset int) ([]models.Response, error) {
+	perm, err := s.GetViewerPermission(ctx, viewerID, formID)
+	if err != nil {
+		return nil, err
+	}
+	if limit <= 0 || limit > 1000 {
+		limit = 50
+	}
+
+	sortDir := "DESC"
+	if f.SortDir == "asc" {
+		sortDir = "ASC"
+	}
+	sortCol := map[string]string{
+		"waktu": "submitted_at",
+		"share": "share_id",
+		"who":   "meta->>'name'",
+	}[f.SortBy]
+	if sortCol == "" {
+		sortCol = "submitted_at"
+	}
+
+	where, wArgs := buildResponseWhere(f)
+	args := append([]any{formID}, wArgs...)
+
+	// Gunakan subquery agar tidak perlu manajemen array UUID
+	respondentClause := ""
+	if perm.RespondentAccess == "selected" {
+		n := len(args) + 1 // $1=formID, $2..wArgs, $n=permID
+		respondentClause = fmt.Sprintf(
+			" AND respondent_id IN (SELECT respondent_id FROM viewer_allowed_respondents WHERE permission_id=$%d)", n)
+		args = append(args, perm.ID)
+	}
+
+	args = append(args, limit, offset)
+	limitN, offsetN := len(args)-1, len(args)
+
+	q := fmt.Sprintf(`
+		SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at
+		FROM form_responses
+		WHERE form_id=$1 AND status='submitted'%s%s
+		ORDER BY %s %s NULLS LAST
+		LIMIT $%d OFFSET $%d`,
+		where, respondentClause, sortCol, sortDir, limitN, offsetN)
+
+	rows, err := s.pool.Query(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []models.Response
+	for rows.Next() {
+		r := models.Response{}
+		if err := rows.Scan(&r.ID, &r.FormID, &r.ShareID, &r.RespondentID, &r.Status, &r.Answers, &r.Meta, &r.SubmittedAt); err != nil {
+			return nil, err
+		}
+		r.Answers = maskAnswers(r.Answers, perm.VisibleFields)
+		out = append(out, r)
+	}
+	if out == nil {
+		out = []models.Response{}
+	}
+	return out, rows.Err()
+}
+
+// CountViewerResponses menghitung jawaban yang boleh dilihat viewer.
+func (s *Store) CountViewerResponses(ctx context.Context, viewerID, formID string, f ResponseFilter) (int64, error) {
+	perm, err := s.GetViewerPermission(ctx, viewerID, formID)
+	if err != nil {
+		return 0, err
+	}
+
+	where, wArgs := buildResponseWhere(f)
+	args := append([]any{formID}, wArgs...)
+
+	respondentClause := ""
+	if perm.RespondentAccess == "selected" {
+		n := len(args) + 1
+		respondentClause = fmt.Sprintf(
+			" AND respondent_id IN (SELECT respondent_id FROM viewer_allowed_respondents WHERE permission_id=$%d)", n)
+		args = append(args, perm.ID)
+	}
+
+	var n int64
+	err = s.pool.QueryRow(ctx, fmt.Sprintf(`
+		SELECT count(*) FROM form_responses
+		WHERE form_id=$1 AND status='submitted'%s%s`,
+		where, respondentClause),
+		args...,
+	).Scan(&n)
+	return n, err
+}
+
+// maskAnswers menyaring kunci answers JSONB agar hanya field yang diizinkan terlihat.
+func maskAnswers(raw json.RawMessage, visible []string) json.RawMessage {
+	if len(visible) == 0 {
+		return raw
+	}
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return raw
+	}
+	allowed := make(map[string]bool, len(visible))
+	for _, f := range visible {
+		allowed[f] = true
+	}
+	out := make(map[string]json.RawMessage, len(visible))
+	for k, v := range m {
+		if allowed[k] {
+			out[k] = v
+		}
+	}
+	b, _ := json.Marshal(out)
+	return b
+}
+
 /* ---------------- wilayah ---------------- */
 
 // GetWilayahByParent mengembalikan daftar wilayah anak dari kodeParent.

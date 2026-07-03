@@ -11,6 +11,7 @@
   <h1>eForm · Dashboard</h1>
   <span class="who" id="who"></span>
   <button class="btn primary" onclick="location.href='/builder'">+ Kuesioner baru</button>
+  <button class="btn" id="btnViewerMgmt" hidden>Kelola Viewer</button>
   <button class="btn" id="logout">Keluar</button>
 </header>
 <main>
@@ -19,6 +20,7 @@
   <tbody id="rows"><tr><td colspan="5" class="empty">Memuat…</td></tr></tbody></table>
 </main>
 
+<!-- Dialog share (tidak berubah) -->
 <dialog id="shareDlg">
   <div class="dlg-h" style="justify-content:space-between"><span>Bagikan kuesioner</span><button class="btn" onclick="shareDlg.close()">✕</button></div>
   <div class="dlg-b">
@@ -42,6 +44,97 @@
     <div class="row"><input id="sharePw" type="text" placeholder="Password (opsional)" style="flex:1"></div>
     <button class="btn primary" id="makeShare">Buat tautan share</button>
     <div id="shareList" style="margin-top:14px"></div>
+  </div>
+</dialog>
+
+<!-- Dialog kelola viewer (superadmin) -->
+<dialog id="viewerMgmtDlg">
+  <div class="dlg-h" style="justify-content:space-between">
+    <span>Kelola Akun Viewer</span>
+    <button class="btn" onclick="viewerMgmtDlg.close()">✕</button>
+  </div>
+  <div class="dlg-b">
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
+      Viewer adalah pengguna yang hanya bisa melihat jawaban kuesioner yang diizinkan, tidak bisa membuat atau mengedit kuesioner.
+    </div>
+    <div class="row" style="gap:8px;flex-wrap:wrap">
+      <input id="vUsername" placeholder="Username viewer" style="flex:1;min-width:120px">
+      <input id="vEmail" type="email" placeholder="Email (opsional)" style="flex:1;min-width:120px">
+      <input id="vPassword" type="password" placeholder="Password (min 6 karakter)" style="flex:1;min-width:140px">
+      <button class="btn primary" onclick="createViewer()">+ Buat Viewer</button>
+    </div>
+    <div id="viewerList" style="margin-top:12px">Memuat…</div>
+  </div>
+</dialog>
+
+<!-- Dialog akses viewer per kuesioner (superadmin) -->
+<dialog id="viewerPermDlg">
+  <div class="dlg-h" style="justify-content:space-between">
+    <span>Akses Viewer · <span id="vpFormTitle"></span></span>
+    <button class="btn" onclick="viewerPermDlg.close()">✕</button>
+  </div>
+  <div class="dlg-b">
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
+      Pilih viewer yang boleh melihat jawaban kuesioner ini dan konfigurasi batasan aksesnya.
+    </div>
+
+    <!-- Form tambah permission baru -->
+    <div style="border:1px solid var(--line);border-radius:var(--radius);padding:12px;margin-bottom:14px">
+      <div style="font-size:12px;font-weight:600;margin-bottom:8px">Tambah Viewer ke Kuesioner Ini</div>
+      <div class="row" style="gap:8px;flex-wrap:wrap;align-items:flex-start">
+        <select id="vpViewerSel" style="flex:1;min-width:140px;font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:6px">
+          <option value="">— pilih viewer —</option>
+        </select>
+        <div style="flex:1;min-width:160px">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Akses responden</div>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:4px">
+            <input type="radio" name="vpRA" value="all" checked> Semua responden
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px">
+            <input type="radio" name="vpRA" value="selected"> Responden tertentu saja
+          </label>
+        </div>
+        <button class="btn primary" onclick="addViewerPermission()" style="align-self:flex-end">Tambahkan</button>
+      </div>
+    </div>
+
+    <!-- Daftar permission yang sudah ada -->
+    <div id="vpPermList">Memuat…</div>
+  </div>
+</dialog>
+
+<!-- Dialog konfigurasi detail satu permission (field visibility + respondents) -->
+<dialog id="vpDetailDlg">
+  <div class="dlg-h" style="justify-content:space-between">
+    <span>Konfigurasi Akses · <span id="vpdViewerName"></span></span>
+    <button class="btn" onclick="vpDetailDlg.close()">✕</button>
+  </div>
+  <div class="dlg-b">
+    <!-- Akses responden -->
+    <div style="font-size:12px;font-weight:600;margin-bottom:6px">Akses Responden</div>
+    <div class="row" style="gap:16px;margin-bottom:4px">
+      <label class="muted"><input type="radio" name="vpdRA" value="all"> Semua responden</label>
+      <label class="muted"><input type="radio" name="vpdRA" value="selected"> Responden tertentu saja</label>
+    </div>
+    <div id="vpdRespondentSection" style="display:none;border:1px solid var(--line);border-radius:6px;padding:10px;margin:8px 0">
+      <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px">Responden yang diizinkan</div>
+      <div id="vpdRespondentList" style="margin-bottom:8px;max-height:150px;overflow-y:auto"></div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Tambah dari responden yang sudah mengisi:</div>
+      <select id="vpdRespondentPicker" style="width:100%;font-size:12px;padding:5px 8px;border:1px solid var(--line);border-radius:6px">
+        <option value="">— pilih responden —</option>
+      </select>
+      <button class="btn" style="margin-top:6px;font-size:12px" onclick="addAllowedRespondent()">+ Tambah</button>
+    </div>
+
+    <!-- Field visibility -->
+    <div style="font-size:12px;font-weight:600;margin:12px 0 6px">Variabel yang Dapat Dilihat</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Centang variabel yang boleh dilihat viewer. Jika tidak ada yang dicentang, semua variabel terlihat.</div>
+    <div id="vpdFieldList" style="max-height:200px;overflow-y:auto;border:1px solid var(--line);border-radius:6px;padding:8px"></div>
+
+    <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn" onclick="vpDetailDlg.close()">Batal</button>
+      <button class="btn primary" onclick="savePermDetail()">Simpan</button>
+    </div>
   </div>
 </dialog>
 

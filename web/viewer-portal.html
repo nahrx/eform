@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portal Viewer · eForm BPS Kaltim</title>
+<style>
+:root{
+  --ink:#13171e;--ink-soft:#4a525e;--muted:#79828f;
+  --surface:#eef1f5;--panel:#fff;--panel-2:#f7f9fb;
+  --line:#dfe4ea;--line-2:#eef1f5;
+  --accent:#0e7490;--accent-ink:#0b5563;--accent-soft:#d6edf1;
+  --ok:#15803d;--ok-soft:#dcfce7;
+  --radius:10px;--radius-s:7px;
+  --shadow:0 1px 2px rgba(19,23,30,.06),0 8px 24px -16px rgba(19,23,30,.25);
+  --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Inter,sans-serif;
+}
+*{box-sizing:border-box}
+body{font-family:var(--sans);color:var(--ink);background:var(--surface);font-size:14px;line-height:1.5;margin:0;-webkit-font-smoothing:antialiased}
+header{display:flex;align-items:center;gap:10px;padding:12px 20px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+header h1{font-size:15px;font-weight:700;margin:0;flex:none}
+.who{font-size:12px;color:var(--muted);flex:1}
+.btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:7px 13px;border-radius:var(--radius-s);font-size:13px;font-weight:500;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:5px;transition:.12s}
+.btn:hover{border-color:#c6cdd6;background:var(--panel-2)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{background:var(--accent-ink)}
+main{max-width:900px;margin:32px auto;padding:0 20px}
+h2{font-size:16px;font-weight:700;margin:0 0 16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:12px}
+.card-title{font-weight:600;font-size:14px;line-height:1.35}
+.card-meta{font-size:11px;color:var(--muted);display:flex;flex-direction:column;gap:3px}
+.card-meta span{display:flex;align-items:center;gap:5px}
+.badge{display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent-ink)}
+.empty{color:var(--muted);font-size:13px;text-align:center;padding:40px}
+</style>
+</head>
+<body>
+<header>
+  <h1>eForm · Portal Viewer</h1>
+  <span class="who" id="who"></span>
+  <button class="btn" id="logout">Keluar</button>
+</header>
+<main>
+  <h2>Kuesioner yang Dapat Anda Akses</h2>
+  <div id="content"><div class="empty">Memuat…</div></div>
+</main>
+<script>
+const TOKEN=localStorage.getItem("eform_token");
+if(!TOKEN)location.replace("/login");
+const H={"Authorization":"Bearer "+TOKEN,"Content-Type":"application/json"};
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+async function api(path,opts={}){
+  const r=await fetch(path,{...opts,headers:{...H,...(opts.headers||{})}});
+  if(r.status===401){localStorage.removeItem("eform_token");location.replace("/login");throw new Error("sesi habis");}
+  const data=(r.headers.get("content-type")||"").includes("json")?await r.json():null;
+  if(!r.ok)throw new Error((data&&data.error)||("HTTP "+r.status));
+  return data;
+}
+
+(async()=>{
+  try{
+    const me=await api("/api/auth/me");
+    document.getElementById("who").textContent=me.username+" · Viewer";
+    // Jika bukan viewer, redirect ke admin
+    if(me.role!=="viewer")location.replace("/admin");
+  }catch{}
+  loadForms();
+})();
+
+async function loadForms(){
+  const el=document.getElementById("content");
+  try{
+    const {forms}=await api("/api/viewer/my-forms");
+    if(!forms||!forms.length){
+      el.innerHTML='<div class="empty">Belum ada kuesioner yang dapat diakses.<br>Hubungi administrator untuk mendapatkan akses.</div>';
+      return;
+    }
+    el.innerHTML=`<div class="grid">${forms.map(f=>`
+      <div class="card">
+        <div class="card-title">${esc(f.formTitle)}</div>
+        <div class="card-meta">
+          <span>
+            <span class="badge">${f.respondentAccess==="all"?"Semua Responden":"Responden Terpilih"}</span>
+          </span>
+          ${f.visibleFields&&f.visibleFields.length
+            ?`<span>Variabel: ${esc(f.visibleFields.slice(0,3).join(", "))}${f.visibleFields.length>3?` +${f.visibleFields.length-3} lainnya`:""}</span>`
+            :`<span>Semua variabel terlihat</span>`}
+        </div>
+        <div>
+          <a class="btn primary" href="/viewer-responses?id=${esc(f.formId)}" style="width:100%;justify-content:center">
+            Lihat Jawaban →
+          </a>
+        </div>
+      </div>`).join("")}
+    </div>`;
+  }catch(e){
+    el.innerHTML=`<div class="empty">Gagal memuat: ${esc(e.message)}</div>`;
+  }
+}
+
+document.getElementById("logout").addEventListener("click",()=>{
+  localStorage.removeItem("eform_token");localStorage.removeItem("eform_user");
+  location.replace("/login");
+});
+</script>
+</body>
+</html>

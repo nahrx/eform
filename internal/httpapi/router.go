@@ -44,6 +44,29 @@ func (s *Server) Routes() http.Handler {
 	mux.Handle("POST /api/users", s.authMW(s.requireRole(s.createUser, "superadmin")))
 	mux.Handle("GET /api/users", s.authMW(s.requireRole(s.listUsers, "superadmin")))
 
+	// --- viewers (superadmin kelola akun viewer) ---
+	mux.Handle("POST /api/viewers", s.authMW(s.requireRole(s.createViewer, "superadmin")))
+	mux.Handle("GET /api/viewers", s.authMW(s.requireRole(s.listViewers, "superadmin")))
+	mux.Handle("DELETE /api/viewers/{id}", s.authMW(s.requireRole(s.deleteViewer, "superadmin")))
+
+	// --- viewer permissions per form (superadmin) ---
+	mux.Handle("POST /api/forms/{id}/viewer-permissions", s.authMW(s.requireRole(s.createViewerPermission, "superadmin")))
+	mux.Handle("GET /api/forms/{id}/viewer-permissions", s.authMW(s.requireRole(s.listFormViewerPermissions, "superadmin")))
+	mux.Handle("GET /api/viewer-permissions/{permId}", s.authMW(s.requireRole(s.getViewerPermission, "superadmin")))
+	mux.Handle("PUT /api/viewer-permissions/{permId}", s.authMW(s.requireRole(s.updateViewerPermission, "superadmin")))
+	mux.Handle("DELETE /api/viewer-permissions/{permId}", s.authMW(s.requireRole(s.deleteViewerPermission, "superadmin")))
+
+	// --- allowed respondents per permission (superadmin) ---
+	mux.Handle("GET /api/viewer-permissions/{permId}/respondents", s.authMW(s.requireRole(s.listViewerAllowedRespondents, "superadmin")))
+	mux.Handle("POST /api/viewer-permissions/{permId}/respondents", s.authMW(s.requireRole(s.addViewerAllowedRespondent, "superadmin")))
+	mux.Handle("DELETE /api/viewer-respondents/{id}", s.authMW(s.requireRole(s.removeViewerAllowedRespondent, "superadmin")))
+	mux.Handle("GET /api/forms/{id}/respondents", s.authMW(s.requireRole(s.listFormRespondents, "superadmin")))
+
+	// --- viewer portal (akses viewer yang sudah login) ---
+	mux.Handle("GET /api/viewer/my-forms", s.authMW(s.requireRole(s.viewerMyForms, "viewer")))
+	mux.Handle("GET /api/viewer/forms/{id}/permission", s.authMW(s.requireRole(s.viewerMyFormPermission, "viewer")))
+	mux.Handle("GET /api/viewer/forms/{id}/responses", s.authMW(s.requireRole(s.viewerListResponses, "viewer")))
+
 	// --- publik: data referensi (tanpa login) ---
 	mux.HandleFunc("GET /api/wilayah", s.wilayahList)
 
@@ -69,8 +92,10 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /admin", s.page("admin.html"))
 	mux.HandleFunc("GET /builder", s.page("builder.html"))
 	mux.HandleFunc("GET /f/{token}", s.page("public.html"))       // halaman isi kuesioner publik
-	mux.HandleFunc("GET /responses", s.page("responses.html"))         // halaman daftar jawaban
-	mux.HandleFunc("GET /response-view", s.page("response-view.html")) // halaman lihat detail jawaban
+	mux.HandleFunc("GET /responses", s.page("responses.html"))           // halaman daftar jawaban
+	mux.HandleFunc("GET /response-view", s.page("response-view.html"))  // halaman lihat detail jawaban
+	mux.HandleFunc("GET /viewer-portal", s.page("viewer-portal.html"))  // portal viewer
+	mux.HandleFunc("GET /viewer-responses", s.page("viewer-responses.html")) // jawaban terbatas viewer
 	mux.HandleFunc("GET /auth/google/done", s.page("google-done.html")) // landing setelah OAuth
 
 	// aset statis tiap halaman (CSS/JS terpisah dari HTML)

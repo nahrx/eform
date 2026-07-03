@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jawaban · eForm Viewer</title>
+<style>
+:root{
+  --ink:#13171e;--ink-soft:#4a525e;--muted:#79828f;
+  --surface:#eef1f5;--panel:#fff;--panel-2:#f7f9fb;
+  --line:#dfe4ea;--line-2:#eef1f5;
+  --accent:#0e7490;--accent-ink:#0b5563;--accent-soft:#d6edf1;
+  --ok:#15803d;--ok-soft:#dcfce7;
+  --radius:10px;--radius-s:7px;
+  --shadow:0 1px 2px rgba(19,23,30,.06),0 8px 24px -16px rgba(19,23,30,.25);
+  --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Inter,sans-serif;
+  --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font-family:var(--sans);color:var(--ink);background:var(--surface);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
+button{font-family:inherit;cursor:pointer}
+input,select{font-family:inherit}
+.shell{display:flex;flex-direction:column;height:100vh}
+.topbar{display:flex;align-items:center;gap:8px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line);flex:none;flex-wrap:wrap}
+.form-title{font-weight:600;font-size:15px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:120px}
+.count-badge{font-family:var(--mono);font-size:11px;color:var(--accent);background:var(--accent-soft);padding:3px 9px;border-radius:999px;white-space:nowrap;flex:none}
+.btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:7px 12px;border-radius:var(--radius-s);font-size:13px;font-weight:500;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:5px;transition:.12s;white-space:nowrap}
+.btn:hover{border-color:#c6cdd6;background:var(--panel-2)}
+.btn-sm{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:4px 9px;border-radius:5px;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap}
+.btn-sm:hover:not([disabled]){background:var(--panel-2)}
+.filter-bar{display:flex;align-items:center;gap:8px;padding:9px 20px;background:var(--panel-2);border-bottom:1px solid var(--line);flex:none;flex-wrap:wrap}
+.filter-lbl{font-size:12px;color:var(--muted);font-weight:500;white-space:nowrap}
+.filter-search{font-size:12.5px;padding:5px 10px;border:1px solid var(--line);border-radius:var(--radius-s);background:var(--panel);color:var(--ink);width:200px}
+.filter-search:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
+.filter-search::placeholder{color:var(--muted)}
+.tbl-outer{flex:1;overflow:auto;padding:18px 20px}
+.tbl-wrap{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:auto}
+table.resp-tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:500px}
+.resp-tbl th{background:var(--panel-2);font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;padding:10px 13px;border-bottom:1px solid var(--line);white-space:nowrap;text-align:left}
+.resp-tbl th.sortable{cursor:pointer;user-select:none}
+.resp-tbl th.sortable:hover{color:var(--ink-soft)}
+.resp-tbl th.sort-active{color:var(--accent-ink)}
+.sort-ic{margin-left:3px;font-size:10px;opacity:.35}
+.resp-tbl th.sort-active .sort-ic{opacity:1}
+.resp-tbl td{padding:9px 13px;border-bottom:1px solid var(--line-2);vertical-align:middle}
+.resp-tbl tbody tr:last-child td{border-bottom:none}
+.resp-tbl tbody tr:hover td{background:var(--panel-2)}
+.resp-tbl .td-num{font-family:var(--mono);font-size:12px;color:var(--muted);width:48px}
+.resp-tbl .td-who{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.resp-tbl .td-time{white-space:nowrap;font-size:12px;color:var(--muted)}
+.resp-tbl .td-val{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;color:var(--ink-soft)}
+.tbl-foot{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);background:var(--panel-2)}
+.loading,.empty-state{padding:32px;text-align:center;color:var(--muted);font-size:13px}
+.notice{background:var(--accent-soft);color:var(--accent-ink);font-size:12px;padding:6px 12px;border-radius:var(--radius-s);flex:none}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header class="topbar">
+    <a class="btn" href="/viewer-portal">← Portal</a>
+    <span class="form-title" id="formTitle">Memuat…</span>
+    <span class="count-badge" id="countBadge" hidden></span>
+    <span class="notice" id="accessNotice" hidden></span>
+  </header>
+
+  <div class="filter-bar">
+    <span class="filter-lbl">Cari</span>
+    <input class="filter-search" id="fSearch" placeholder="Cari nama / email…" oninput="onSearchDebounce()">
+  </div>
+
+  <div class="tbl-outer">
+    <div class="tbl-wrap" id="tblWrap">
+      <div class="loading">Memuat…</div>
+    </div>
+  </div>
+</div>
+<script>
+const TOKEN=localStorage.getItem("eform_token");
+if(!TOKEN)location.replace("/login");
+const FORM_ID=new URLSearchParams(location.search).get("id");
+if(!FORM_ID)location.replace("/viewer-portal");
+
+const H={"Authorization":"Bearer "+TOKEN,"Content-Type":"application/json"};
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const txt=v=>v==null?"":(typeof v==="object"?(v.id||Object.values(v)[0]||""):String(v));
+
+let SCHEMA=null, PERM=null, RESPONSES=[], TOTAL=0, PAGE=0;
+const PAGE_SIZE=50;
+let SORT_BY="waktu", SORT_DIR="desc";
+let FILTER_SEARCH="";
+let _searchTimer=null;
+
+async function api(path,opts={}){
+  const r=await fetch(path,{...opts,headers:{...H,...(opts.headers||{})}});
+  if(r.status===401){localStorage.removeItem("eform_token");location.replace("/login");throw new Error("sesi habis");}
+  const data=(r.headers.get("content-type")||"").includes("json")?await r.json():null;
+  if(!r.ok)throw new Error((data&&data.error)||("HTTP "+r.status));
+  return data;
+}
+
+async function init(){
+  try{
+    // Cek role
+    const me=await api("/api/auth/me");
+    if(me.role!=="viewer")location.replace("/admin");
+
+    // Muat permission dan schema secara paralel
+    const [perm,form]=await Promise.all([
+      api("/api/viewer/forms/"+FORM_ID+"/permission"),
+      api("/api/forms/"+FORM_ID)
+    ]);
+    PERM=perm; SCHEMA=form.schema;
+
+    document.title="Jawaban · "+(form.title||"Kuesioner");
+    document.getElementById("formTitle").textContent=form.title||"Kuesioner";
+
+    // Tampilkan info akses
+    const notice=document.getElementById("accessNotice");
+    notice.hidden=false;
+    const fields=PERM.visibleFields&&PERM.visibleFields.length;
+    notice.textContent=`Akses: ${PERM.respondentAccess==="all"?"semua responden":"responden terpilih"}`+
+      (fields?` · ${PERM.visibleFields.length} variabel`:" · semua variabel");
+
+    await loadPage(0);
+  }catch(e){
+    document.getElementById("formTitle").textContent="Gagal memuat: "+e.message;
+    if(e.message.includes("403")||e.message.includes("akses"))
+      document.getElementById("tblWrap").innerHTML='<div class="empty-state">Anda tidak memiliki akses ke kuesioner ini.</div>';
+  }
+}
+
+function onSearchDebounce(){
+  clearTimeout(_searchTimer);
+  _searchTimer=setTimeout(()=>{
+    FILTER_SEARCH=document.getElementById("fSearch").value.trim();
+    loadPage(0);
+  },350);
+}
+
+function toggleSort(col){
+  if(SORT_BY===col)SORT_DIR=SORT_DIR==="asc"?"desc":"asc";
+  else{SORT_BY=col;SORT_DIR=col==="waktu"?"desc":"asc";}
+  loadPage(0);
+}
+
+async function loadPage(page){
+  PAGE=page;
+  document.getElementById("tblWrap").innerHTML='<div class="loading">Memuat…</div>';
+  try{
+    const params=new URLSearchParams({limit:PAGE_SIZE,offset:PAGE*PAGE_SIZE,sortBy:SORT_BY,sortDir:SORT_DIR});
+    if(FILTER_SEARCH)params.set("search",FILTER_SEARCH);
+    const data=await api("/api/viewer/forms/"+FORM_ID+"/responses?"+params);
+    RESPONSES=data.responses||[];
+    TOTAL=data.total||0;
+
+    const badge=document.getElementById("countBadge");
+    badge.textContent=TOTAL+" jawaban"+(FILTER_SEARCH?" (difilter)":"");
+    badge.hidden=false;
+    renderTable();
+  }catch(e){
+    document.getElementById("tblWrap").innerHTML=`<div class="empty-state">${esc(e.message)}</div>`;
+  }
+}
+
+/* ---- field schema helper ---- */
+function findField(schema,name){
+  let found=null;
+  function walk(comps){
+    for(const c of comps||[]){
+      if(c.kind==="field"&&c.name===name){found=c;return;}
+      if(c.components)walk(c.components);
+    }
+  }
+  for(const p of schema?.pages||[])if(!found)walk(p.components||[]);
+  return found;
+}
+
+function getOptionLabel(c,val){
+  if(c.optionsRef&&SCHEMA){
+    const t=(SCHEMA.referenceData||{})[c.optionsRef];
+    if(t&&t.items){const item=t.items.find(it=>String(it.code)===String(val));if(item)return txt(item.label);}
+  }
+  if(c.options){const opt=c.options.find(o=>String(o.value)===String(val));if(opt)return txt(opt.label)||String(val);}
+  return String(val);
+}
+
+function formatFieldValue(c,val){
+  if(val==null||val==="")return"";
+  if(Array.isArray(val)){if(!val.length)return"";return val.map(v=>getOptionLabel(c,v)).join(", ");}
+  if(c.type==="boolean")return(val==="true"||val===true)?"Ya":"Tidak";
+  if(c.type==="select"||c.type==="radio")return getOptionLabel(c,val);
+  return String(val);
+}
+
+function parseAnswers(raw){
+  try{return typeof raw==="string"?JSON.parse(raw):(raw||{});}catch{return{};}
+}
+
+function formatDate(iso){
+  if(!iso||iso==="0001-01-01T00:00:00Z")return"—";
+  return new Date(iso).toLocaleString("id-ID",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});
+}
+
+function sortTh(col,label,cls){
+  const active=SORT_BY===col;
+  const ic=active?(SORT_DIR==="asc"?"↑":"↓"):"↕";
+  return`<th class="sortable${active?" sort-active":""}${cls?" "+cls:""}" onclick="toggleSort('${col}')">${label}<span class="sort-ic">${ic}</span></th>`;
+}
+
+function renderTable(){
+  // Tentukan kolom field yang tampil: visibleFields jika diset, else semua field di answers[0]
+  let visibleCols=PERM.visibleFields&&PERM.visibleFields.length?PERM.visibleFields:[];
+  if(!visibleCols.length&&RESPONSES.length){
+    // Inferensi dari kunci answers respons pertama
+    const sample=parseAnswers(RESPONSES[0].answers);
+    visibleCols=Object.keys(sample).slice(0,8);
+  }
+
+  if(!RESPONSES.length){
+    document.getElementById("tblWrap").innerHTML=
+      `<div class="empty-state">${FILTER_SEARCH?"Tidak ada jawaban yang cocok dengan pencarian.":"Belum ada jawaban."}</div>`;
+    return;
+  }
+
+  // Buat header kolom field
+  const extraTh=visibleCols.map(name=>{
+    const f=findField(SCHEMA,name);
+    const label=f?(typeof f.label==="string"?f.label:(f.label?.id||name)):name;
+    return`<th class="td-val">${esc(label)}</th>`;
+  }).join("");
+
+  let html=`<table class="resp-tbl"><thead><tr>
+    <th class="td-num">#</th>
+    ${sortTh("who","Responden","td-who")}
+    ${sortTh("waktu","Waktu","td-time")}
+    ${extraTh}
+  </tr></thead><tbody>`;
+
+  RESPONSES.forEach((resp,i)=>{
+    const num=PAGE*PAGE_SIZE+i+1;
+    const answers=parseAnswers(resp.answers);
+    const meta=parseAnswers(resp.meta);
+    const who=meta.name
+      ?`${esc(meta.name)}<br><span style="font-size:11px;color:var(--muted)">${esc(meta.email||"")}</span>`
+      :esc(meta.email||"—");
+    const waktu=formatDate(resp.submittedAt);
+    const extraVals=visibleCols.map(name=>{
+      const c=findField(SCHEMA,name);
+      const raw=answers[name];
+      const display=c?formatFieldValue(c,raw):txt(raw);
+      return`<td class="td-val" title="${esc(display)}">${esc(display)}</td>`;
+    }).join("");
+
+    html+=`<tr>
+      <td class="td-num">${num}</td>
+      <td class="td-who">${who}</td>
+      <td class="td-time">${waktu}</td>
+      ${extraVals}
+    </tr>`;
+  });
+
+  html+=`</tbody></table>`;
+
+  // Footer paginasi
+  const totalPages=Math.ceil(TOTAL/PAGE_SIZE);
+  const footer=`<div class="tbl-foot">
+    <div>${(PAGE*PAGE_SIZE+1)}–${Math.min((PAGE+1)*PAGE_SIZE,TOTAL)} dari ${TOTAL}</div>
+    <div style="display:flex;gap:6px">
+      <button class="btn-sm" onclick="loadPage(${PAGE-1})" ${PAGE===0?"disabled":""}>← Sebelumnya</button>
+      <button class="btn-sm" onclick="loadPage(${PAGE+1})" ${PAGE>=totalPages-1?"disabled":""}>Berikutnya →</button>
+    </div>
+  </div>`;
+
+  document.getElementById("tblWrap").innerHTML=html+footer;
+}
+
+init();
+</script>
+</body>
+</html>

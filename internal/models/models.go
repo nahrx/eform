@@ -89,3 +89,28 @@ type Respondent struct {
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
+
+// ViewerFormPermission menyimpan hak akses seorang viewer ke satu kuesioner.
+type ViewerFormPermission struct {
+	ID               string    `json:"id"`
+	ViewerID         string    `json:"viewerId"`
+	FormID           string    `json:"formId"`
+	RespondentAccess string    `json:"respondentAccess"` // 'all' | 'selected'
+	VisibleFields    []string  `json:"visibleFields"`    // nil = semua field
+	CreatedBy        *string   `json:"createdBy,omitempty"`
+	CreatedAt        time.Time `json:"createdAt"`
+	// Diisi saat listing (join)
+	ViewerUsername string `json:"viewerUsername,omitempty"`
+	FormTitle      string `json:"formTitle,omitempty"`
+	AllowedCount   int    `json:"allowedCount,omitempty"`
+}
+
+// ViewerAllowedRespondent adalah satu responden yang diizinkan dalam mode 'selected'.
+type ViewerAllowedRespondent struct {
+	ID           string    `json:"id"`
+	PermissionID string    `json:"permissionId"`
+	RespondentID string    `json:"respondentId"`
+	Email        string    `json:"email,omitempty"`
+	Name         string    `json:"name,omitempty"`
+	CreatedAt    time.Time `json:"createdAt"`
+}

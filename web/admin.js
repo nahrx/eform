@@ -12,8 +12,17 @@ async function api(path,opts={}){
   return data;
 }
 
+let MY_ROLE="admin";
 (async()=>{
-  try{const me=await api("/api/auth/me");$("#who").textContent=me.username+" · "+me.role;}catch(e){}
+  try{
+    const me=await api("/api/auth/me");
+    MY_ROLE=me.role||"admin";
+    $("#who").textContent=me.username+" · "+me.role;
+    if(MY_ROLE==="superadmin"){
+      $("#btnViewerMgmt").hidden=false;
+      $("#btnViewerMgmt").addEventListener("click",openViewerMgmt);
+    }
+  }catch(e){}
   load();
 })();
 
@@ -33,6 +42,7 @@ async function load(){
         <button class="btn" onclick="togglePub('${f.id}','${f.status}')">${f.status==="published"?"Tarik":"Publikasikan"}</button>
         <button class="btn" onclick="openShare('${f.id}','${esc(f.title)}','${f.status}')">Bagikan</button>
         <button class="btn" onclick="location.href='/responses?id=${f.id}'">Jawaban${counts[i]>0?` (${counts[i]})`:""}</button>
+        ${MY_ROLE==="superadmin"?`<button class="btn" onclick="openViewerPerm('${f.id}','${esc(f.title)}')">Akses Viewer</button>`:""}
         <button class="btn danger" onclick="del('${f.id}','${esc(f.title)}')" ${counts[i]>0?'disabled title="Tidak dapat dihapus karena sudah ada jawaban"':""}>Hapus</button>
       </div></td></tr>`).join("");
   }catch(e){ $("#rows").innerHTML=`<tr><td colspan="5" class="empty">${esc(e.message)}</td></tr>`; }
@@ -267,3 +277,243 @@ $("#makeShare").addEventListener("click",async()=>{
 
 $("#logout").addEventListener("click",()=>{localStorage.removeItem("eform_token");localStorage.removeItem("eform_user");location.replace("/login");});
 $("#refresh").addEventListener("click",load);
+
+/* ======================================================
+   VIEWER MANAGEMENT (superadmin)
+   ====================================================== */
+
+// --- Dialog kelola akun viewer ---
+async function openViewerMgmt(){
+  viewerMgmtDlg.showModal();
+  await refreshViewerList();
+}
+
+async function refreshViewerList(){
+  const el=document.getElementById("viewerList");
+  el.textContent="Memuat…";
+  try{
+    const {viewers}=await api("/api/viewers");
+    if(!viewers.length){el.innerHTML='<div class="muted" style="font-size:13px">Belum ada viewer.</div>';return;}
+    el.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="background:var(--surface)">
+        <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)">Username</th>
+        <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)">Email</th>
+        <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)">Status</th>
+        <th style="padding:6px 8px;border-bottom:1px solid var(--line)"></th>
+      </tr></thead>
+      <tbody>${viewers.map(v=>`<tr>
+        <td style="padding:6px 8px;border-bottom:1px solid var(--line-2)">${esc(v.username)}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid var(--line-2);color:var(--muted)">${esc(v.email||"—")}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid var(--line-2)"><span class="tag ${v.isActive?"published":"archived"}">${v.isActive?"Aktif":"Nonaktif"}</span></td>
+        <td style="padding:6px 8px;border-bottom:1px solid var(--line-2);text-align:right">
+          <button class="btn danger" style="font-size:12px;padding:3px 8px" onclick="deleteViewer('${v.id}','${esc(v.username)}')">Hapus</button>
+        </td>
+      </tr>`).join("")}</tbody>
+    </table>`;
+  }catch(e){el.textContent="Gagal: "+e.message;}
+}
+
+async function createViewer(){
+  const username=document.getElementById("vUsername").value.trim();
+  const email=document.getElementById("vEmail").value.trim();
+  const password=document.getElementById("vPassword").value;
+  if(!username||!password){alert("Username dan password wajib diisi");return;}
+  try{
+    await api("/api/viewers",{method:"POST",body:JSON.stringify({username,email,password})});
+    document.getElementById("vUsername").value="";
+    document.getElementById("vEmail").value="";
+    document.getElementById("vPassword").value="";
+    await refreshViewerList();
+  }catch(e){alert("Gagal: "+e.message);}
+}
+
+async function deleteViewer(id,name){
+  if(!confirm(`Hapus viewer "${name}"? Semua akses kuesioner viewer ini akan ikut dihapus.`))return;
+  try{await api("/api/viewers/"+id,{method:"DELETE"});await refreshViewerList();}
+  catch(e){alert("Gagal: "+e.message);}
+}
+
+// --- Dialog akses viewer per kuesioner ---
+let _vpFormId=null, _vpFormSchema=null;
+async function openViewerPerm(formId,formTitle){
+  _vpFormId=formId;
+  document.getElementById("vpFormTitle").textContent=formTitle;
+  viewerPermDlg.showModal();
+  // Isi dropdown pilih viewer
+  try{
+    const {viewers}=await api("/api/viewers");
+    const sel=document.getElementById("vpViewerSel");
+    sel.innerHTML=`<option value="">— pilih viewer —</option>`+
+      viewers.map(v=>`<option value="${esc(v.id)}">${esc(v.username)}</option>`).join("");
+  }catch{}
+  await refreshVpPermList();
+}
+
+async function refreshVpPermList(){
+  const el=document.getElementById("vpPermList");
+  el.textContent="Memuat…";
+  try{
+    const {permissions}=await api("/api/forms/"+_vpFormId+"/viewer-permissions");
+    if(!permissions.length){el.innerHTML='<div class="muted" style="font-size:13px">Belum ada viewer yang ditambahkan.</div>';return;}
+    el.innerHTML=permissions.map(p=>`
+      <div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <div style="flex:1;min-width:120px">
+          <b>${esc(p.viewerUsername)}</b>
+          <div style="font-size:11px;color:var(--muted)">
+            ${p.respondentAccess==="all"?"Semua responden":`${p.allowedCount} responden dipilih`}
+            · ${p.visibleFields&&p.visibleFields.length?p.visibleFields.length+" variabel":"Semua variabel"}
+          </div>
+        </div>
+        <div class="acts">
+          <button class="btn" style="font-size:12px" onclick="openVpDetail('${p.id}','${esc(p.viewerUsername)}','${p.formId}')">Konfigurasi</button>
+          <button class="btn danger" style="font-size:12px" onclick="removeViewerPerm('${p.id}','${esc(p.viewerUsername)}')">Hapus</button>
+        </div>
+      </div>`).join("");
+  }catch(e){el.textContent="Gagal: "+e.message;}
+}
+
+async function addViewerPermission(){
+  const viewerId=document.getElementById("vpViewerSel").value;
+  const respondentAccess=document.querySelector("input[name='vpRA']:checked")?.value||"all";
+  if(!viewerId){alert("Pilih viewer terlebih dahulu");return;}
+  try{
+    await api("/api/forms/"+_vpFormId+"/viewer-permissions",{
+      method:"POST",body:JSON.stringify({viewerId,respondentAccess,visibleFields:[]})
+    });
+    document.getElementById("vpViewerSel").value="";
+    document.querySelector("input[name='vpRA'][value='all']").checked=true;
+    await refreshVpPermList();
+  }catch(e){alert("Gagal: "+e.message);}
+}
+
+async function removeViewerPerm(permId,viewerName){
+  if(!confirm(`Cabut akses "${viewerName}" dari kuesioner ini?`))return;
+  try{await api("/api/viewer-permissions/"+permId,{method:"DELETE"});await refreshVpPermList();}
+  catch(e){alert("Gagal: "+e.message);}
+}
+
+// --- Dialog konfigurasi detail (field visibility + respondents) ---
+let _vpdPermId=null, _vpdFormId=null;
+async function openVpDetail(permId,viewerName,formId){
+  _vpdPermId=permId; _vpdFormId=formId;
+  document.getElementById("vpdViewerName").textContent=viewerName;
+
+  try{
+    // Load semua data yang dibutuhkan secara paralel
+    const [curPerm,allowedData,formData,respondentsData]=await Promise.all([
+      api("/api/viewer-permissions/"+permId),
+      api("/api/viewer-permissions/"+permId+"/respondents").catch(()=>({respondents:[]})),
+      api("/api/forms/"+formId),
+      api("/api/forms/"+formId+"/respondents").catch(()=>({respondents:[]}))
+    ]);
+    _vpFormSchema=formData.schema;
+
+    // Set radio akses responden
+    document.querySelector(`input[name='vpdRA'][value='${curPerm.respondentAccess}']`).checked=true;
+    toggleRespondentSection(curPerm.respondentAccess==="selected");
+
+    // Isi daftar field
+    buildVpdFieldList(formData.schema,curPerm.visibleFields||[]);
+
+    // Isi daftar allowed respondents
+    renderAllowedRespondents(allowedData.respondents||[]);
+
+    // Isi picker responden (hanya yang belum ditambahkan)
+    const picker=document.getElementById("vpdRespondentPicker");
+    const allowed=new Set((allowedData.respondents||[]).map(r=>r.respondentId));
+    picker.innerHTML=`<option value="">— pilih responden —</option>`+
+      (respondentsData.respondents||[]).filter(r=>!allowed.has(r.id)).map(r=>
+        `<option value="${esc(r.id)}">${esc(r.name||r.email||r.id)}</option>`).join("");
+
+    vpDetailDlg.showModal();
+  }catch(e){alert("Gagal memuat: "+e.message);}
+}
+
+document.querySelectorAll("input[name='vpdRA']").forEach(rb=>{
+  rb.addEventListener("change",()=>toggleRespondentSection(rb.value==="selected"));
+});
+
+function toggleRespondentSection(show){
+  document.getElementById("vpdRespondentSection").style.display=show?"block":"none";
+}
+
+function renderAllowedRespondents(list){
+  const el=document.getElementById("vpdRespondentList");
+  if(!list.length){el.innerHTML='<div class="muted" style="font-size:11px">Belum ada responden dipilih.</div>';return;}
+  el.innerHTML=list.map(r=>`
+    <div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px">
+      <span style="flex:1">${esc(r.name||r.email||r.respondentId)}</span>
+      <button class="btn danger" style="font-size:11px;padding:2px 6px" onclick="removeAllowedRespondent('${r.id}')">✕</button>
+    </div>`).join("");
+}
+
+async function addAllowedRespondent(){
+  const respondentId=document.getElementById("vpdRespondentPicker").value;
+  if(!respondentId)return;
+  try{
+    await api("/api/viewer-permissions/"+_vpdPermId+"/respondents",{
+      method:"POST",body:JSON.stringify({respondentId})
+    });
+    // Reload section
+    const [perm,formRespondents]=await Promise.all([
+      api("/api/viewer-permissions/"+_vpdPermId+"/respondents"),
+      api("/api/forms/"+_vpdFormId+"/respondents").catch(()=>({respondents:[]}))
+    ]);
+    renderAllowedRespondents(perm.respondents||[]);
+    const picker=document.getElementById("vpdRespondentPicker");
+    const allowed=new Set((perm.respondents||[]).map(r=>r.respondentId));
+    picker.innerHTML=`<option value="">— pilih responden —</option>`+
+      (formRespondents.respondents||[]).filter(r=>!allowed.has(r.id)).map(r=>
+        `<option value="${esc(r.id)}">${esc(r.name||r.email||r.id)}</option>`).join("");
+  }catch(e){alert("Gagal: "+e.message);}
+}
+
+async function removeAllowedRespondent(id){
+  try{
+    await api("/api/viewer-respondents/"+id,{method:"DELETE"});
+    const [perm,formRespondents]=await Promise.all([
+      api("/api/viewer-permissions/"+_vpdPermId+"/respondents"),
+      api("/api/forms/"+_vpdFormId+"/respondents").catch(()=>({respondents:[]}))
+    ]);
+    renderAllowedRespondents(perm.respondents||[]);
+    const picker=document.getElementById("vpdRespondentPicker");
+    const allowed=new Set((perm.respondents||[]).map(r=>r.respondentId));
+    picker.innerHTML=`<option value="">— pilih responden —</option>`+
+      (formRespondents.respondents||[]).filter(r=>!allowed.has(r.id)).map(r=>
+        `<option value="${esc(r.id)}">${esc(r.name||r.email||r.id)}</option>`).join("");
+  }catch(e){alert("Gagal: "+e.message);}
+}
+
+function buildVpdFieldList(schema,checked){
+  const el=document.getElementById("vpdFieldList");
+  const fields=[];
+  function walk(comps){
+    for(const c of comps||[]){
+      if(c.kind==="field"&&c.name&&c.type!=="note"&&c.type!=="hidden"&&c.type!=="markdown")
+        fields.push({name:c.name,label:typeof c.label==="string"?c.label:(c.label?.id||c.name)});
+      else if(c.components)walk(c.components);
+    }
+  }
+  for(const p of schema?.pages||[])walk(p.components||[]);
+  if(!fields.length){el.innerHTML='<div class="muted" style="font-size:12px">Tidak ada variabel di kuesioner ini.</div>';return;}
+  el.innerHTML=fields.map(f=>`
+    <label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;cursor:pointer">
+      <input type="checkbox" value="${esc(f.name)}" ${checked.includes(f.name)||!checked.length?"checked":""}>
+      ${esc(f.label)}
+    </label>`).join("");
+}
+
+async function savePermDetail(){
+  const respondentAccess=document.querySelector("input[name='vpdRA']:checked")?.value||"all";
+  const checked=[...document.querySelectorAll("#vpdFieldList input:checked")].map(cb=>cb.value);
+  // Jika semua field dicek = tidak perlu filter (kirim array kosong = semua terlihat)
+  const total=document.querySelectorAll("#vpdFieldList input").length;
+  const visibleFields=checked.length===total?[]:checked;
+  try{
+    await api("/api/viewer-permissions/"+_vpdPermId,{
+      method:"PUT",body:JSON.stringify({respondentAccess,visibleFields})
+    });
+    vpDetailDlg.close();
+    await refreshVpPermList();
+  }catch(e){alert("Gagal menyimpan: "+e.message);}
+}
