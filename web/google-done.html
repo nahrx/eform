@@ -14,18 +14,32 @@ body{font-family:ui-sans-serif,system-ui,sans-serif;display:flex;align-items:cen
   const p=new URLSearchParams(location.search);
   const token=p.get("token");
   const next=p.get("next")||"/";
+  const type=p.get("type")||"";
   if(token){
-    localStorage.setItem("eform_resp_token",token);
-    // Decode payload JWT (base64url) untuk simpan info user tanpa server round-trip
-    try{
-      const payload=JSON.parse(atob(token.split(".")[1].replace(/-/g,"+").replace(/_/g,"/")));
-      localStorage.setItem("eform_resp_user",JSON.stringify({
-        id:payload.respondentId||payload.sub||"",
-        email:payload.email||"",
-        name:payload.name||"",
-        picture:payload.picture||""
-      }));
-    }catch(_){}
+    if(type==="viewer"){
+      // Token admin JWT — simpan sebagai eform_token (sama dengan token admin biasa)
+      localStorage.setItem("eform_token",token);
+      try{
+        const payload=JSON.parse(atob(token.split(".")[1].replace(/-/g,"+").replace(/_/g,"/")));
+        localStorage.setItem("eform_user",JSON.stringify({
+          id:payload.sub||"",
+          username:payload.username||payload.sub||"",
+          role:payload.role||"viewer"
+        }));
+      }catch(_){}
+    } else {
+      // Token respondent — simpan sebagai eform_resp_token
+      localStorage.setItem("eform_resp_token",token);
+      try{
+        const payload=JSON.parse(atob(token.split(".")[1].replace(/-/g,"+").replace(/_/g,"/")));
+        localStorage.setItem("eform_resp_user",JSON.stringify({
+          id:payload.respondentId||payload.sub||"",
+          email:payload.email||"",
+          name:payload.name||"",
+          picture:payload.picture||""
+        }));
+      }catch(_){}
+    }
   }
   location.replace(next);
 })();

@@ -11,54 +11,57 @@ import (
 	"strings"
 )
 
-// GET /auth/google?next=...
-// Redirect browser ke halaman login Google.
-func (s *Server) googleLogin(w http.ResponseWriter, r *http.Request) {
+// googleStartOAuth adalah helper bersama yang memulai alur OAuth Google.
+// mode: "" untuk responden, "viewer" untuk viewer.
+func (s *Server) googleStartOAuth(w http.ResponseWriter, r *http.Request, next, mode string) {
 	if s.cfg.GoogleClientID == "" {
 		writeErr(w, http.StatusNotImplemented, "Login Google belum dikonfigurasi (GOOGLE_CLIENT_ID kosong)")
 		return
 	}
-
-	next := r.URL.Query().Get("next")
 	if next == "" || !strings.HasPrefix(next, "/") {
 		next = "/"
 	}
 
-	// Buat nonce acak untuk CSRF state
 	b := make([]byte, 16)
 	_, _ = rand.Read(b)
 	nonce := base64.RawURLEncoding.EncodeToString(b)
 
-	// Encode state = base64(json{n, next})
-	stateBytes, _ := json.Marshal(map[string]string{"n": nonce, "next": next})
+	stateBytes, _ := json.Marshal(map[string]string{"n": nonce, "next": next, "mode": mode})
 	state := base64.RawURLEncoding.EncodeToString(stateBytes)
 
-	// Simpan nonce di cookie HttpOnly untuk verifikasi di callback
 	http.SetCookie(w, &http.Cookie{
 		Name:     "oauth_state",
 		Value:    nonce,
 		Path:     "/",
-		MaxAge:   300, // 5 menit
+		MaxAge:   300,
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 	})
 
-	redirectURI := s.googleRedirectURI()
 	authURL := "https://accounts.google.com/o/oauth2/v2/auth?" + url.Values{
 		"client_id":     {s.cfg.GoogleClientID},
-		"redirect_uri":  {redirectURI},
+		"redirect_uri":  {s.googleRedirectURI()},
 		"response_type": {"code"},
 		"scope":         {"openid email profile"},
 		"state":         {state},
 		"access_type":   {"online"},
 		"prompt":        {"select_account"},
 	}.Encode()
-
 	http.Redirect(w, r, authURL, http.StatusFound)
 }
 
+// GET /auth/google?next=...  — alur login untuk responden publik.
+func (s *Server) googleLogin(w http.ResponseWriter, r *http.Request) {
+	s.googleStartOAuth(w, r, r.URL.Query().Get("next"), "")
+}
+
+// GET /auth/google/viewer  — alur login Google khusus untuk viewer.
+func (s *Server) googleViewerLogin(w http.ResponseWriter, r *http.Request) {
+	s.googleStartOAuth(w, r, "/viewer-portal", "viewer")
+}
+
 // GET /auth/google/callback?code=...&state=...
-// Google mengarahkan kembali ke sini setelah login.
+// Google mengarahkan kembali ke sini setelah login (dipakai oleh responden maupun viewer).
 func (s *Server) googleCallback(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.GoogleClientID == "" {
 		writeErr(w, http.StatusNotImplemented, "Login Google belum dikonfigurasi")
@@ -75,6 +78,7 @@ func (s *Server) googleCallback(w http.ResponseWriter, r *http.Request) {
 	var stateData struct {
 		N    string `json:"n"`
 		Next string `json:"next"`
+		Mode string `json:"mode"` // "" = responden, "viewer" = viewer
 	}
 	if err := json.Unmarshal(stateBytes, &stateData); err != nil {
 		writeErr(w, http.StatusBadRequest, "state OAuth tidak valid")
@@ -85,15 +89,12 @@ func (s *Server) googleCallback(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "verifikasi CSRF gagal — coba login ulang")
 		return
 	}
-	// Hapus state cookie
 	http.SetCookie(w, &http.Cookie{Name: "oauth_state", Value: "", Path: "/", MaxAge: -1})
 
-	// Pastikan tidak ada error dari Google
 	if errParam := r.URL.Query().Get("error"); errParam != "" {
 		writeErr(w, http.StatusUnauthorized, "login Google dibatalkan: "+errParam)
 		return
 	}
-
 	code := r.URL.Query().Get("code")
 	if code == "" {
 		writeErr(w, http.StatusBadRequest, "kode OAuth tidak ditemukan")
@@ -114,27 +115,45 @@ func (s *Server) googleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Simpan/perbarui respondent di database
-	respondent, err := s.st.UpsertRespondent(r.Context(), gUser.ID, gUser.Email, gUser.Name, gUser.Picture)
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal menyimpan data responden")
-		return
-	}
-
-	// Buat JWT untuk respondent
-	jwtToken, err := s.auth.GenerateRespondent(respondent.ID, respondent.Email, respondent.Name, respondent.Picture)
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal menerbitkan token")
-		return
-	}
-
-	// Sanitasi next URL
 	next := stateData.Next
 	if next == "" || !strings.HasPrefix(next, "/") {
 		next = "/"
 	}
 
-	// Arahkan ke halaman landing yang menyimpan token ke localStorage
+	// ── Alur Viewer: cari user berdasarkan email Google ──
+	if stateData.Mode == "viewer" {
+		user, err := s.st.GetUserByEmail(r.Context(), gUser.Email)
+		if err != nil || user.Role != "viewer" || !user.IsActive {
+			// Email tidak terdaftar sebagai viewer aktif
+			http.Redirect(w, r, "/viewer-portal?error=not_authorized&email="+url.QueryEscape(gUser.Email), http.StatusFound)
+			return
+		}
+		jwtToken, err := s.auth.Generate(user.ID, user.Username, user.Role)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "gagal menerbitkan token")
+			return
+		}
+		// Simpan ke localStorage via done page dengan type=viewer
+		doneURL := "/auth/google/done?" + url.Values{
+			"token": {jwtToken},
+			"next":  {"/viewer-portal"},
+			"type":  {"viewer"},
+		}.Encode()
+		http.Redirect(w, r, doneURL, http.StatusFound)
+		return
+	}
+
+	// ── Alur Responden (default) ──
+	respondent, err := s.st.UpsertRespondent(r.Context(), gUser.ID, gUser.Email, gUser.Name, gUser.Picture)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal menyimpan data responden")
+		return
+	}
+	jwtToken, err := s.auth.GenerateRespondent(respondent.ID, respondent.Email, respondent.Name, respondent.Picture)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal menerbitkan token")
+		return
+	}
 	doneURL := "/auth/google/done?" + url.Values{
 		"token": {jwtToken},
 		"next":  {next},

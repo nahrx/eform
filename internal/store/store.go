@@ -87,23 +87,29 @@ func (s *Store) CountUsers(ctx context.Context) (int, error) {
 	return n, err
 }
 
-func (s *Store) CreateUser(ctx context.Context, username, email, hash, role string) (*models.User, error) {
-	var emailArg any
+func (s *Store) CreateUser(ctx context.Context, username, email, hash, role, note string) (*models.User, error) {
+	var emailArg, noteArg any
 	if email != "" {
 		emailArg = email
 	}
+	if note != "" {
+		noteArg = note
+	}
 	u := &models.User{}
-	var em *string
+	var em, nt *string
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO users(username,email,password_hash,role) VALUES ($1,$2,$3,$4)
-		 RETURNING id,username,email,role,is_active,created_at,updated_at`,
-		username, emailArg, hash, role,
-	).Scan(&u.ID, &u.Username, &em, &u.Role, &u.IsActive, &u.CreatedAt, &u.UpdatedAt)
+		`INSERT INTO users(username,email,password_hash,role,note) VALUES ($1,$2,$3,$4,$5)
+		 RETURNING id,username,email,role,note,is_active,created_at,updated_at`,
+		username, emailArg, hash, role, noteArg,
+	).Scan(&u.ID, &u.Username, &em, &u.Role, &nt, &u.IsActive, &u.CreatedAt, &u.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
 	if em != nil {
 		u.Email = *em
+	}
+	if nt != nil {
+		u.Note = *nt
 	}
 	return u, nil
 }
@@ -749,12 +755,32 @@ func (s *Store) DeleteDraft(ctx context.Context, formID, respondentID string) er
 	return err
 }
 
+// GetUserByEmail mencari user berdasarkan alamat email (dipakai untuk Google OAuth viewer).
+func (s *Store) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
+	u := &models.User{}
+	var em *string
+	err := s.pool.QueryRow(ctx,
+		`SELECT id,username,email,password_hash,role,is_active,created_at,updated_at
+		 FROM users WHERE lower(email)=lower($1)`, email,
+	).Scan(&u.ID, &u.Username, &em, &u.PasswordHash, &u.Role, &u.IsActive, &u.CreatedAt, &u.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if em != nil {
+		u.Email = *em
+	}
+	return u, nil
+}
+
 /* ---------------- viewers ---------------- */
 
 // ListViewers mengembalikan semua user dengan role='viewer'.
 func (s *Store) ListViewers(ctx context.Context) ([]models.User, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id,username,email,role,is_active,created_at,updated_at FROM users
+		`SELECT id,username,email,role,note,is_active,created_at,updated_at FROM users
 		 WHERE role='viewer' ORDER BY username`)
 	if err != nil {
 		return nil, err
@@ -763,12 +789,15 @@ func (s *Store) ListViewers(ctx context.Context) ([]models.User, error) {
 	var out []models.User
 	for rows.Next() {
 		u := models.User{}
-		var em *string
-		if err := rows.Scan(&u.ID, &u.Username, &em, &u.Role, &u.IsActive, &u.CreatedAt, &u.UpdatedAt); err != nil {
+		var em, nt *string
+		if err := rows.Scan(&u.ID, &u.Username, &em, &u.Role, &nt, &u.IsActive, &u.CreatedAt, &u.UpdatedAt); err != nil {
 			return nil, err
 		}
 		if em != nil {
 			u.Email = *em
+		}
+		if nt != nil {
+			u.Note = *nt
 		}
 		out = append(out, u)
 	}

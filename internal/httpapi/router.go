@@ -85,6 +85,7 @@ func (s *Server) Routes() http.Handler {
 
 	// --- OAuth Google (redirect, tidak butuh JWT) ---
 	mux.HandleFunc("GET /auth/google", s.googleLogin)
+	mux.HandleFunc("GET /auth/google/viewer", s.googleViewerLogin)
 	mux.HandleFunc("GET /auth/google/callback", s.googleCallback)
 
 	// --- halaman ---

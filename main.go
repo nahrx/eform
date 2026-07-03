@@ -78,7 +78,7 @@ func seedSuperadmin(ctx context.Context, st *store.Store, sc config.SeedConfig) 
 	if err != nil {
 		return err
 	}
-	if _, err := st.CreateUser(ctx, sc.Username, sc.Email, hash, "superadmin"); err != nil {
+	if _, err := st.CreateUser(ctx, sc.Username, sc.Email, hash, "superadmin", ""); err != nil {
 		return err
 	}
 	log.Println("============================================================")

@@ -18,6 +18,12 @@
 *{box-sizing:border-box}
 body{font-family:var(--sans);color:var(--ink);background:var(--surface);font-size:14px;line-height:1.5;margin:0;-webkit-font-smoothing:antialiased}
 header{display:flex;align-items:center;gap:10px;padding:12px 20px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+.login-box{max-width:360px;margin:60px auto;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:32px 28px;box-shadow:var(--shadow);text-align:center;display:flex;flex-direction:column;gap:16px}
+.login-box h2{margin:0;font-size:16px}
+.login-box p{margin:0;font-size:13px;color:var(--muted)}
+.alert{padding:10px 14px;border-radius:var(--radius-s);font-size:13px;background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
+.btn-google{display:inline-flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line);border-radius:var(--radius-s);padding:10px 18px;font-size:13px;font-weight:500;cursor:pointer;text-decoration:none;color:var(--ink);transition:.12s}
+.btn-google:hover{border-color:#c6cdd6;background:var(--panel-2)}
 header h1{font-size:15px;font-weight:700;margin:0;flex:none}
 .who{font-size:12px;color:var(--muted);flex:1}
 .btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:7px 13px;border-radius:var(--radius-s);font-size:13px;font-weight:500;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:5px;transition:.12s}
@@ -46,30 +52,66 @@ h2{font-size:16px;font-weight:700;margin:0 0 16px}
   <div id="content"><div class="empty">Memuat…</div></div>
 </main>
 <script>
-const TOKEN=localStorage.getItem("eform_token");
-if(!TOKEN)location.replace("/login");
-const H={"Authorization":"Bearer "+TOKEN,"Content-Type":"application/json"};
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
-async function api(path,opts={}){
-  const r=await fetch(path,{...opts,headers:{...H,...(opts.headers||{})}});
-  if(r.status===401){localStorage.removeItem("eform_token");location.replace("/login");throw new Error("sesi habis");}
-  const data=(r.headers.get("content-type")||"").includes("json")?await r.json():null;
-  if(!r.ok)throw new Error((data&&data.error)||("HTTP "+r.status));
-  return data;
+// Cek apakah ada error dari callback OAuth
+const urlP=new URLSearchParams(location.search);
+const oauthError=urlP.get("error");
+const errorEmail=urlP.get("email");
+
+// Tampilkan halaman login jika belum ada token
+const TOKEN=localStorage.getItem("eform_token");
+if(!TOKEN){
+  showLoginPage();
+} else {
+  initPortal();
 }
 
-(async()=>{
-  try{
-    const me=await api("/api/auth/me");
-    document.getElementById("who").textContent=me.username+" · Viewer";
-    // Jika bukan viewer, redirect ke admin
-    if(me.role!=="viewer")location.replace("/admin");
-  }catch{}
-  loadForms();
-})();
+function showLoginPage(){
+  document.getElementById("who").textContent="";
+  document.getElementById("logout").style.display="none";
+  document.querySelector("main").innerHTML=`
+    <div class="login-box">
+      <h2>Portal Viewer</h2>
+      <p>Masuk menggunakan akun Google yang telah didaftarkan oleh administrator.</p>
+      ${oauthError==="not_authorized"?`<div class="alert">Akun Google${errorEmail?" ("+esc(errorEmail)+")":""} tidak terdaftar sebagai viewer aktif.<br>Hubungi administrator.</div>`:""}
+      <a href="/auth/google/viewer" class="btn-google">
+        <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z"/></svg>
+        Masuk dengan Google
+      </a>
+    </div>`;
+}
 
-async function loadForms(){
+function initPortal(){
+  const H={"Authorization":"Bearer "+TOKEN,"Content-Type":"application/json"};
+
+  async function api(path,opts={}){
+    const r=await fetch(path,{...opts,headers:{...H,...(opts.headers||{})}});
+    if(r.status===401){
+      localStorage.removeItem("eform_token");localStorage.removeItem("eform_user");
+      showLoginPage();throw new Error("sesi habis");
+    }
+    const data=(r.headers.get("content-type")||"").includes("json")?await r.json():null;
+    if(!r.ok)throw new Error((data&&data.error)||("HTTP "+r.status));
+    return data;
+  }
+
+  (async()=>{
+    try{
+      const me=await api("/api/auth/me");
+      document.getElementById("who").textContent=me.username+" · Viewer";
+      if(me.role!=="viewer"){location.replace("/admin");return;}
+    }catch{return;}
+    loadForms(api);
+  })();
+
+  document.getElementById("logout").addEventListener("click",()=>{
+    localStorage.removeItem("eform_token");localStorage.removeItem("eform_user");
+    showLoginPage();
+  });
+}
+
+async function loadForms(api){
   const el=document.getElementById("content");
   try{
     const {forms}=await api("/api/viewer/my-forms");
@@ -99,11 +141,6 @@ async function loadForms(){
     el.innerHTML=`<div class="empty">Gagal memuat: ${esc(e.message)}</div>`;
   }
 }
-
-document.getElementById("logout").addEventListener("click",()=>{
-  localStorage.removeItem("eform_token");localStorage.removeItem("eform_user");
-  location.replace("/login");
-});
 </script>
 </body>
 </html>

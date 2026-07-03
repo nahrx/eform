@@ -70,7 +70,7 @@ func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "gagal hashing password")
 		return
 	}
-	u, err := s.st.CreateUser(r.Context(), in.Username, in.Email, hash, in.Role)
+	u, err := s.st.CreateUser(r.Context(), in.Username, in.Email, hash, in.Role, "")
 	if err != nil {
 		writeErr(w, http.StatusConflict, "username/email mungkin sudah dipakai")
 		return

@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"net/http"
 	"strconv"
@@ -18,23 +20,29 @@ func (s *Server) createViewer(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Username string `json:"username"`
 		Email    string `json:"email"`
-		Password string `json:"password"`
+		Note     string `json:"note"`
 	}
 	if err := decodeJSON(r, &in); err != nil {
 		writeErr(w, http.StatusBadRequest, "format permintaan salah")
 		return
 	}
 	in.Username = strings.TrimSpace(in.Username)
-	if in.Username == "" || len(in.Password) < 6 {
-		writeErr(w, http.StatusBadRequest, "username wajib, password minimal 6 karakter")
+	in.Email = strings.TrimSpace(in.Email)
+	in.Note = strings.TrimSpace(in.Note)
+	if in.Username == "" || in.Email == "" {
+		writeErr(w, http.StatusBadRequest, "username dan email wajib diisi")
 		return
 	}
-	hash, err := auth.HashPassword(in.Password)
+	// Viewer login via Google, jadi buat password acak (tidak dipakai untuk login)
+	b := make([]byte, 24)
+	_, _ = rand.Read(b)
+	randomPwd := base64.RawURLEncoding.EncodeToString(b)
+	hash, err := auth.HashPassword(randomPwd)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "gagal memproses password")
 		return
 	}
-	u, err := s.st.CreateUser(r.Context(), in.Username, in.Email, hash, "viewer")
+	u, err := s.st.CreateUser(r.Context(), in.Username, in.Email, hash, "viewer", in.Note)
 	if err != nil {
 		writeErr(w, http.StatusConflict, "username/email mungkin sudah dipakai")
 		return
