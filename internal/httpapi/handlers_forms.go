@@ -365,6 +365,32 @@ func (s *Server) listResponses(w http.ResponseWriter, r *http.Request) {
 		SortBy:  q.Get("sortBy"),
 		SortDir: q.Get("sortDir"),
 	}
+	// Parse filter per-field schema:
+	//   "f_namafield=nilai"  → ILIKE (teks bebas)
+	//   "fe_namafield=nilai" → exact match (dropdown/radio)
+	for key, vals := range q {
+		if len(vals) == 0 || strings.TrimSpace(vals[0]) == "" {
+			continue
+		}
+		val := strings.TrimSpace(vals[0])
+		if strings.HasPrefix(key, "fe_") {
+			fieldName := key[3:]
+			if f.FieldExactFilters == nil {
+				f.FieldExactFilters = make(map[string]string)
+			}
+			if len(f.FieldExactFilters) < 10 {
+				f.FieldExactFilters[fieldName] = val
+			}
+		} else if strings.HasPrefix(key, "f_") {
+			fieldName := key[2:]
+			if f.FieldFilters == nil {
+				f.FieldFilters = make(map[string]string)
+			}
+			if len(f.FieldFilters) < 10 {
+				f.FieldFilters[fieldName] = val
+			}
+		}
+	}
 	resp, err := s.st.ListAllResponsesByForm(r.Context(), formID, f, limit, offset)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")

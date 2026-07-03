@@ -62,7 +62,11 @@ func (s *Server) logMW(next http.Handler) http.Handler {
 		start := time.Now()
 		sw := &statusWriter{ResponseWriter: w, status: 200}
 		next.ServeHTTP(sw, r)
-		log.Printf("%s %s -> %d (%s)", r.Method, r.URL.Path, sw.status, time.Since(start).Round(time.Millisecond))
+		u := r.URL.Path
+		if r.URL.RawQuery != "" {
+			u += "?" + r.URL.RawQuery
+		}
+		log.Printf("%s %s -> %d (%s)", r.Method, u, sw.status, time.Since(start).Round(time.Millisecond))
 	})
 }
 

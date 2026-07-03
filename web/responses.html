@@ -21,6 +21,7 @@
 html,body{height:100%;margin:0}
 body{font-family:var(--sans);color:var(--ink);background:var(--surface);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
 button{font-family:inherit;cursor:pointer}
+input,select{font-family:inherit}
 
 .shell{display:flex;flex-direction:column;height:100vh}
 
@@ -39,15 +40,24 @@ button{font-family:inherit;cursor:pointer}
 /* filter bar */
 .filter-bar{display:flex;align-items:center;gap:8px;padding:9px 20px;background:var(--panel-2);border-bottom:1px solid var(--line);flex:none;flex-wrap:wrap}
 .filter-lbl{font-size:12px;color:var(--muted);font-weight:500;white-space:nowrap}
-.filter-sel{font-size:12.5px;padding:5px 8px;border:1px solid var(--line);border-radius:var(--radius-s);background:var(--panel);color:var(--ink);font-family:inherit;max-width:170px}
+.filter-sel{font-size:12.5px;padding:5px 8px;border:1px solid var(--line);border-radius:var(--radius-s);background:var(--panel);color:var(--ink);max-width:170px}
 .filter-sel:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
-.filter-search{font-size:12.5px;padding:5px 10px;border:1px solid var(--line);border-radius:var(--radius-s);background:var(--panel);color:var(--ink);font-family:inherit;width:190px}
+.filter-search{font-size:12.5px;padding:5px 10px;border:1px solid var(--line);border-radius:var(--radius-s);background:var(--panel);color:var(--ink);width:170px}
 .filter-search:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
 .filter-search::placeholder{color:var(--muted)}
-.filter-sep{width:1px;height:20px;background:var(--line);flex:none}
+.filter-sep{width:1px;height:20px;background:var(--line);flex:none;align-self:center}
 .filter-chip{font-size:11px;color:var(--accent);background:var(--accent-soft);padding:3px 9px;border-radius:999px;font-weight:600;white-space:nowrap}
-.btn-reset{border:none;background:none;color:var(--muted);padding:3px 6px;border-radius:var(--radius-s);font-size:12px;cursor:pointer;font-family:inherit}
+.btn-reset{border:none;background:none;color:var(--muted);padding:3px 6px;border-radius:var(--radius-s);font-size:12px;cursor:pointer}
 .btn-reset:hover{background:var(--line-2);color:var(--ink)}
+
+/* field filter section (superadmin only) */
+.ff-bar{display:flex;align-items:center;gap:8px;padding:7px 20px;background:#f0f7f9;border-bottom:1px solid var(--line);flex:none;flex-wrap:wrap}
+.ff-bar:empty{display:none}
+.ff-group{display:flex;align-items:center;gap:5px}
+.ff-lbl{font-size:11px;color:var(--accent-ink);font-weight:600;white-space:nowrap;background:var(--accent-soft);padding:2px 7px;border-radius:4px}
+.ff-input{font-size:12.5px;padding:4px 9px;border:1px solid var(--accent-soft);border-radius:var(--radius-s);background:var(--panel);color:var(--ink);width:150px}
+.ff-input:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
+.ff-input::placeholder{color:var(--muted)}
 
 /* tabel area */
 .tbl-outer{flex:1;overflow:auto;padding:18px 20px}
@@ -113,6 +123,7 @@ table.resp-tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:600p
     <button class="btn primary" id="btnCsv" hidden>↓ CSV</button>
   </header>
 
+  <!-- Filter bar utama -->
   <div class="filter-bar">
     <span class="filter-lbl">Status</span>
     <select class="filter-sel" id="fStatus" onchange="onFilter()">
@@ -128,8 +139,11 @@ table.resp-tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:600p
     <div class="filter-sep"></div>
     <input class="filter-search" id="fSearch" placeholder="Cari nama / email…" oninput="onSearchDebounce()">
     <span class="filter-chip" id="filterChip" hidden></span>
-    <button class="btn-reset" id="btnReset" onclick="resetFilters()" hidden>✕ Reset</button>
+    <button class="btn-reset" id="btnReset" onclick="resetFilters()" hidden>✕ Reset semua filter</button>
   </div>
+
+  <!-- Filter bar variabel tambahan (hanya superadmin, muncul jika ada kolom dipilih) -->
+  <div class="ff-bar" id="ffBar"></div>
 
   <div class="tbl-outer">
     <div class="tbl-wrap" id="tblWrap">
@@ -155,7 +169,9 @@ let SEL_COLS=[], ALL_FIELDS=[], SHARE_MAP={};
 // state filter & sort
 let SORT_BY="waktu", SORT_DIR="desc";
 let FILTER_STATUS="", FILTER_SHARE="", FILTER_SEARCH="";
-let _searchTimer=null;
+let FIELD_FILTERS={};       // fieldName → nilai teks (ILIKE)
+let FIELD_EXACT_FILTERS={}; // fieldName → nilai pasti (=, untuk dropdown/radio)
+let _searchTimer=null, _fieldTimer=null;
 
 async function api(path,opts){
   opts=opts||{};
@@ -187,14 +203,13 @@ async function init(){
 
     ALL_FIELDS=extractFields(SCHEMA);
     SEL_COLS=loadColPref();
+
     if(MY_ROLE==="superadmin"&&ALL_FIELDS.length){
       document.getElementById("colWrap").hidden=false;
       buildColPicker();
+      renderFieldFilters();
     }
-
-    // Isi dropdown share dari share list
     buildShareFilter();
-
     await loadPage(0);
   }catch(e){
     document.getElementById("formTitle").textContent="Gagal memuat: "+e.message;
@@ -209,6 +224,175 @@ function buildShareFilter(){
     opt.value=id; opt.textContent=label;
     sel.appendChild(opt);
   });
+}
+
+/* ---- helpers untuk opsi field ---- */
+function getOptions(c){
+  const opts=[];
+  if(c.optionsRef&&SCHEMA){
+    const t=(SCHEMA.referenceData||{})[c.optionsRef];
+    if(t&&t.items)t.items.forEach(it=>opts.push({value:String(it.code),label:txt(it.label)}));
+  }
+  if(!opts.length&&c.options)
+    c.options.forEach(o=>opts.push({value:String(o.value),label:txt(o.label)||String(o.value)}));
+  return opts;
+}
+
+// Tentukan jenis filter untuk satu field:
+//  {kind:"select", opts:[...]}              → dropdown statis
+//  {kind:"api", url, ...}                   → dropdown dari API (tanpa dependensi)
+//  {kind:"cascade", urlTpl, deps, ...}      → dropdown API yang bergantung pada field lain
+//  {kind:"text"}                            → input teks bebas
+function fieldFilterKind(c){
+  if(!c)return{kind:"text"};
+  if(c.type==="boolean")
+    return{kind:"select",opts:[{value:"true",label:"Ya"},{value:"false",label:"Tidak"}]};
+  if(c.type==="radio"||c.type==="select"){
+    // Sumber: optionsApi langsung di field
+    if(c.optionsApi&&c.optionsApi.url){
+      const deps=[...c.optionsApi.url.matchAll(/\{([^}]+)\}/g)].map(m=>m[1]);
+      const base={valueField:c.optionsApi.valueField||"code",
+                  labelField:c.optionsApi.labelField||"label",
+                  path:c.optionsApi.path||null};
+      if(deps.length)return{kind:"cascade",urlTpl:c.optionsApi.url,deps,...base};
+      return{kind:"api",url:c.optionsApi.url,...base};
+    }
+    // Sumber: referenceData via optionsRef
+    if(c.optionsRef){
+      const tbl=(SCHEMA.referenceData||{})[c.optionsRef];
+      if(tbl){
+        if(tbl.items)
+          return{kind:"select",opts:tbl.items.map(it=>({value:String(it.code),label:txt(it.label)}))};
+        if(tbl.source==="api"&&tbl.url){
+          const deps=[...tbl.url.matchAll(/\{([^}]+)\}/g)].map(m=>m[1]);
+          const base={valueField:tbl.valueField||"code",
+                      labelField:tbl.labelField||"label",
+                      path:tbl.path||null};
+          if(deps.length)return{kind:"cascade",urlTpl:tbl.url,deps,...base};
+          return{kind:"api",url:tbl.url,...base};
+        }
+      }
+    }
+    // Sumber: opsi inline di field
+    if(c.options&&c.options.length)
+      return{kind:"select",opts:c.options.map(o=>({value:String(o.value),label:txt(o.label)||String(o.value)}))};
+  }
+  return{kind:"text"};
+}
+
+// Cache hasil fetch API agar tidak berulang
+const _apiOptCache={};
+async function fetchApiOpts(src){
+  if(_apiOptCache[src.url])return _apiOptCache[src.url];
+  try{
+    const r=await fetch(src.url,{headers:H});
+    const d=await r.json();
+    const getPath=(o,p)=>String(p).split(".").reduce((x,k)=>x==null?x:x[k],o);
+    let arr=src.path?getPath(d,src.path):(Array.isArray(d)?d:(d.data||d.items||d.results||[]));
+    const vf=src.valueField||"code",lf=src.labelField||"label";
+    const opts=(arr||[]).map(it=>({value:String(it[vf]),label:txt(it[lf])||String(it[vf])}));
+    _apiOptCache[src.url]=opts;
+    return opts;
+  }catch{return[];}
+}
+
+/* ---- field filter bar (superadmin) ---- */
+function renderFieldFilters(){
+  const bar=document.getElementById("ffBar");
+  if(MY_ROLE!=="superadmin"||!SEL_COLS.length){bar.innerHTML="";return;}
+  // Hapus nilai cascade yang depnya belum terpenuhi (termasuk transitif)
+  SEL_COLS.forEach(name=>{
+    const fk=fieldFilterKind(findField(SCHEMA,name));
+    if(fk.kind==="cascade"&&fk.deps.find(dep=>!FIELD_EXACT_FILTERS[dep]))
+      delete FIELD_EXACT_FILTERS[name];
+  });
+  const parts=SEL_COLS.map((name,i)=>{
+    const fd=findField(SCHEMA,name);
+    const label=(ALL_FIELDS.find(ff=>ff.name===name)||{}).label||name;
+    const sep=i>0?'<div class="filter-sep"></div>':"";
+    const fk=fieldFilterKind(fd);
+
+    if(fk.kind==="select"){
+      const curVal=FIELD_EXACT_FILTERS[name]||"";
+      const optHtml=`<option value="">Semua</option>`+
+        fk.opts.map(o=>`<option value="${esc(o.value)}"${curVal===o.value?" selected":""}>${esc(o.label)}</option>`).join("");
+      return`${sep}<div class="ff-group">
+        <span class="ff-lbl">${esc(label)}</span>
+        <select class="ff-input" data-field="${esc(name)}" onchange="onFieldSelect(this)">${optHtml}</select>
+      </div>`;
+    }
+    if(fk.kind==="api"){
+      // Render placeholder dulu, isi setelah fetch
+      return`${sep}<div class="ff-group">
+        <span class="ff-lbl">${esc(label)}</span>
+        <select class="ff-input" data-field="${esc(name)}" data-api-src="${esc(JSON.stringify(fk))}"
+                onchange="onFieldSelect(this)" disabled>
+          <option value="">Memuat…</option>
+        </select>
+      </div>`;
+    }
+    if(fk.kind==="cascade"){
+      const missingDep=fk.deps.find(dep=>!FIELD_EXACT_FILTERS[dep]);
+      if(missingDep){
+        const depLabel=(ALL_FIELDS.find(ff=>ff.name===missingDep)||{}).label||missingDep;
+        return`${sep}<div class="ff-group">
+          <span class="ff-lbl">${esc(label)}</span>
+          <select class="ff-input" data-field="${esc(name)}" disabled>
+            <option value="">— pilih ${esc(depLabel)} dahulu —</option>
+          </select>
+        </div>`;
+      }
+      const resolvedUrl=fk.urlTpl.replace(/\{([^}]+)\}/g,(_,k)=>encodeURIComponent(FIELD_EXACT_FILTERS[k]||""));
+      const src={url:resolvedUrl,valueField:fk.valueField,labelField:fk.labelField,path:fk.path};
+      return`${sep}<div class="ff-group">
+        <span class="ff-lbl">${esc(label)}</span>
+        <select class="ff-input" data-field="${esc(name)}" data-api-src="${esc(JSON.stringify(src))}"
+                onchange="onFieldSelect(this)" disabled>
+          <option value="">Memuat…</option>
+        </select>
+      </div>`;
+    }
+    // text
+    const curVal=FIELD_FILTERS[name]||"";
+    return`${sep}<div class="ff-group">
+      <span class="ff-lbl">${esc(label)}</span>
+      <input class="ff-input" placeholder="Filter…" value="${esc(curVal)}"
+             data-field="${esc(name)}" oninput="onFieldInput(this)">
+    </div>`;
+  });
+  bar.innerHTML=parts.join("");
+
+  // Isi dropdown API secara async
+  bar.querySelectorAll("select[data-api-src]").forEach(async sel=>{
+    const src=JSON.parse(sel.dataset.apiSrc);
+    const opts=await fetchApiOpts(src);
+    const curVal=FIELD_EXACT_FILTERS[sel.dataset.field]||"";
+    sel.innerHTML=`<option value="">Semua</option>`+
+      opts.map(o=>`<option value="${esc(o.value)}"${curVal===o.value?" selected":""}>${esc(o.label)}</option>`).join("");
+    sel.disabled=false;
+  });
+}
+
+function onFieldInput(el){
+  const name=el.dataset.field;
+  const val=el.value.trim();
+  if(val)FIELD_FILTERS[name]=val; else delete FIELD_FILTERS[name];
+  clearTimeout(_fieldTimer);
+  _fieldTimer=setTimeout(()=>loadPage(0),350);
+}
+
+function onFieldSelect(el){
+  const name=el.dataset.field;
+  const val=el.value;
+  if(val)FIELD_EXACT_FILTERS[name]=val; else delete FIELD_EXACT_FILTERS[name];
+  // Re-render jika ada cascade child yang bergantung pada field ini
+  const hasCascadeChild=SEL_COLS.some(colName=>{
+    if(colName===name)return false;
+    const fk=fieldFilterKind(findField(SCHEMA,colName));
+    return fk.kind==="cascade"&&fk.deps.includes(name);
+  });
+  if(hasCascadeChild)renderFieldFilters();
+  loadPage(0);
 }
 
 /* ---- filter events ---- */
@@ -228,25 +412,42 @@ function onSearchDebounce(){
 
 function resetFilters(){
   FILTER_STATUS="";FILTER_SHARE="";FILTER_SEARCH="";
+  FIELD_FILTERS={};FIELD_EXACT_FILTERS={};
   document.getElementById("fStatus").value="";
   document.getElementById("fShare").value="";
   document.getElementById("fSearch").value="";
+  renderFieldFilters();
   loadPage(0);
 }
 
 function updateFilterUI(){
-  const active=FILTER_STATUS||FILTER_SHARE||FILTER_SEARCH;
+  const parts=[];
+  if(FILTER_STATUS)parts.push(FILTER_STATUS==="submitted"?"Terkirim":"Draf");
+  if(FILTER_SHARE)parts.push(esc(SHARE_MAP[FILTER_SHARE]||"Share tertentu"));
+  if(FILTER_SEARCH)parts.push(`"${esc(FILTER_SEARCH)}"`);
+  Object.entries(FIELD_FILTERS).forEach(([k,v])=>{
+    const f=ALL_FIELDS.find(ff=>ff.name===k);
+    parts.push(`${esc(f?f.label:k)}: "${esc(v)}"`);
+  });
+  Object.entries(FIELD_EXACT_FILTERS).forEach(([k,v])=>{
+    const fd=findField(SCHEMA,k);
+    const fk=fieldFilterKind(fd);
+    const f=ALL_FIELDS.find(ff=>ff.name===k);
+    let displayVal=v;
+    if(fk.kind==="select"){
+      const o=fk.opts.find(x=>x.value===v);if(o)displayVal=o.label;
+    } else if(fk.kind==="api"&&_apiOptCache[fk.url]){
+      const o=_apiOptCache[fk.url].find(x=>x.value===v);if(o)displayVal=o.label;
+    } else if(fk.kind==="cascade"){
+      const ru=fk.urlTpl.replace(/\{([^}]+)\}/g,(_,dk)=>encodeURIComponent(FIELD_EXACT_FILTERS[dk]||""));
+      if(_apiOptCache[ru]){const o=_apiOptCache[ru].find(x=>x.value===v);if(o)displayVal=o.label;}
+    }
+    parts.push(`${esc(f?f.label:k)}: ${esc(displayVal)}`);
+  });
   const chip=document.getElementById("filterChip");
   const btnR=document.getElementById("btnReset");
-  if(active){
-    const parts=[];
-    if(FILTER_STATUS)parts.push(FILTER_STATUS==="submitted"?"Terkirim":"Draf");
-    if(FILTER_SHARE)parts.push(esc(SHARE_MAP[FILTER_SHARE]||"Share tertentu"));
-    if(FILTER_SEARCH)parts.push(`"${esc(FILTER_SEARCH)}"`);
-    chip.textContent=parts.join(" · ");chip.hidden=false;btnR.hidden=false;
-  }else{
-    chip.hidden=true;btnR.hidden=true;
-  }
+  if(parts.length){chip.textContent=parts.join(" · ");chip.hidden=false;btnR.hidden=false;}
+  else{chip.hidden=true;btnR.hidden=true;}
 }
 
 /* ---- sort ---- */
@@ -261,22 +462,19 @@ async function loadPage(page){
   PAGE=page;
   document.getElementById("tblWrap").innerHTML='<div class="loading">Memuat…</div>';
   try{
-    const params=new URLSearchParams({
-      limit:PAGE_SIZE,
-      offset:PAGE*PAGE_SIZE,
-      sortBy:SORT_BY,
-      sortDir:SORT_DIR,
-    });
+    const params=new URLSearchParams({limit:PAGE_SIZE,offset:PAGE*PAGE_SIZE,sortBy:SORT_BY,sortDir:SORT_DIR});
     if(FILTER_STATUS)params.set("status",FILTER_STATUS);
     if(FILTER_SHARE)params.set("shareId",FILTER_SHARE);
     if(FILTER_SEARCH)params.set("search",FILTER_SEARCH);
+    Object.entries(FIELD_FILTERS).forEach(([k,v])=>{if(v)params.set("f_"+k,v);});
+    Object.entries(FIELD_EXACT_FILTERS).forEach(([k,v])=>{if(v)params.set("fe_"+k,v);});
 
     const data=await api("/api/forms/"+FORM_ID+"/responses?"+params);
     RESPONSES=data.responses||[];
     TOTAL=data.total||0;
 
+    const isFiltered=FILTER_STATUS||FILTER_SHARE||FILTER_SEARCH||Object.keys(FIELD_FILTERS).length||Object.keys(FIELD_EXACT_FILTERS).length;
     const badge=document.getElementById("countBadge");
-    const isFiltered=FILTER_STATUS||FILTER_SHARE||FILTER_SEARCH;
     badge.textContent=TOTAL+" jawaban"+(isFiltered?" (difilter)":"");
     badge.hidden=false;
     updateFilterUI();
@@ -330,16 +528,22 @@ document.addEventListener("click",()=>document.getElementById("colPanel")?.class
 document.getElementById("colPanel")?.addEventListener("click",e=>e.stopPropagation());
 
 document.getElementById("btnColApply")?.addEventListener("click",()=>{
-  SEL_COLS=[...document.querySelectorAll("#colList input:checked")].map(cb=>cb.value).slice(0,5);
+  const newCols=[...document.querySelectorAll("#colList input:checked")].map(cb=>cb.value).slice(0,5);
+  // bersihkan filter field yang kolomnya dihapus
+  SEL_COLS.filter(c=>!newCols.includes(c)).forEach(c=>{delete FIELD_FILTERS[c];delete FIELD_EXACT_FILTERS[c];});
+  SEL_COLS=newCols;
   saveColPref(SEL_COLS);
   document.getElementById("colPanel").classList.remove("open");
-  renderTable();
+  renderFieldFilters();
+  loadPage(0);
 });
 document.getElementById("btnColReset")?.addEventListener("click",()=>{
+  SEL_COLS.forEach(c=>{delete FIELD_FILTERS[c];delete FIELD_EXACT_FILTERS[c];});
   SEL_COLS=[];saveColPref([]);
   document.querySelectorAll("#colList input").forEach(cb=>cb.checked=false);
   document.getElementById("colPanel").classList.remove("open");
-  renderTable();
+  renderFieldFilters();
+  loadPage(0);
 });
 
 /* ---- render tabel ---- */
@@ -351,15 +555,19 @@ function sortTh(col,label,cls){
 
 function renderTable(){
   if(!RESPONSES.length){
-    const msg=FILTER_STATUS||FILTER_SHARE||FILTER_SEARCH
+    const msg=FILTER_STATUS||FILTER_SHARE||FILTER_SEARCH||Object.keys(FIELD_FILTERS).length||Object.keys(FIELD_EXACT_FILTERS).length
       ?"Tidak ada jawaban yang cocok dengan filter.":"Belum ada jawaban.";
     document.getElementById("tblWrap").innerHTML=`<div class="empty-state">${msg}</div>`;
     return;
   }
 
-  const extraCols=SEL_COLS.map(name=>{
+  // Header kolom tambahan — sortable untuk superadmin
+  const extraTh=SEL_COLS.map(name=>{
     const f=ALL_FIELDS.find(ff=>ff.name===name);
-    return`<th>${esc(f?f.label:name)}</th>`;
+    const label=f?f.label:name;
+    return MY_ROLE==="superadmin"
+      ?sortTh(name,esc(label),"td-val")
+      :`<th class="td-val">${esc(label)}</th>`;
   }).join("");
 
   let html=`<table class="resp-tbl"><thead><tr>
@@ -368,7 +576,7 @@ function renderTable(){
     ${sortTh("share","Share","td-share")}
     ${sortTh("who","Responden","td-who")}
     ${sortTh("waktu","Waktu","td-time")}
-    ${extraCols}
+    ${extraTh}
     <th class="td-act">Aksi</th>
   </tr></thead><tbody>`;
 
@@ -458,7 +666,7 @@ function getOptionLabel(c,val){
   if(c.options){const opt=c.options.find(o=>String(o.value)===String(val));if(opt)return txt(opt.label)||String(val);}
   return String(val);
 }
-function formatFieldValue(c,val,answers){
+function formatFieldValue(c,val){
   if(val==null||val==="")return"";
   if(Array.isArray(val)){if(!val.length)return"";return val.map(v=>getOptionLabel(c,v)).join(", ");}
   if(c.type==="boolean")return(val==="true"||val===true)?"Ya":"Tidak";

@@ -14,11 +14,63 @@ import (
 
 // ResponseFilter parameter untuk filter dan sort daftar jawaban admin.
 type ResponseFilter struct {
-	Status  string // 'submitted'|'draft'|'' (kosong = semua)
-	ShareID string // uuid string atau '' (kosong = semua)
-	Search  string // pencarian parsial pada meta.name / meta.email
-	SortBy  string // 'waktu'|'status'|'share'|'who'
-	SortDir string // 'asc'|'desc'
+	Status            string            // 'submitted'|'draft'|'' (kosong = semua)
+	ShareID           string            // uuid string atau '' (kosong = semua)
+	Search            string            // pencarian parsial pada meta.name / meta.email
+	SortBy            string            // 'waktu'|'status'|'share'|'who'|nama_field_schema
+	SortDir           string            // 'asc'|'desc'
+	FieldFilters      map[string]string // fieldName → nilai teks (ILIKE, untuk field bebas)
+	FieldExactFilters map[string]string // fieldName → nilai pasti (=, untuk dropdown/radio)
+}
+
+// isSafeIdentifier memvalidasi nama field schema agar aman diinterpolasi ke SQL.
+// Hanya huruf, angka, dan underscore diizinkan.
+func isSafeIdentifier(s string) bool {
+	if s == "" || len(s) > 64 {
+		return false
+	}
+	for _, c := range s {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_') {
+			return false
+		}
+	}
+	return true
+}
+
+// buildResponseWhere membangun klausa WHERE dan slice args untuk query daftar/count jawaban.
+// args dimulai dari $2 (karena $1 selalu formID).
+func buildResponseWhere(f ResponseFilter) (string, []any) {
+	var args []any
+	where := ""
+	add := func(v any) int {
+		args = append(args, v)
+		return len(args) + 1 // +1 karena $1=formID sudah di luar
+	}
+	if f.Status != "" {
+		n := add(f.Status)
+		where += fmt.Sprintf(" AND status=$%d", n)
+	}
+	if f.ShareID != "" {
+		n := add(f.ShareID)
+		where += fmt.Sprintf(" AND share_id::text=$%d", n)
+	}
+	if f.Search != "" {
+		n := add("%" + f.Search + "%")
+		where += fmt.Sprintf(" AND (meta->>'name' ILIKE $%d OR meta->>'email' ILIKE $%d)", n, n)
+	}
+	for fieldName, val := range f.FieldFilters {
+		if isSafeIdentifier(fieldName) && val != "" {
+			n := add("%" + val + "%")
+			where += fmt.Sprintf(" AND answers->>'%s' ILIKE $%d", fieldName, n)
+		}
+	}
+	for fieldName, val := range f.FieldExactFilters {
+		if isSafeIdentifier(fieldName) && val != "" {
+			n := add(val)
+			where += fmt.Sprintf(" AND answers->>'%s'=$%d", fieldName, n)
+		}
+	}
+	return where, args
 }
 
 var ErrNotFound = errors.New("data tidak ditemukan")
@@ -423,30 +475,36 @@ func (s *Store) GetResponseByID(ctx context.Context, id string) (*models.Respons
 	return r, nil
 }
 
-// ListAllResponsesByForm mengembalikan semua respons (form_responses + response_drafts) untuk tampilan admin,
-// dengan dukungan filter status/shareId/search dan sort dinamis.
+// ListAllResponsesByForm mengembalikan semua respons (form_responses + response_drafts) untuk tampilan admin.
+// Mendukung filter status/shareId/search/per-field dan sort dinamis termasuk field schema.
 func (s *Store) ListAllResponsesByForm(ctx context.Context, formID string, f ResponseFilter, limit, offset int) ([]models.Response, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 50
 	}
-	// Validasi sort column terhadap allowlist untuk mencegah SQL injection
+	// Sort column: cek fixed allowlist dulu, lalu coba sebagai nama field schema
+	sortDir := "DESC"
+	if f.SortDir == "asc" {
+		sortDir = "ASC"
+	}
 	sortCol := map[string]string{
 		"waktu":  "submitted_at",
 		"status": "status",
 		"share":  "share_id",
 		"who":    "meta->>'name'",
 	}[f.SortBy]
+	if sortCol == "" && isSafeIdentifier(f.SortBy) {
+		sortCol = fmt.Sprintf("answers->>'%s'", f.SortBy)
+	}
 	if sortCol == "" {
 		sortCol = "submitted_at"
 	}
-	sortDir := "DESC"
-	if f.SortDir == "asc" {
-		sortDir = "ASC"
-	}
-	searchArg := ""
-	if f.Search != "" {
-		searchArg = "%" + f.Search + "%"
-	}
+
+	where, wArgs := buildResponseWhere(f)
+	// args: $1=formID, lalu wArgs sebagai $2…$N, lalu limit=$N+1, offset=$N+2
+	args := append([]any{formID}, wArgs...)
+	args = append(args, limit, offset)
+	limitN, offsetN := len(args)-1, len(args)
+
 	q := fmt.Sprintf(`
 		SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at FROM (
 		  SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at
@@ -455,12 +513,11 @@ func (s *Store) ListAllResponsesByForm(ctx context.Context, formID string, f Res
 		  SELECT id,form_id,share_id,respondent_id,'draft'::text,answers,'{}'::jsonb,saved_at
 		    FROM response_drafts WHERE form_id=$1
 		) combined
-		WHERE ($2='' OR status=$2)
-		  AND ($3='' OR share_id::text=$3)
-		  AND ($4='' OR meta->>'name' ILIKE $4 OR meta->>'email' ILIKE $4)
+		WHERE 1=1%s
 		ORDER BY %s %s NULLS LAST
-		LIMIT $5 OFFSET $6`, sortCol, sortDir)
-	rows, err := s.pool.Query(ctx, q, formID, f.Status, f.ShareID, searchArg, limit, offset)
+		LIMIT $%d OFFSET $%d`, where, sortCol, sortDir, limitN, offsetN)
+
+	rows, err := s.pool.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -478,21 +535,17 @@ func (s *Store) ListAllResponsesByForm(ctx context.Context, formID string, f Res
 
 // CountAllResponsesByForm menghitung semua respons (semua status + response_drafts) sesuai filter.
 func (s *Store) CountAllResponsesByForm(ctx context.Context, formID string, f ResponseFilter) (int64, error) {
-	searchArg := ""
-	if f.Search != "" {
-		searchArg = "%" + f.Search + "%"
-	}
+	where, wArgs := buildResponseWhere(f)
+	args := append([]any{formID}, wArgs...)
 	var n int64
-	err := s.pool.QueryRow(ctx, `
+	err := s.pool.QueryRow(ctx, fmt.Sprintf(`
 		SELECT count(*) FROM (
-		  SELECT status,share_id,meta FROM form_responses WHERE form_id=$1
+		  SELECT status,share_id,meta,answers FROM form_responses WHERE form_id=$1
 		  UNION ALL
-		  SELECT 'draft'::text,share_id,'{}'::jsonb FROM response_drafts WHERE form_id=$1
+		  SELECT 'draft'::text,share_id,'{}'::jsonb,answers FROM response_drafts WHERE form_id=$1
 		) combined
-		WHERE ($2='' OR status=$2)
-		  AND ($3='' OR share_id::text=$3)
-		  AND ($4='' OR meta->>'name' ILIKE $4 OR meta->>'email' ILIKE $4)`,
-		formID, f.Status, f.ShareID, searchArg,
+		WHERE 1=1%s`, where),
+		args...
 	).Scan(&n)
 	return n, err
 }
