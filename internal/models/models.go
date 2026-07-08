@@ -115,3 +115,14 @@ type ViewerAllowedRespondent struct {
 	Name         string    `json:"name,omitempty"`
 	CreatedAt    time.Time `json:"createdAt"`
 }
+
+// EditorFormPermission menyimpan hak kelola seorang editor ke satu kuesioner.
+type EditorFormPermission struct {
+	ID         string    `json:"id"`
+	EditorID   string    `json:"editorId"`
+	FormID     string    `json:"formId"`
+	CreatedBy  *string   `json:"createdBy,omitempty"`
+	CreatedAt  time.Time `json:"createdAt"`
+	EditorName string    `json:"editorName,omitempty"`
+	FormTitle  string    `json:"formTitle,omitempty"`
+}

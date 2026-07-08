@@ -16,7 +16,7 @@ body{font-family:ui-sans-serif,system-ui,sans-serif;display:flex;align-items:cen
   const next=p.get("next")||"/";
   const type=p.get("type")||"";
   if(token){
-    if(type==="viewer"){
+    if(type==="viewer"||type==="editor"){
       // Token admin JWT — simpan sebagai eform_token (sama dengan token admin biasa)
       localStorage.setItem("eform_token",token);
       try{

@@ -309,18 +309,26 @@ func (s *Server) saveDraftHandler(w http.ResponseWriter, r *http.Request) {
 //   - hanya prov  → daftar kabupaten/kota di bawah provinsi tersebut
 //   - prov + kab  → daftar kecamatan di bawah kabupaten tersebut
 //   - prov + kab + kec → daftar desa/kelurahan di bawah kecamatan tersebut
+//   - prov + kab + kec + desa → daftar SLS di bawah desa/kelurahan tersebut
+//   - prov + kab + kec + desa + sls → daftar Sub SLS di bawah SLS tersebut
 //
 // Nilai parameter adalah kode_wilayah (misal "64", "6401", "6401010").
 // Endpoint ini tidak memerlukan autentikasi.
 func (s *Server) wilayahList(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	prov := q.Get("prov")
-	kab  := q.Get("kab")
-	kec  := q.Get("kec")
+	kab := q.Get("kab")
+	kec := q.Get("kec")
+	desa := q.Get("desa")
+	sls := q.Get("sls")
 
 	// Gunakan parameter paling spesifik sebagai kode_parent
 	var parent string
 	switch {
+	case sls != "":
+		parent = sls
+	case desa != "":
+		parent = desa
 	case kec != "":
 		parent = kec
 	case kab != "":
