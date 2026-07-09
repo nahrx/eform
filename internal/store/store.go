@@ -724,12 +724,31 @@ func (s *Store) UpsertResponse(ctx context.Context, formID string, shareID *stri
 	}
 	r := &models.Response{}
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO form_responses(form_id,share_id,respondent_id,status,answers,meta)
-		 VALUES ($1,$2,$3,'submitted',$4,$5)
-		 ON CONFLICT (form_id,respondent_id) WHERE respondent_id IS NOT NULL
-		 DO UPDATE SET share_id=EXCLUDED.share_id, status='submitted', answers=EXCLUDED.answers,
-		               meta=EXCLUDED.meta, submitted_at=now()
-		 RETURNING id,form_id,share_id,respondent_id,status,answers,meta,submitted_at`,
+		`WITH updated AS (
+			UPDATE form_responses
+			   SET share_id=$2,
+			       status='submitted',
+			       answers=$4,
+			       meta=$5,
+			       submitted_at=now()
+			 WHERE id = (
+			 	SELECT id
+			 	  FROM form_responses
+			 	 WHERE form_id=$1 AND respondent_id=$3 AND status='submitted'
+			 	 ORDER BY submitted_at DESC
+			 	 LIMIT 1
+			 )
+			 RETURNING id,form_id,share_id,respondent_id,status,answers,meta,submitted_at
+		), inserted AS (
+			INSERT INTO form_responses(form_id,share_id,respondent_id,status,answers,meta)
+			SELECT $1,$2,$3,'submitted',$4,$5
+			WHERE NOT EXISTS (SELECT 1 FROM updated)
+			RETURNING id,form_id,share_id,respondent_id,status,answers,meta,submitted_at
+		)
+		SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at FROM updated
+		UNION ALL
+		SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at FROM inserted
+		LIMIT 1`,
 		formID, shareID, respondentID, answers, meta,
 	).Scan(&r.ID, &r.FormID, &r.ShareID, &r.RespondentID, &r.Status, &r.Answers, &r.Meta, &r.SubmittedAt)
 	return r, err
