@@ -39,7 +39,10 @@ func (s *Server) createViewer(w http.ResponseWriter, r *http.Request) {
 	}
 	// Viewer login via Google, jadi buat password acak (tidak dipakai untuk login)
 	b := make([]byte, 24)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal membuat password acak")
+		return
+	}
 	randomPwd := base64.RawURLEncoding.EncodeToString(b)
 	hash, err := auth.HashPassword(randomPwd)
 	if err != nil {
