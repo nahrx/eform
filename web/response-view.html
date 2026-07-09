@@ -224,7 +224,7 @@ function renderNode(c,answers,rp){
     return`<div class="rv-block">${c.title?`<div class="rv-block-title">${esc(txt(c.title))}</div>`:""}${renderNodes(c.components||[],answers,rp)}</div>`;
   if(c.kind==="section")
     return`<div class="rv-section">${c.title?`<div class="rv-section-title">${esc(txt(c.title))}</div>`:""}${renderNodes(c.components||[],answers,rp)}</div>`;
-  if(c.kind==="roster")return renderRoster(c,answers);
+  if(c.kind==="roster")return renderRoster(c,answers,rp);
   return renderField(c,answers,rp);
 }
 
@@ -284,16 +284,17 @@ function renderField(c,answers,rp){
   return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer${isEmpty?" empty":""}">${isEmpty?"—":esc(display)}</div></div>`;
 }
 
-function renderRoster(r,answers){
-  const count=getRosterCount(r,answers);
+function renderRoster(r,answers,rp){
+  rp=rp||"";
+  const count=getRosterCount(r,answers,rp);
   const title=esc(txt(r.title)||r.name);
   let html=`<div class="rv-roster"><div class="rv-roster-title">${title} <span style="font-weight:400;font-size:12px">(${count} baris)</span></div>`;
   if(count<=0){html+=`<div class="rv-empty">Tidak ada data</div>`;}
   else{
     const rowLbl=i=>r.rowTitle?`${esc(txt(r.rowTitle))} #${i+1}`:`Baris #${i+1}`;
     for(let i=0;i<count;i++){
-      const rp=`${r.name}#${i}#`;
-      html+=`<div class="rv-row"><div class="rv-row-num">${rowLbl(i)}</div>${renderNodes(r.components||[],answers,rp)}</div>`;
+      const childRp=rosterRowPrefix(r,i,rp);
+      html+=`<div class="rv-row"><div class="rv-row-num">${rowLbl(i)}</div>${renderNodes(r.components||[],answers,childRp)}</div>`;
     }
   }
   return html+`</div>`;
@@ -333,25 +334,30 @@ function formatScalarValue(c,val){
   if(val==null||val==="")return null;
   return String(val);
 }
-function getRosterCount(r,answers){
-  if(r.countFrom){
-    const cf=Math.floor(Number(answers[r.countFrom]));
+function getRosterCount(r,answers,rowPrefix){
+  const from=String(r.countFrom||"").trim();
+  if(from){
+    const raw=(rowPrefix&&((rowPrefix+from) in answers))?answers[rowPrefix+from]:answers[from];
+    const cf=Math.floor(Number(raw));
     if(!Number.isFinite(cf)||cf<0)return 0;
     if(r.max!=null&&r.max!==""&&cf>Number(r.max))return Number(r.max);
     return cf;
   }
-  const stored=answers[r.name+"#count"];
+  const stored=answers[rosterCountKey(r,rowPrefix)];
   if(stored!=null){const n=Math.floor(Number(stored));return Number.isFinite(n)&&n>=0?n:0;}
   let max=-1;
-  const prefix=r.name+"#";
+  const prefix=rosterScopePrefix(r,rowPrefix);
   for(const k of Object.keys(answers)){
-    if(k.startsWith(prefix)&&k!==r.name+"#count"){
+    if(k.startsWith(prefix)&&k!==rosterCountKey(r,rowPrefix)){
       const m=k.slice(prefix.length).match(/^(\d+)#/);
       if(m)max=Math.max(max,+m[1]);
     }
   }
   return max+1;
 }
+function rosterScopePrefix(r,rowPrefix){return `${rowPrefix||""}${r.name}#`;}
+function rosterCountKey(r,rowPrefix){return `${rosterScopePrefix(r,rowPrefix)}count`;}
+function rosterRowPrefix(r,rowIdx,rowPrefix){return `${rosterScopePrefix(r,rowPrefix)}${rowIdx}#`;}
 
 if(FORM_ID&&RESP_ID)init();
 </script>

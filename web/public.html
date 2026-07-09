@@ -721,8 +721,9 @@ const DT_INPUT_TYPE={date:"date",time:"time",datetime:"datetime-local"};
 let pending=[];
 
 function pvEmpty(v){return v==null||v===""||(Array.isArray(v)&&v.length===0);}
-function fieldHtml(c,rp){
+function fieldHtml(c,rp,scopes){
   rp=rp||"";
+  const scopeList=[rp,...normScopes(scopes)];
   if(!evalVisible(c.visibleWhen,rp))return"";
   if(rp?ROW_SKIP_HIDDEN.get(rp.slice(0,-1))?.has(c.name):SKIP_HIDDEN.has(c.name))return""; // disembunyikan oleh skip-to
   const key=rp+c.name, ke=esc(key);
@@ -734,8 +735,8 @@ function fieldHtml(c,rp){
   const dis=enabled?"":" disabled";
   const rdOnly=c.readOnly?" readonly":"";
   const disAll=(enabled&&!c.readOnly)?"":" disabled";
-  const lab=`<label class="pv-lab">${esc(rowInterp(txt(c.label)||c.name,rp))}${isRequired?' <span class="pv-req">*</span>':''}</label>`;
-  const hint=c.hint?`<div class="pv-hint">${esc(rowInterp(txt(c.hint),rp))}</div>`:"";
+  const lab=`<label class="pv-lab">${esc(rowInterp(txt(c.label)||c.name,scopeList))}${isRequired?' <span class="pv-req">*</span>':''}</label>`;
+  const hint=c.hint?`<div class="pv-hint">${esc(rowInterp(txt(c.hint),scopeList))}</div>`:"";
   if(c.defaultValue&&pvEmpty(answers[key]))answers[key]=c.defaultValue;
   if(c.type==="calculated"){
     if(c.autofill){
@@ -789,52 +790,84 @@ function fieldHtml(c,rp){
   return`<div class="pv-field" data-fieldkey="${ke}">${lab}${hint}<div>${ctrl}</div>${vmsg}</div>`;
 }
 
-function nodeHtml(c,rp){
+function nodeHtml(c,rp,scopes){
   rp=rp||"";
+  const scopeList=[rp,...normScopes(scopes)];
   if(c.kind==="block"){
     if(!evalVisible(c.visibleWhen,rp))return"";
-    const inner=(c.components||[]).map(x=>nodeHtml(x,rp)).join("");
+    const inner=(c.components||[]).map(x=>nodeHtml(x,rp,scopes)).join("");
     if(!inner)return"";
-    return`<div class="pv-card">${c.title?`<div class="pv-bt">${esc(rowInterp(txt(c.title),rp))}</div>`:""}${inner}</div>`;
+    return`<div class="pv-card">${c.title?`<div class="pv-bt">${esc(rowInterp(txt(c.title),scopeList))}</div>`:""}${inner}</div>`;
   }
   if(c.kind==="section"){
     if(!evalVisible(c.visibleWhen,rp))return"";
-    const inner=(c.components||[]).map(x=>nodeHtml(x,rp)).join("");
+    const inner=(c.components||[]).map(x=>nodeHtml(x,rp,scopes)).join("");
     if(!inner)return"";
-    return`<div class="pv-sec">${c.title?`<div class="pv-st">${esc(rowInterp(txt(c.title),rp))}</div>`:""}${inner}</div>`;
+    return`<div class="pv-sec">${c.title?`<div class="pv-st">${esc(rowInterp(txt(c.title),scopeList))}</div>`:""}${inner}</div>`;
   }
   if(c.kind==="roster"){
     if(!evalVisible(c.visibleWhen,rp))return"";
-    return rosterHtml(c);
+    return rosterHtml(c,rp,scopes);
   }
-  return fieldHtml(c,rp);
+  return fieldHtml(c,rp,scopes);
 }
 
 /* ---- roster ---- */
-function rosterCount(r){
-  if(r.countFrom){
-    let cf=Math.floor(Number(answers[r.countFrom]));
+function rosterCount(r,rowPrefix){
+  const from=String(r.countFrom||"").trim();
+  if(from){
+    let raw=refResolve(from,rowPrefix||"");
+    if((raw==null||raw==="")&&rosterView&&rosterView.roster){
+      const k=`${rosterView.roster.name}#${rosterView.rowIdx}#${from}`;
+      if(k in answers)raw=answers[k];
+    }
+    let cf=Math.floor(Number(raw));
     if(!Number.isFinite(cf)||cf<0)cf=0;
     if(r.max!=null&&r.max!==""&&cf>Number(r.max))cf=Number(r.max);
     return cf;
   }
-  const stored=answers[r.name+"#count"];
+  const stored=answers[rosterCountKey(r,rowPrefix)];
   if(stored!=null)return Math.max(0,Math.floor(Number(stored))||0);
   return Number(r.min)||0;
 }
+function rosterScopePrefix(r,rowPrefix){return `${rowPrefix||""}${r.name}#`;}
+function rosterCountKey(r,rowPrefix){return `${rosterScopePrefix(r,rowPrefix)}count`;}
+function rosterRowPrefix(r,rowIdx,rowPrefix){return `${rosterScopePrefix(r,rowPrefix)}${rowIdx}#`;}
 function flatRosterFields(r){const out=[];function go(a){(a||[]).forEach(c=>{c.kind==="field"?out.push(c):c.components&&go(c.components);});}go(r.components);return out;}
-function rowSummary(r,i){
+function rowSummary(r,i,rowPrefix){
   const fields=(r.rowDisplay&&r.rowDisplay.length)?r.rowDisplay:flatRosterFields(r).slice(0,2).map(c=>c.name);
-  return fields.map(fn=>{const v=answers[`${r.name}#${i}#${fn}`];return(v==null||v==="")?null:String(v);}).filter(Boolean).join(" · ");
+  const rp=rosterRowPrefix(r,i,rowPrefix);
+  return fields.map(fn=>{const v=answers[`${rp}${fn}`];return(v==null||v==="")?null:String(v);}).filter(Boolean).join(" · ");
 }
-function hasRowData(r,i){return flatRosterFields(r).some(c=>{const v=answers[`${r.name}#${i}#${c.name}`];return v!=null&&v!==""&&!(Array.isArray(v)&&!v.length);});}
+function hasRowData(r,i,rowPrefix){const rp=rosterRowPrefix(r,i,rowPrefix);return flatRosterFields(r).some(c=>{const v=answers[`${rp}${c.name}`];return v!=null&&v!==""&&!(Array.isArray(v)&&!v.length);});}
 function addRowLabel(r){return r.rowTitle?`+ Tambah ${esc(txt(r.rowTitle))}`:"+ Tambah baris";}
 // Interpolasi nilai field lain dalam baris roster ke teks label/hint/itemLabel.
 // Mendukung dua sintaks: {{nama}} dan ${nama} (dipakai campur di berbagai tempat).
 const INTERP_RE=/\{\{\s*([^}]+?)\s*\}\}|\$\{\s*([^}]+?)\s*\}/g;
-function rowInterp(text,rp){if(!text||!rp)return text;return text.replace(INTERP_RE,(_,a,b)=>{const v=answers[rp+(a||b).trim()];return v!=null?String(v):"";});}
-function rowLabel(r,i){
-  if(r.itemLabel){const rp=`${r.name}#${i}#`;return esc(txt(r.itemLabel).replace(/\{\{\s*index\s*\}\}|\$\{\s*index\s*\}/g,String(i+1)).replace(INTERP_RE,(_,a,b)=>{const v=answers[rp+(a||b).trim()];return v!=null?String(v):"";}));}
+function normScopes(scopes){
+  if(!scopes)return [];
+  if(Array.isArray(scopes))return scopes.filter(Boolean);
+  return [scopes].filter(Boolean);
+}
+function indexFromScopePrefix(prefix){
+  const m=String(prefix||"").match(/#(\d+)#$/);
+  return m?Number(m[1])+1:null;
+}
+function rowInterp(text,scopes){
+  if(!text)return text;
+  const list=normScopes(scopes);
+  return text.replace(INTERP_RE,(_,a,b)=>{
+    const n=(a||b).trim();
+    if(n==="index"){
+      for(const p of list){const idx=indexFromScopePrefix(p);if(idx!=null)return String(idx);}
+      return "";
+    }
+    for(const p of list){const k=p+n;if(k in answers)return String(answers[k]);}
+    return "";
+  });
+}
+function rowLabel(r,i,scopes){
+  if(r.itemLabel){const rp=`${r.name}#${i}#`;const list=[rp,...normScopes(scopes)];return esc(txt(r.itemLabel).replace(/\{\{\s*index\s*\}\}|\$\{\s*index\s*\}/g,String(i+1)).replace(INTERP_RE,(_,a,b)=>{const n=(a||b).trim();for(const p of list){const k=p+n;if(k in answers)return String(answers[k]);}return "";}));}
   return r.rowTitle?`${esc(txt(r.rowTitle))} #${i+1}`:`Baris #${i+1}`;
 }
 function rowDefaultValue(r,i){
@@ -843,32 +876,35 @@ function rowDefaultValue(r,i){
   const lines=raw.split(/\r?\n/).map(s=>s.trim());
   return (i<lines.length&&lines[i])?lines[i]:"";
 }
-function ensureRosterDefaultValues(r,count){
+function ensureRosterDefaultValues(r,count,rowPrefix){
   const pf=primaryRowField(r);
   if(!pf) return;
   for(let i=0;i<count;i++){
-    const key=`${r.name}#${i}#${pf}`;
+    const key=`${rosterRowPrefix(r,i,rowPrefix)}${pf}`;
     const cur=answers[key];
     if(cur!=null&&String(cur)!=="") continue;
     const def=rowDefaultValue(r,i);
     if(def) answers[key]=def;
   }
 }
-function rosterHtml(r){
-  const count=rosterCount(r),manual=!r.countFrom,rn=esc(r.name);
-  ensureRosterDefaultValues(r,count);
-  const title=esc(txt(r.title)||r.name);
+function rosterHtml(r,rp,scopes){
+  rp=rp||"";
+  const hostScopes=[rp,...normScopes(scopes)];
+  const from=String(r.countFrom||"").trim();
+  const count=rosterCount(r,rp),manual=!from,rn=esc(r.name);
+  ensureRosterDefaultValues(r,count,rp);
+  const title=esc(rowInterp(txt(r.title)||r.name,hostScopes));
   if(r.rosterType==="separate"){
     let h=`<div class="pv-roster" id="pvroster_${rn}"><div class="pv-rh">${title}<span class="pv-tag">subhalaman</span></div>`;
-    if(r.countFrom&&count<=0)h+=`<div class="pv-rowempty">Isi dulu kolom "${esc(r.countFrom)}" untuk menentukan jumlah baris.</div>`;
+    if(from&&count<=0)h+=`<div class="pv-rowempty">Isi dulu kolom "${esc(from)}" untuk menentukan jumlah baris.</div>`;
     else if(count<=0)h+=`<div class="pv-rowempty">Belum ada baris.</div>`;
-    else{h+=`<div class="pv-rowlist">`;for(let i=0;i<count;i++){const sum=rowSummary(r,i),filled=hasRowData(r,i);h+=`<div class="pv-rowitem"><div class="pv-rowinfo"><b>${rowLabel(r,i)}</b><span>${sum?esc(sum):"<i>belum diisi</i>"}</span></div>${manual?`<button class="pv-rowdel" data-delrow="${rn}" data-i="${i}">hapus</button>`:""}<button class="pv-rowopen" data-openrow="${rn}" data-i="${i}">${filled?"Edit":"Isi"} →</button></div>`;}h+=`</div>`;}
+    else{h+=`<div class="pv-rowlist">`;for(let i=0;i<count;i++){const sum=rowSummary(r,i,rp),filled=hasRowData(r,i,rp);h+=`<div class="pv-rowitem"><div class="pv-rowinfo"><b>${rowLabel(r,i,hostScopes)}</b><span>${sum?esc(sum):"<i>belum diisi</i>"}</span></div>${manual?`<button class="pv-rowdel" data-delrow="${rn}" data-i="${i}">hapus</button>`:""}<button class="pv-rowopen" data-openrow="${rn}" data-i="${i}">${filled?"Edit":"Isi"} →</button></div>`;}h+=`</div>`;}
     if(manual)h+=`<button class="pv-add" data-addrow="${rn}">${addRowLabel(r)}</button>`;
     return h+`</div>`;
   }
   let h=`<div class="pv-roster" id="pvroster_${rn}"><div class="pv-rh">${title}</div>`;
-  if(r.countFrom&&count<=0)h+=`<div class="pv-rowempty">Isi dulu kolom "${esc(r.countFrom)}" untuk menentukan jumlah baris.</div>`;
-  for(let i=0;i<count;i++){const rowSkip=computeRosterRowSkipState(r,i);ROW_SKIP_HIDDEN.set(`${r.name}#${i}`,rowSkip);rowSkip.forEach(n=>{delete answers[`${r.name}#${i}#${n}`];});const rp=`${r.name}#${i}#`;h+=`<div class="pv-row"><div class="pv-rownum"><span>${rowLabel(r,i)}</span>${manual?`<button class="pv-del" data-delrow="${rn}" data-i="${i}">hapus</button>`:""}</div>`;(r.components||[]).forEach(f=>h+=nodeHtml(f,rp));h+=`</div>`;}
+  if(from&&count<=0)h+=`<div class="pv-rowempty">Isi dulu kolom "${esc(from)}" untuk menentukan jumlah baris.</div>`;
+  for(let i=0;i<count;i++){const childRp=rosterRowPrefix(r,i,rp);const rowKey=childRp.slice(0,-1);const rowSkip=computeRosterRowSkipState(r,i);ROW_SKIP_HIDDEN.set(rowKey,rowSkip);rowSkip.forEach(n=>{delete answers[`${childRp}${n}`];});h+=`<div class="pv-row"><div class="pv-rownum"><span>${rowLabel(r,i,hostScopes)}</span>${manual?`<button class="pv-del" data-delrow="${rn}" data-i="${i}">hapus</button>`:""}</div>`;(r.components||[]).forEach(f=>h+=nodeHtml(f,childRp,hostScopes));h+=`</div>`;}
   if(manual)h+=`<button class="pv-add" data-addrow="${rn}">${addRowLabel(r)}</button>`;
   return h+`</div>`;
 }
@@ -1316,8 +1352,8 @@ function renderRosterRow(){
   rowSkip.forEach(n=>{delete answers[rp+n];});
   pending=[];
   const userBar=document.getElementById("pvUserBar")?.outerHTML||"";
-  const total=rosterCount(roster);
-  const rosterTitle=esc(txt(roster.title)||roster.name);
+  const total=rosterCount(roster,rp);
+  const rosterTitle=esc(rowInterp(txt(roster.title)||roster.name,[rp]));
   const hasStructure=(roster.components||[]).some(c=>c.kind==="block"||c.kind==="section");
   let fieldsHtml=(roster.components||[]).map(f=>nodeHtml(f,rp)).join("");
   if(!hasStructure&&fieldsHtml)fieldsHtml=`<div class="pv-card">${fieldsHtml}</div>`;
