@@ -153,7 +153,7 @@ function uniqueCopyName(base){const used=allUsedNames();let n=1,name=`${base}_co
 function newPage(){return {uid:uid(),kind:"page",name:autoName("page"),title:"",visibleWhen:"",components:[]};}
 function newBlock(){return {uid:uid(),kind:"block",name:autoName("block"),title:"",visibleWhen:"",components:[]};}
 function newSection(){return {uid:uid(),kind:"section",name:autoName("section"),title:"",visibleWhen:"",components:[]};}
-function newRoster(rt){return {uid:uid(),kind:"roster",name:autoName("roster"),title:"",rowTitle:"",rosterType:rt||"inline",min:"",max:"",countFrom:"",itemLabel:"",rowDisplay:[],visibleWhen:"",components:[]};}
+function newRoster(rt){return {uid:uid(),kind:"roster",name:autoName("roster"),title:"",rowTitle:"",rosterType:rt||"inline",min:"",max:"",countFrom:"",itemLabel:"",rowDefaults:"",rowDisplay:[],visibleWhen:"",components:[]};}
 function newField(type){const f={uid:uid(),kind:"field",type,name:autoName(type),label:"",hint:"",required:false,readOnly:false,promptOnAdd:false,visibleWhen:"",enableWhen:"",requiredWhen:"",allowRemark:false,defaultValue:""};
   if(CHOICE.has(type)){f.options=[{value:"1",label:"Opsi 1"}];f.optionSource="manual";f.optionsRef="";f.optionsFilterBy="";f.optionsApi={};}
   if(NUMERIC.has(type)){f.min="";f.max="";f.step="";f.unit="";}
@@ -508,7 +508,14 @@ function navForm(n,kind){
 }
 function rosterForm(n){
   const childFields=(n.components||[]).filter(c=>c.kind==="field");
+  const minRows=Math.max(0,Math.floor(Number(n.min)||0));
+  const rowDefaultLines=String(n.rowDefaults||"").split(/\r?\n/);
   const dispBlock = `<div class="group"><div class="gh">Field tampil di daftar baris</div>${childFields.length?childFields.map(f=>`<label class="check"><input type="checkbox" data-rowdisp="${esc(f.name)}" ${(n.rowDisplay||[]).includes(f.name)?"checked":""}> ${esc(f.label||f.name)}</label>`).join(""):`<div class="help" style="margin-left:0">Tambah field ke roster dulu.</div>`}<div class="help" style="margin-left:0;margin-top:6px">Untuk roster subhalaman: nilai field ini jadi ringkasan tiap baris di halaman utama.</div></div>`;
+  const rowDefaultEditor=(n.rosterType==="separate")
+    ? (minRows>0
+      ? `<div class="group"><div class="gh">Nilai awal baris (auto isi field pertama)</div>${Array.from({length:minRows},(_,i)=>`<div class="field"><label>Baris ${i+1}</label><input class="ctrl" data-rowdefault-index="${i}" value="${esc((rowDefaultLines[i]||"").trim())}" placeholder="Contoh: Usaha ${i+1}"></div>`).join("")}<div class="help" style="margin-left:0">Nilai ini otomatis diisi ke field pertama tiap baris yang dibuat dari Min baris. Tidak menimpa nilai yang sudah Anda ubah manual.</div></div>`
+      : `<div class="group"><div class="gh">Nilai awal baris</div><div class="help" style="margin-left:0;margin-bottom:6px">Isi Min baris dulu agar editor per baris muncul. Anda juga bisa isi cepat dalam format 1 baris = 1 nilai.</div><textarea class="ctrl" data-k="rowDefaults" rows="4" placeholder="Usaha Budi&#10;Usaha Rudi&#10;Usaha Dudi">${esc(n.rowDefaults||"")}</textarea></div>`)
+    : "";
   return `${headBar("roster",n.name)}
   <div class="field"><label>Nama (dataKey)</label><input class="ctrl mono" data-k="name" value="${esc(n.name)}"></div>
   <div class="field"><label>Jenis roster</label>
@@ -519,6 +526,7 @@ function rosterForm(n){
   <div class="row2"><div class="field"><label>Min baris</label><input class="ctrl" type="number" step="1" min="0" inputmode="numeric" data-k="min" value="${esc(n.min??"")}"></div><div class="field"><label>Maks baris</label><input class="ctrl" type="number" step="1" min="0" inputmode="numeric" data-k="max" value="${esc(n.max??"")}"></div></div>
   <div class="field"><label>Jumlah baris dari field (countFrom) <span class="help">otomatis generate baris; kosongkan untuk pakai tombol "+ Tambah ${n.rowTitle?esc(n.rowTitle):"baris"}" dengan popup</span></label><input class="ctrl mono" data-k="countFrom" value="${esc(n.countFrom||"")}"></div>
   <div class="field"><label>Label tiap baris (itemLabel)</label><input class="ctrl" data-k="itemLabel" placeholder="Usaha {{index}}: \${nama}" value="${esc(n.itemLabel||"")}"></div>
+  ${rowDefaultEditor}
   ${dispBlock}
   <div class="field"><label>Tampil bila</label><textarea class="ctrl" data-k="visibleWhen">${esc(n.visibleWhen||"")}</textarea></div>
   ${n.rosterType==="separate"?`<button class="add-row" id="openRoster">Buka editor template roster →</button>`:""}`;
@@ -578,7 +586,20 @@ function skipsBlock(c){let rows=(c.skips||[]).map((s,i)=>`<div class="mini" data
 function validationsBlock(c){let rows=(c.validations||[]).map((v,i)=>`<div class="mini" data-vi="${i}"><input class="ctrl mono" data-vf="test" placeholder="test (TRUE=lolos)" value="${esc(v.test||"")}"><div class="mr" style="grid-template-columns:1fr auto;margin-top:6px"><input class="ctrl" data-vf="message" placeholder="pesan" value="${esc(typeof v.message==="object"?(v.message.id||""):(v.message||""))}"><button class="x" data-vrm>×</button></div><select class="ctrl" data-vf="severity" style="margin-top:6px">${opt("error","error — blokir",v.severity||"error")}${opt("warning","warning — boleh lanjut",v.severity||"error")}</select></div>`).join("");return `<div class="group"><div class="gh">Validasi</div><div id="valRows">${rows}</div><button class="add-row" id="addVal">+ Tambah aturan</button></div>`;}
 
 function wireForm(pane,node){
-  pane.querySelectorAll("[data-k]").forEach(inp=>{const h=()=>{node[inp.dataset.k]=inp.type==="checkbox"?inp.checked:inp.value;softUpdate();};inp.addEventListener("input",h);inp.addEventListener("change",h);});
+  pane.querySelectorAll("[data-k]").forEach(inp=>{const h=()=>{node[inp.dataset.k]=inp.type==="checkbox"?inp.checked:inp.value;if(node.kind==="roster"&&inp.dataset.k==="min"){render();return;}softUpdate();};inp.addEventListener("input",h);inp.addEventListener("change",h);});
+  pane.querySelectorAll("[data-rowdefault-index]").forEach(inp=>{
+    const onChange=()=>{
+      const idx=Number(inp.getAttribute("data-rowdefault-index"));
+      const lines=String(node.rowDefaults||"").split(/\r?\n/);
+      while(lines.length<=idx) lines.push("");
+      lines[idx]=inp.value;
+      while(lines.length && String(lines[lines.length-1]||"").trim()==="") lines.pop();
+      node.rowDefaults=lines.join("\n");
+      softUpdate();
+    };
+    inp.addEventListener("input",onChange);
+    inp.addEventListener("change",onChange);
+  });
   pane.querySelector("#delBtn")?.addEventListener("click",()=>{if(confirm("Hapus ini?")){removeNode(node.uid);selected=null;selectedSet=new Set();render();}});
   pane.querySelector("#dupBtn")?.addEventListener("click",()=>{const arr=parentArrayOf(node.uid),i=arr.indexOf(node),copy=JSON.parse(JSON.stringify(node));reuid(copy);copy.name=uniqueCopyName(node.name);arr.splice(i+1,0,copy);selected=copy.uid;selectedSet=new Set([copy.uid]);render();});
   pane.querySelector("#copyBtn")?.addEventListener("click",()=>{copyNode(node);render();});
@@ -607,7 +628,7 @@ function serNode(n){
   if(n.kind==="page"){const o={kind:"page",name:n.name};if(clean(n.title))o.title=loc(n.title);if(clean(n.visibleWhen))o.visibleWhen=n.visibleWhen;o.components=n.components.map(serNode);return o;}
   if(n.kind==="block"){const o={kind:"block",name:n.name,layout:"card"};if(clean(n.title))o.title=loc(n.title);if(clean(n.visibleWhen))o.visibleWhen=n.visibleWhen;o.components=n.components.map(serNode);return o;}
   if(n.kind==="section"){const o={kind:"section",name:n.name,layout:"bordered"};if(clean(n.title))o.title=loc(n.title);if(clean(n.visibleWhen))o.visibleWhen=n.visibleWhen;o.components=n.components.map(serNode);return o;}
-  if(n.kind==="roster"){const o={kind:"roster",name:n.name,rosterType:n.rosterType};if(clean(n.title))o.title=loc(n.title);if(clean(n.rowTitle))o.rowTitle=n.rowTitle;["min","max"].forEach(k=>{if(clean(n[k]))o[k]=num(n[k]);});if(clean(n.countFrom))o.countFrom=n.countFrom;if(clean(n.itemLabel))o.itemLabel=loc(n.itemLabel);if(n.rowDisplay&&n.rowDisplay.length)o.rowDisplay=n.rowDisplay;if(clean(n.visibleWhen))o.visibleWhen=n.visibleWhen;o.components=n.components.map(serNode);return o;}
+  if(n.kind==="roster"){const o={kind:"roster",name:n.name,rosterType:n.rosterType};if(clean(n.title))o.title=loc(n.title);if(clean(n.rowTitle))o.rowTitle=n.rowTitle;["min","max"].forEach(k=>{if(clean(n[k]))o[k]=num(n[k]);});if(clean(n.countFrom))o.countFrom=n.countFrom;if(clean(n.itemLabel))o.itemLabel=loc(n.itemLabel);if(clean(n.rowDefaults))o.rowDefaults=loc(n.rowDefaults);if(n.rowDisplay&&n.rowDisplay.length)o.rowDisplay=n.rowDisplay;if(clean(n.visibleWhen))o.visibleWhen=n.visibleWhen;o.components=n.components.map(serNode);return o;}
   const c=n,o={kind:"field",name:c.name,type:c.type};
   if(c.type!=="note"&&clean(c.label))o.label=loc(c.label);
   if(clean(c.hint))o.hint=loc(c.hint);
@@ -673,7 +694,7 @@ function importJSON(obj){try{
 function impNode(n,forceKind){
   const kind=forceKind||n.kind||"field";
   if(kind==="page"||kind==="block"||kind==="section"){return {uid:uid(),kind,name:n.name||autoName(kind),title:textOf(n.title),visibleWhen:n.visibleWhen||"",components:(n.components||[]).map(c=>impNode(c))};}
-  if(kind==="roster"){return {uid:uid(),kind:"roster",name:n.name||autoName("roster"),title:textOf(n.title),rowTitle:n.rowTitle||"",rosterType:n.rosterType||"inline",min:n.min??"",max:n.max??"",countFrom:n.countFrom||"",itemLabel:textOf(n.itemLabel),rowDisplay:n.rowDisplay||[],visibleWhen:n.visibleWhen||"",components:(n.components||[]).map(c=>impNode(c))};}
+  if(kind==="roster"){return {uid:uid(),kind:"roster",name:n.name||autoName("roster"),title:textOf(n.title),rowTitle:n.rowTitle||"",rosterType:n.rosterType||"inline",min:n.min??"",max:n.max??"",countFrom:n.countFrom||"",itemLabel:textOf(n.itemLabel),rowDefaults:textOf(n.rowDefaults),rowDisplay:n.rowDisplay||[],visibleWhen:n.visibleWhen||"",components:(n.components||[]).map(c=>impNode(c))};}
   const f=newField(n.type||"text");f.uid=uid();f.name=n.name||f.name;f.label=textOf(n.label);f.hint=textOf(n.hint);f.html=textOf(n.html);f.markdown=textOf(n.markdown);f.calculate=n.calculate||"";f.autofill=!!n.autofill;
   ["required","readOnly","allowRemark","promptOnAdd","visibleWhen","enableWhen","requiredWhen","unit","pattern","optionsRef","optionsFilterBy","min","max","step","maxLength","defaultValue"].forEach(k=>{if(n[k]!=null)f[k]=n[k];});
   f.placeholder=textOf(n.placeholder);
@@ -1014,6 +1035,23 @@ function rowSummary(r,i){
 }
 function isRowFilled(r,i){return flatFields(r.components).some(f=>{const v=pv.values[`${r.name}#${i}#${f.name}`];return v!=null&&v!=="";});}
 function primaryRowField(r){if(r.rowDisplay&&r.rowDisplay.length)return r.rowDisplay[0];const f=flatFields(r.components)[0];return f?f.name:null;}
+function rowDefaultValue(r,i){
+  const raw=String(r.rowDefaults||"");
+  if(!raw)return "";
+  const lines=raw.split(/\r?\n/).map(s=>s.trim());
+  return (i<lines.length&&lines[i])?lines[i]:"";
+}
+function ensureRosterDefaultValues(r,count){
+  const pf=primaryRowField(r);
+  if(!pf) return;
+  for(let i=0;i<count;i++){
+    const key=`${r.name}#${i}#${pf}`;
+    const cur=pv.values[key];
+    if(cur!=null&&String(cur)!=="") continue;
+    const def=rowDefaultValue(r,i);
+    if(def) pv.values[key]=def;
+  }
+}
 function openAddRowModal(r){
   const title=r.rowTitle||"baris";
   const promptFields=flatFields(r.components).filter(f=>f.promptOnAdd);
@@ -1061,6 +1099,7 @@ function rowLabel(r,i){
 }
 function pvRoster(r){
   const count=rosterCount(r);const manual=!r.countFrom;
+  ensureRosterDefaultValues(r,count);
   if(r.rosterType==="separate"){
     let h=`<div class="pv-roster" id="pvroster_${esc(r.name)}"><div class="pv-rh">${esc(r.title||r.name)}<span class="pv-tag">subhalaman</span></div>`;
     if(r.countFrom&&count<=0){h+=`<div class="pv-rowempty">Isi dulu “${esc(labelOfField(r.countFrom))}” untuk menentukan jumlah baris.</div>`;}

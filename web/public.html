@@ -837,8 +837,26 @@ function rowLabel(r,i){
   if(r.itemLabel){const rp=`${r.name}#${i}#`;return esc(txt(r.itemLabel).replace(/\{\{\s*index\s*\}\}|\$\{\s*index\s*\}/g,String(i+1)).replace(INTERP_RE,(_,a,b)=>{const v=answers[rp+(a||b).trim()];return v!=null?String(v):"";}));}
   return r.rowTitle?`${esc(txt(r.rowTitle))} #${i+1}`:`Baris #${i+1}`;
 }
+function rowDefaultValue(r,i){
+  const raw=String(txt(r.rowDefaults)||"");
+  if(!raw)return "";
+  const lines=raw.split(/\r?\n/).map(s=>s.trim());
+  return (i<lines.length&&lines[i])?lines[i]:"";
+}
+function ensureRosterDefaultValues(r,count){
+  const pf=primaryRowField(r);
+  if(!pf) return;
+  for(let i=0;i<count;i++){
+    const key=`${r.name}#${i}#${pf}`;
+    const cur=answers[key];
+    if(cur!=null&&String(cur)!=="") continue;
+    const def=rowDefaultValue(r,i);
+    if(def) answers[key]=def;
+  }
+}
 function rosterHtml(r){
   const count=rosterCount(r),manual=!r.countFrom,rn=esc(r.name);
+  ensureRosterDefaultValues(r,count);
   const title=esc(txt(r.title)||r.name);
   if(r.rosterType==="separate"){
     let h=`<div class="pv-roster" id="pvroster_${rn}"><div class="pv-rh">${title}<span class="pv-tag">subhalaman</span></div>`;
