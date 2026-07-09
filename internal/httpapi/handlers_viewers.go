@@ -21,9 +21,13 @@ func (s *Server) createViewer(w http.ResponseWriter, r *http.Request) {
 		Username string `json:"username"`
 		Email    string `json:"email"`
 		Note     string `json:"note"`
+		FormID   string `json:"formId"`
 	}
 	if err := decodeJSON(r, &in); err != nil {
 		writeErr(w, http.StatusBadRequest, "format permintaan salah")
+		return
+	}
+	if !s.ensureAdminFormScope(w, r, strings.TrimSpace(in.FormID)) {
 		return
 	}
 	in.Username = strings.TrimSpace(in.Username)
@@ -35,7 +39,10 @@ func (s *Server) createViewer(w http.ResponseWriter, r *http.Request) {
 	}
 	// Viewer login via Google, jadi buat password acak (tidak dipakai untuk login)
 	b := make([]byte, 24)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal membuat password acak")
+		return
+	}
 	randomPwd := base64.RawURLEncoding.EncodeToString(b)
 	hash, err := auth.HashPassword(randomPwd)
 	if err != nil {
@@ -51,6 +58,9 @@ func (s *Server) createViewer(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listViewers(w http.ResponseWriter, r *http.Request) {
+	if !s.ensureAdminFormScope(w, r, strings.TrimSpace(r.URL.Query().Get("formId"))) {
+		return
+	}
 	viewers, err := s.st.ListViewers(r.Context())
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
@@ -60,6 +70,9 @@ func (s *Server) listViewers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) deleteViewer(w http.ResponseWriter, r *http.Request) {
+	if !s.ensureAdminFormScope(w, r, strings.TrimSpace(r.URL.Query().Get("formId"))) {
+		return
+	}
 	id := r.PathValue("id")
 	if err := s.st.DeleteUser(r.Context(), id); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
@@ -78,6 +91,9 @@ func (s *Server) deleteViewer(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) createViewerPermission(w http.ResponseWriter, r *http.Request) {
 	formID := r.PathValue("id")
+	if _, ok := s.ensureFormAccess(w, r, formID); !ok {
+		return
+	}
 	var in struct {
 		ViewerID         string   `json:"viewerId"`
 		RespondentAccess string   `json:"respondentAccess"`
@@ -104,7 +120,11 @@ func (s *Server) createViewerPermission(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) listFormViewerPermissions(w http.ResponseWriter, r *http.Request) {
-	perms, err := s.st.ListFormViewerPermissions(r.Context(), r.PathValue("id"))
+	formID := r.PathValue("id")
+	if _, ok := s.ensureFormAccess(w, r, formID); !ok {
+		return
+	}
+	perms, err := s.st.ListFormViewerPermissions(r.Context(), formID)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
 		return
@@ -122,10 +142,26 @@ func (s *Server) getViewerPermission(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
 		return
 	}
+	if _, ok := s.ensureFormAccess(w, r, p.FormID); !ok {
+		return
+	}
 	writeJSON(w, http.StatusOK, p)
 }
 
 func (s *Server) updateViewerPermission(w http.ResponseWriter, r *http.Request) {
+	perm, err := s.st.GetViewerPermissionByID(r.Context(), r.PathValue("permId"))
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "permission tidak ditemukan")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		return
+	}
+	if _, ok := s.ensureFormAccess(w, r, perm.FormID); !ok {
+		return
+	}
+
 	var in struct {
 		RespondentAccess string   `json:"respondentAccess"`
 		VisibleFields    []string `json:"visibleFields"`
@@ -150,6 +186,19 @@ func (s *Server) updateViewerPermission(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) deleteViewerPermission(w http.ResponseWriter, r *http.Request) {
+	perm, err := s.st.GetViewerPermissionByID(r.Context(), r.PathValue("permId"))
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "permission tidak ditemukan")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		return
+	}
+	if _, ok := s.ensureFormAccess(w, r, perm.FormID); !ok {
+		return
+	}
+
 	if err := s.st.DeleteViewerPermission(r.Context(), r.PathValue("permId")); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeErr(w, http.StatusNotFound, "permission tidak ditemukan")
@@ -166,6 +215,19 @@ func (s *Server) deleteViewerPermission(w http.ResponseWriter, r *http.Request) 
    ================================================================ */
 
 func (s *Server) listViewerAllowedRespondents(w http.ResponseWriter, r *http.Request) {
+	perm, err := s.st.GetViewerPermissionByID(r.Context(), r.PathValue("permId"))
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "permission tidak ditemukan")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		return
+	}
+	if _, ok := s.ensureFormAccess(w, r, perm.FormID); !ok {
+		return
+	}
+
 	items, err := s.st.ListViewerAllowedRespondents(r.Context(), r.PathValue("permId"))
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
@@ -175,6 +237,19 @@ func (s *Server) listViewerAllowedRespondents(w http.ResponseWriter, r *http.Req
 }
 
 func (s *Server) addViewerAllowedRespondent(w http.ResponseWriter, r *http.Request) {
+	perm, err := s.st.GetViewerPermissionByID(r.Context(), r.PathValue("permId"))
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "permission tidak ditemukan")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		return
+	}
+	if _, ok := s.ensureFormAccess(w, r, perm.FormID); !ok {
+		return
+	}
+
 	var in struct {
 		RespondentID string `json:"respondentId"`
 	}
@@ -195,6 +270,28 @@ func (s *Server) addViewerAllowedRespondent(w http.ResponseWriter, r *http.Reque
 }
 
 func (s *Server) removeViewerAllowedRespondent(w http.ResponseWriter, r *http.Request) {
+	item, err := s.st.GetViewerAllowedRespondentByID(r.Context(), r.PathValue("id"))
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "data tidak ditemukan")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		return
+	}
+	perm, err := s.st.GetViewerPermissionByID(r.Context(), item.PermissionID)
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "permission tidak ditemukan")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		return
+	}
+	if _, ok := s.ensureFormAccess(w, r, perm.FormID); !ok {
+		return
+	}
+
 	if err := s.st.RemoveViewerAllowedRespondent(r.Context(), r.PathValue("id")); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeErr(w, http.StatusNotFound, "data tidak ditemukan")
@@ -208,12 +305,39 @@ func (s *Server) removeViewerAllowedRespondent(w http.ResponseWriter, r *http.Re
 
 // listFormRespondents digunakan superadmin untuk memilih responden saat konfigurasi 'selected'.
 func (s *Server) listFormRespondents(w http.ResponseWriter, r *http.Request) {
-	respondents, err := s.st.ListFormRespondents(r.Context(), r.PathValue("id"))
+	formID := r.PathValue("id")
+	if _, ok := s.ensureFormAccess(w, r, formID); !ok {
+		return
+	}
+	respondents, err := s.st.ListFormRespondents(r.Context(), formID)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"respondents": respondents})
+}
+
+func (s *Server) ensureAdminFormScope(w http.ResponseWriter, r *http.Request, formID string) bool {
+	u := userFrom(r.Context())
+	if u == nil {
+		writeErr(w, http.StatusUnauthorized, "perlu login")
+		return false
+	}
+	if u.Role == "superadmin" {
+		return true
+	}
+	if u.Role != "admin" {
+		writeErr(w, http.StatusForbidden, "akses ditolak")
+		return false
+	}
+	if strings.TrimSpace(formID) == "" {
+		writeErr(w, http.StatusBadRequest, "formId wajib diisi untuk admin")
+		return false
+	}
+	if _, ok := s.ensureFormAccess(w, r, formID); !ok {
+		return false
+	}
+	return true
 }
 
 /* ================================================================
@@ -245,6 +369,29 @@ func (s *Server) viewerMyFormPermission(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	writeJSON(w, http.StatusOK, perm)
+}
+
+// viewerGetForm mengembalikan data form untuk viewer yang punya permission.
+func (s *Server) viewerGetForm(w http.ResponseWriter, r *http.Request) {
+	viewerID := userFrom(r.Context()).Subject
+	formID := r.PathValue("id")
+	if _, err := s.st.GetViewerPermission(r.Context(), viewerID, formID); errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusForbidden, "tidak memiliki akses ke kuesioner ini")
+		return
+	} else if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		return
+	}
+	f, err := s.st.GetForm(r.Context(), formID)
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "kuesioner tidak ditemukan")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		return
+	}
+	writeJSON(w, http.StatusOK, f)
 }
 
 // viewerListResponses melayani daftar jawaban yang boleh dilihat viewer (dengan pembatasan).

@@ -10,13 +10,53 @@
 <header>
   <h1>eForm · Dashboard</h1>
   <span class="who" id="who"></span>
-  <button class="btn primary" onclick="location.href='/builder'">+ Kuesioner baru</button>
+  <button class="btn primary" id="btnNewForm" onclick="location.href='/builder'">+ Kuesioner baru</button>
   <button class="btn" id="logout">Keluar</button>
 </header>
 <main>
-  <div class="bar"><h2>Daftar Kuesioner</h2><button class="btn" id="refresh">↻ Muat ulang</button></div>
-  <table id="tbl"><thead><tr><th>Judul</th><th>Status</th><th>Diperbarui</th><th>Jawaban</th><th></th></tr></thead>
-  <tbody id="rows"><tr><td colspan="5" class="empty">Memuat…</td></tr></tbody></table>
+  <div class="tabbar" id="tabbar">
+    <button class="btn tab active" id="tabFormsBtn" type="button">Kuesioner</button>
+    <button class="btn tab" id="tabUsersBtn" type="button" hidden>User</button>
+  </div>
+
+  <section id="formsSection">
+    <div class="bar"><h2>Daftar Kuesioner</h2><button class="btn" id="refresh">↻ Muat ulang</button></div>
+    <table id="tbl"><thead><tr><th>Judul</th><th>Status</th><th>Diperbarui</th><th id="thAnswers">Jawaban</th><th></th></tr></thead>
+    <tbody id="rows"><tr><td colspan="5" class="empty">Memuat…</td></tr></tbody></table>
+  </section>
+
+  <section id="usersSection" hidden>
+    <div class="bar"><h2>Manajemen User</h2><button class="btn" id="refreshUsers" type="button">↻ Muat ulang</button></div>
+    <div class="user-card">
+      <div class="user-card-title">Buat User Baru</div>
+      <div class="user-grid">
+        <input id="uUsername" placeholder="Username" autocomplete="off">
+        <input id="uEmail" type="email" placeholder="Email (opsional)">
+        <input id="uPassword" type="password" placeholder="Password (min. 6 karakter)">
+        <select id="uRole">
+          <option value="admin">admin</option>
+          <option value="superadmin">superadmin</option>
+        </select>
+      </div>
+      <div class="user-actions">
+        <button class="btn primary" id="btnCreateUser" type="button">+ Buat User</button>
+      </div>
+      <div class="muted" id="userMsg"></div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Username</th>
+          <th>Email</th>
+          <th>Role</th>
+          <th>Status</th>
+          <th>Dibuat</th>
+        </tr>
+      </thead>
+      <tbody id="userRows"><tr><td colspan="5" class="empty">Memuat…</td></tr></tbody>
+    </table>
+  </section>
 </main>
 
 <!-- Dialog share (tidak berubah) -->
@@ -151,6 +191,45 @@
       <button class="btn" onclick="vpDetailDlg.close()">Batal</button>
       <button class="btn primary" onclick="savePermDetail()">Simpan</button>
     </div>
+  </div>
+</dialog>
+
+<!-- Dialog akses editor per kuesioner (superadmin) -->
+<dialog id="editorPermDlg">
+  <div class="dlg-h" style="justify-content:space-between">
+    <span>Akses Editor · <span id="epFormTitle"></span></span>
+    <button class="btn" onclick="editorPermDlg.close()">✕</button>
+  </div>
+  <div class="dlg-b">
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
+      Pilih editor yang boleh mengelola kuesioner ini.
+    </div>
+
+    <div style="border:1px solid var(--line);border-radius:var(--radius);padding:12px;margin-bottom:14px">
+      <div style="font-size:12px;font-weight:600;margin-bottom:4px">Akun Editor</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px">
+        Editor login dengan akun Google. Buat akun editor dengan username dan email Google.
+      </div>
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <input id="eUsername" placeholder="Username editor" style="flex:1;min-width:110px">
+        <input id="eEmail" type="email" placeholder="Email Google editor" style="flex:1;min-width:150px">
+        <input id="eNote" placeholder="Catatan (opsional)" style="flex:1;min-width:130px">
+        <button class="btn primary" type="button" onclick="createEditor()">+ Buat Editor</button>
+      </div>
+      <div id="editorList" style="margin-top:10px">Memuat…</div>
+    </div>
+
+    <div style="border:1px solid var(--line);border-radius:var(--radius);padding:12px;margin-bottom:14px">
+      <div style="font-size:12px;font-weight:600;margin-bottom:8px">Tambah Editor ke Kuesioner Ini</div>
+      <div class="row" style="gap:8px;flex-wrap:wrap;align-items:flex-start">
+        <select id="epEditorSel" style="flex:1;min-width:160px;font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:6px">
+          <option value="">— pilih editor —</option>
+        </select>
+        <button class="btn primary" type="button" onclick="addEditorPermission()">Tambahkan</button>
+      </div>
+    </div>
+
+    <div id="epPermList">Memuat…</div>
   </div>
 </dialog>
 

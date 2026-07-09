@@ -206,6 +206,49 @@ func (s *Store) ListForms(ctx context.Context) ([]models.Form, error) {
 	return out, rows.Err()
 }
 
+// ListFormsByOwner mengembalikan daftar form milik owner tertentu.
+func (s *Store) ListFormsByOwner(ctx context.Context, ownerID string) ([]models.Form, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT id,slug,title,description,status,version,owner_id,created_at,updated_at
+		 FROM forms WHERE owner_id=$1 ORDER BY updated_at DESC`, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []models.Form
+	for rows.Next() {
+		f := models.Form{}
+		if err := rows.Scan(&f.ID, &f.Slug, &f.Title, &f.Description, &f.Status, &f.Version, &f.OwnerID, &f.CreatedAt, &f.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, f)
+	}
+	return out, rows.Err()
+}
+
+// ListFormsByEditor mengembalikan daftar form yang ditugaskan ke editor.
+func (s *Store) ListFormsByEditor(ctx context.Context, editorID string) ([]models.Form, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT f.id,f.slug,f.title,f.description,f.status,f.version,f.owner_id,f.created_at,f.updated_at
+		 FROM forms f
+		 JOIN editor_form_permissions p ON p.form_id=f.id
+		 WHERE p.editor_id=$1
+		 ORDER BY f.updated_at DESC`, editorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []models.Form
+	for rows.Next() {
+		f := models.Form{}
+		if err := rows.Scan(&f.ID, &f.Slug, &f.Title, &f.Description, &f.Status, &f.Version, &f.OwnerID, &f.CreatedAt, &f.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, f)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) UpdateForm(ctx context.Context, id, title, desc string, schema json.RawMessage, version string) (*models.Form, error) {
 	f := &models.Form{}
 	err := s.pool.QueryRow(ctx,
@@ -306,6 +349,23 @@ func (s *Store) GetShareByToken(ctx context.Context, token string) (*models.Shar
 	return sh, nil
 }
 
+// GetShareByID mengambil satu share berdasarkan ID.
+func (s *Store) GetShareByID(ctx context.Context, id string) (*models.Share, error) {
+	sh := &models.Share{}
+	err := s.pool.QueryRow(ctx,
+		`SELECT id,form_id,token,label,is_active,allow_responses,multi_response,access_mode,password_hash,expires_at,view_count,created_at
+		 FROM form_shares WHERE id=$1`, id,
+	).Scan(&sh.ID, &sh.FormID, &sh.Token, &sh.Label, &sh.IsActive, &sh.AllowResponses, &sh.MultiResponse, &sh.AccessMode, &sh.PasswordHash, &sh.ExpiresAt, &sh.ViewCount, &sh.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	sh.HasPassword = sh.PasswordHash != nil
+	return sh, nil
+}
+
 func (s *Store) RevokeShare(ctx context.Context, id string) error {
 	ct, err := s.pool.Exec(ctx, `UPDATE form_shares SET is_active=false WHERE id=$1`, id)
 	if err != nil {
@@ -395,6 +455,21 @@ func (s *Store) ListShareAllowedEmails(ctx context.Context, shareID string) ([]m
 		out = append(out, e)
 	}
 	return out, rows.Err()
+}
+
+// GetShareAllowedEmailByID mengambil data allowlist email per ID.
+func (s *Store) GetShareAllowedEmailByID(ctx context.Context, id string) (*models.ShareAllowedEmail, error) {
+	e := &models.ShareAllowedEmail{}
+	err := s.pool.QueryRow(ctx,
+		`SELECT id,share_id,email,note,created_at FROM share_allowed_emails WHERE id=$1`, id,
+	).Scan(&e.ID, &e.ShareID, &e.Email, &e.Note, &e.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return e, nil
 }
 
 func (s *Store) DeleteShareAllowedEmail(ctx context.Context, id string) error {
@@ -551,7 +626,7 @@ func (s *Store) CountAllResponsesByForm(ctx context.Context, formID string, f Re
 		  SELECT 'draft'::text,share_id,'{}'::jsonb,answers FROM response_drafts WHERE form_id=$1
 		) combined
 		WHERE 1=1%s`, where),
-		args...
+		args...,
 	).Scan(&n)
 	return n, err
 }
@@ -807,6 +882,36 @@ func (s *Store) ListViewers(ctx context.Context) ([]models.User, error) {
 	return out, rows.Err()
 }
 
+// ListEditors mengembalikan semua user dengan role='editor'.
+func (s *Store) ListEditors(ctx context.Context) ([]models.User, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT id,username,email,role,note,is_active,created_at,updated_at FROM users
+		 WHERE role='editor' ORDER BY username`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []models.User
+	for rows.Next() {
+		u := models.User{}
+		var em, nt *string
+		if err := rows.Scan(&u.ID, &u.Username, &em, &u.Role, &nt, &u.IsActive, &u.CreatedAt, &u.UpdatedAt); err != nil {
+			return nil, err
+		}
+		if em != nil {
+			u.Email = *em
+		}
+		if nt != nil {
+			u.Note = *nt
+		}
+		out = append(out, u)
+	}
+	if out == nil {
+		out = []models.User{}
+	}
+	return out, rows.Err()
+}
+
 // DeleteUser menghapus user secara permanen (dimaksudkan untuk viewer).
 func (s *Store) DeleteUser(ctx context.Context, id string) error {
 	ct, err := s.pool.Exec(ctx, `DELETE FROM users WHERE id=$1`, id)
@@ -856,6 +961,19 @@ func (s *Store) GetViewerPermissionByID(ctx context.Context, permID string) (*mo
 		return nil, ErrNotFound
 	}
 	return p, err
+}
+
+// GetViewerAllowedRespondentByID mengambil data allowed respondent berdasarkan ID.
+func (s *Store) GetViewerAllowedRespondentByID(ctx context.Context, id string) (*models.ViewerAllowedRespondent, error) {
+	ar := &models.ViewerAllowedRespondent{}
+	err := s.pool.QueryRow(ctx,
+		`SELECT id,permission_id,respondent_id,created_at
+		 FROM viewer_allowed_respondents WHERE id=$1`, id,
+	).Scan(&ar.ID, &ar.PermissionID, &ar.RespondentID, &ar.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return ar, err
 }
 
 // ListFormViewerPermissions mengembalikan semua permission viewer untuk satu kuesioner (dengan join username).
@@ -1115,6 +1233,81 @@ func (s *Store) CountViewerResponses(ctx context.Context, viewerID, formID strin
 		args...,
 	).Scan(&n)
 	return n, err
+}
+
+/* ---------------- editors ---------------- */
+
+// CreateEditorPermission memberikan akses editor ke satu kuesioner.
+func (s *Store) CreateEditorPermission(ctx context.Context, editorID, formID string, createdBy *string) (*models.EditorFormPermission, error) {
+	p := &models.EditorFormPermission{}
+	err := s.pool.QueryRow(ctx,
+		`INSERT INTO editor_form_permissions(editor_id,form_id,created_by)
+		 VALUES ($1,$2,$3)
+		 RETURNING id,editor_id,form_id,created_by,created_at`,
+		editorID, formID, createdBy,
+	).Scan(&p.ID, &p.EditorID, &p.FormID, &p.CreatedBy, &p.CreatedAt)
+	return p, err
+}
+
+// GetEditorPermissionByID mengambil permission editor berdasarkan ID.
+func (s *Store) GetEditorPermissionByID(ctx context.Context, permID string) (*models.EditorFormPermission, error) {
+	p := &models.EditorFormPermission{}
+	err := s.pool.QueryRow(ctx,
+		`SELECT id,editor_id,form_id,created_by,created_at
+		 FROM editor_form_permissions WHERE id=$1`, permID,
+	).Scan(&p.ID, &p.EditorID, &p.FormID, &p.CreatedBy, &p.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return p, err
+}
+
+// ListFormEditorPermissions mengembalikan semua editor yang punya akses ke satu kuesioner.
+func (s *Store) ListFormEditorPermissions(ctx context.Context, formID string) ([]models.EditorFormPermission, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT p.id,p.editor_id,p.form_id,p.created_by,p.created_at,u.username
+		 FROM editor_form_permissions p
+		 JOIN users u ON u.id=p.editor_id
+		 WHERE p.form_id=$1
+		 ORDER BY p.created_at`, formID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []models.EditorFormPermission
+	for rows.Next() {
+		p := models.EditorFormPermission{}
+		if err := rows.Scan(&p.ID, &p.EditorID, &p.FormID, &p.CreatedBy, &p.CreatedAt, &p.EditorName); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	if out == nil {
+		out = []models.EditorFormPermission{}
+	}
+	return out, rows.Err()
+}
+
+// DeleteEditorPermission mencabut akses editor dari kuesioner.
+func (s *Store) DeleteEditorPermission(ctx context.Context, permID string) error {
+	ct, err := s.pool.Exec(ctx, `DELETE FROM editor_form_permissions WHERE id=$1`, permID)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// HasEditorFormPermission mengecek apakah editor punya akses kelola ke form tertentu.
+func (s *Store) HasEditorFormPermission(ctx context.Context, editorID, formID string) (bool, error) {
+	var exists bool
+	err := s.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM editor_form_permissions WHERE editor_id=$1 AND form_id=$2)`,
+		editorID, formID,
+	).Scan(&exists)
+	return exists, err
 }
 
 // maskAnswers menyaring kunci answers JSONB agar hanya field yang diizinkan terlihat.

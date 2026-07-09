@@ -7,6 +7,13 @@
   .btn:hover{filter:brightness(.98)}
   main{max-width:1000px;margin:22px auto;padding:0 18px}
   .bar{display:flex;align-items:center;gap:10px;margin-bottom:16px} .bar h2{font-size:15px;margin:0;flex:1}
+  .tabbar{display:flex;gap:8px;margin-bottom:14px}
+  .tab{background:#fff}
+  .tab.active{background:#0e7490;color:#fff;border-color:#0e7490}
+  .user-card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px}
+  .user-card-title{font-size:13px;font-weight:700;margin-bottom:10px}
+  .user-grid{display:grid;grid-template-columns:2fr 2fr 2fr 1.2fr;gap:8px}
+  .user-actions{margin-top:10px;display:flex;justify-content:flex-end}
   table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden}
   th,td{text-align:left;padding:11px 14px;font-size:13.5px;border-bottom:1px solid var(--line);vertical-align:middle}
   th{background:#f8fafc;font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted)}
@@ -38,3 +45,9 @@
   .edit-lbl{min-width:90px;font-size:12px;font-weight:600;color:var(--muted);flex:none}
   .btn-sm{padding:5px 12px;font-size:12.5px}
   :root{--panel:#fff;--panel-2:#f8fafc;--surface:#f1f5f9;--radius:9px;--bad:#b91c1c}
+
+  @media (max-width: 860px){
+    .user-grid{grid-template-columns:1fr}
+    .user-actions{justify-content:stretch}
+    .user-actions .btn{width:100%}
+  }

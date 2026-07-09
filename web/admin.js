@@ -13,35 +13,149 @@ async function api(path,opts={}){
 }
 
 let MY_ROLE="admin";
+let ACTIVE_TAB="forms";
 (async()=>{
   try{
     const me=await api("/api/auth/me");
     MY_ROLE=me.role||"admin";
     $("#who").textContent=me.username+" · "+me.role;
+    setupAdminMenu();
   }catch(e){}
   load();
 })();
+
+function setupAdminMenu(){
+  const tabUsersBtn=$("#tabUsersBtn");
+  const btnNewForm=$("#btnNewForm");
+  if(tabUsersBtn){
+    tabUsersBtn.hidden=MY_ROLE!=="superadmin";
+  }
+  if(btnNewForm){
+    btnNewForm.style.display=(MY_ROLE==="admin"||MY_ROLE==="superadmin")?"":"none";
+  }
+  if(MY_ROLE!=="superadmin"){
+    switchTab("forms");
+    return;
+  }
+  $("#tabFormsBtn")?.addEventListener("click",()=>switchTab("forms"));
+  tabUsersBtn?.addEventListener("click",()=>switchTab("users"));
+  $("#refreshUsers")?.addEventListener("click",loadUsers);
+  $("#btnCreateUser")?.addEventListener("click",createUserFromPanel);
+}
+
+function switchTab(tab){
+  ACTIVE_TAB=tab;
+  const formsTab=$("#tabFormsBtn");
+  const usersTab=$("#tabUsersBtn");
+  const formsSection=$("#formsSection");
+  const usersSection=$("#usersSection");
+  const newFormBtn=$("#btnNewForm");
+  const isUsers=tab==="users";
+  const canCreateForm=MY_ROLE==="admin"||MY_ROLE==="superadmin";
+  formsSection.hidden=isUsers;
+  usersSection.hidden=!isUsers;
+  formsTab?.classList.toggle("active",!isUsers);
+  usersTab?.classList.toggle("active",isUsers);
+  if(newFormBtn) newFormBtn.style.display=(!isUsers&&canCreateForm)?"":"none";
+  if(isUsers){
+    loadUsers();
+  }
+}
 
 async function load(){
   try{
     const {forms}=await api("/api/forms");
     const rows=$("#rows");
-    if(!forms||!forms.length){rows.innerHTML='<tr><td colspan="5" class="empty">Belum ada kuesioner. Klik “+ Kuesioner baru”.</td></tr>';return;}
-    const counts=await Promise.all(forms.map(f=>api("/api/forms/"+f.id+"/responses?limit=1").then(d=>d.total).catch(()=>0)));
+    const canViewResults=MY_ROLE!=="editor";
+    const answersTh=$("#thAnswers");
+    if(answersTh) answersTh.style.display=canViewResults?"":"none";
+    const colCount=canViewResults?5:4;
+    if(!forms||!forms.length){rows.innerHTML=`<tr><td colspan="${colCount}" class="empty">Belum ada kuesioner. Klik “+ Kuesioner baru”.</td></tr>`;return;}
+    const counts=canViewResults
+      ? await Promise.all(forms.map(f=>api("/api/forms/"+f.id+"/responses?limit=1").then(d=>d.total).catch(()=>0)))
+      : forms.map(()=>0);
     rows.innerHTML=forms.map((f,i)=>`<tr>
       <td><b>${esc(f.title)}</b><div class="muted">${esc(f.slug)}</div></td>
       <td><span class="tag ${f.status}">${f.status}</span></td>
       <td class="muted">${new Date(f.updatedAt).toLocaleString("id-ID")}</td>
-      <td>${counts[i]} ${counts[i]?`· <a href="/api/forms/${f.id}/responses.csv" onclick="return dl(event,'${f.id}')">CSV</a>`:""}</td>
+      ${canViewResults?`<td>${counts[i]} ${counts[i]?`· <a href="/api/forms/${f.id}/responses.csv" onclick="return dl(event,'${f.id}')">CSV</a>`:""}</td>`:""}
       <td><div class="acts">
         <button class="btn" onclick="location.href='/builder?id=${f.id}'">Buka</button>
         <button class="btn" onclick="togglePub('${f.id}','${f.status}')">${f.status==="published"?"Tarik":"Publikasikan"}</button>
         <button class="btn" onclick="openShare('${f.id}','${esc(f.title)}','${f.status}')">Bagikan</button>
-        <button class="btn" onclick="location.href='/responses?id=${f.id}'">Jawaban${counts[i]>0?` (${counts[i]})`:""}</button>
-        ${MY_ROLE==="superadmin"?`<button class="btn" onclick="openViewerPerm('${f.id}','${esc(f.title)}')">Akses Viewer</button>`:""}
+        ${canViewResults?`<button class="btn" onclick="location.href='/responses?id=${f.id}'">Jawaban${counts[i]>0?` (${counts[i]})`:""}</button>`:""}
+        ${(MY_ROLE==="superadmin"||MY_ROLE==="admin")?`<button class="btn" onclick="openEditorPerm('${f.id}','${esc(f.title)}')">Akses Editor</button>`:""}
+        ${(MY_ROLE==="superadmin"||MY_ROLE==="admin")?`<button class="btn" onclick="openViewerPerm('${f.id}','${esc(f.title)}')">Akses Viewer</button>`:""}
         <button class="btn danger" onclick="del('${f.id}','${esc(f.title)}')" ${counts[i]>0?'disabled title="Tidak dapat dihapus karena sudah ada jawaban"':""}>Hapus</button>
       </div></td></tr>`).join("");
-  }catch(e){ $("#rows").innerHTML=`<tr><td colspan="5" class="empty">${esc(e.message)}</td></tr>`; }
+  }catch(e){
+    const canViewResults=MY_ROLE!=="editor";
+    const answersTh=$("#thAnswers");
+    if(answersTh) answersTh.style.display=canViewResults?"":"none";
+    $("#rows").innerHTML=`<tr><td colspan="${canViewResults?5:4}" class="empty">${esc(e.message)}</td></tr>`;
+  }
+}
+
+async function loadUsers(){
+  if(MY_ROLE!=="superadmin") return;
+  const rows=$("#userRows");
+  if(!rows) return;
+  rows.innerHTML='<tr><td colspan="5" class="empty">Memuat…</td></tr>';
+  try{
+    const {users}=await api("/api/users");
+    if(!users||!users.length){
+      rows.innerHTML='<tr><td colspan="5" class="empty">Belum ada user.</td></tr>';
+      return;
+    }
+    rows.innerHTML=users.map(u=>`<tr>
+      <td><b>${esc(u.username||"-")}</b></td>
+      <td class="muted">${esc(u.email||"-")}</td>
+      <td><span class="tag">${esc(u.role||"-")}</span></td>
+      <td><span class="tag ${u.isActive?"published":"archived"}">${u.isActive?"Aktif":"Nonaktif"}</span></td>
+      <td class="muted">${u.createdAt?new Date(u.createdAt).toLocaleString("id-ID"):"-"}</td>
+    </tr>`).join("");
+  }catch(e){
+    rows.innerHTML=`<tr><td colspan="5" class="empty">${esc(e.message)}</td></tr>`;
+  }
+}
+
+async function createUserFromPanel(){
+  const username=(""+($("#uUsername")?.value||"")).trim();
+  const email=(""+($("#uEmail")?.value||"")).trim();
+  const password=(""+($("#uPassword")?.value||"")).trim();
+  const role=(""+($("#uRole")?.value||"admin")).trim();
+  const msg=$("#userMsg");
+
+  if(!username){
+    if(msg) msg.textContent="Username wajib diisi.";
+    $("#uUsername")?.focus();
+    return;
+  }
+  if(password.length<6){
+    if(msg) msg.textContent="Password minimal 6 karakter.";
+    $("#uPassword")?.focus();
+    return;
+  }
+
+  const btn=$("#btnCreateUser");
+  if(btn){btn.disabled=true;btn.textContent="Membuat…";}
+  if(msg) msg.textContent="";
+  try{
+    await api("/api/users",{
+      method:"POST",
+      body:JSON.stringify({username,email,password,role})
+    });
+    if(msg) msg.textContent="User berhasil dibuat.";
+    if($("#uUsername")) $("#uUsername").value="";
+    if($("#uEmail")) $("#uEmail").value="";
+    if($("#uPassword")) $("#uPassword").value="";
+    if($("#uRole")) $("#uRole").value="admin";
+    await loadUsers();
+  }catch(e){
+    if(msg) msg.textContent="Gagal: "+e.message;
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent="+ Buat User";}
+  }
 }
 
 async function dl(ev,id){ // unduh CSV dengan header auth
@@ -272,7 +386,147 @@ $("#makeShare").addEventListener("click",async()=>{
 });
 
 $("#logout").addEventListener("click",()=>{localStorage.removeItem("eform_token");localStorage.removeItem("eform_user");location.replace("/login");});
-$("#refresh").addEventListener("click",load);
+$("#refresh").addEventListener("click",()=>{
+  if(ACTIVE_TAB==="users"){
+    loadUsers();
+    return;
+  }
+  load();
+});
+
+/* ======================================================
+   EDITOR MANAGEMENT (superadmin)
+   ====================================================== */
+
+let _epFormId=null;
+
+async function openEditorPerm(formId,formTitle){
+  _epFormId=formId;
+  document.getElementById("epFormTitle").textContent=formTitle;
+  editorPermDlg.showModal();
+  await refreshEditorsAndPerms();
+}
+
+async function refreshEditorsAndPerms(){
+  await Promise.all([refreshEditorList(), refreshEditorPermList()]);
+}
+
+async function refreshEditorList(){
+  const el=document.getElementById("editorList");
+  const sel=document.getElementById("epEditorSel");
+  if(!el||!sel) return;
+  el.textContent="Memuat…";
+  try{
+    const {editors}=await api("/api/editors?formId="+encodeURIComponent(_epFormId||""));
+    const cur=sel.value;
+    sel.innerHTML='<option value="">— pilih editor —</option>'+
+      (editors||[]).map(u=>`<option value="${esc(u.id)}">${esc(u.username)}</option>`).join("");
+    sel.value=cur;
+
+    if(!editors||!editors.length){
+      el.innerHTML='<div class="muted" style="font-size:13px">Belum ada editor.</div>';
+      return;
+    }
+
+    el.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="background:var(--surface)">
+        <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)">Username</th>
+        <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)">Email</th>
+        <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)">Catatan</th>
+        <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)">Status</th>
+        <th style="padding:6px 8px;border-bottom:1px solid var(--line)"></th>
+      </tr></thead>
+      <tbody>${editors.map(e=>`<tr>
+        <td style="padding:6px 8px;border-bottom:1px solid var(--line-2)">${esc(e.username)}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid var(--line-2);color:var(--muted)">${esc(e.email||"—")}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid var(--line-2);color:var(--muted)">${esc(e.note||"—")}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid var(--line-2)"><span class="tag ${e.isActive?"published":"archived"}">${e.isActive?"Aktif":"Nonaktif"}</span></td>
+        <td style="padding:6px 8px;border-bottom:1px solid var(--line-2);text-align:right">
+          <button class="btn danger" style="font-size:12px;padding:3px 8px" onclick="deleteEditor('${e.id}','${esc(e.username)}')">Hapus</button>
+        </td>
+      </tr>`).join("")}</tbody>
+    </table>`;
+  }catch(e){
+    el.textContent="Gagal: "+e.message;
+  }
+}
+
+async function createEditor(){
+  const username=(document.getElementById("eUsername")?.value||"").trim();
+  const email=(document.getElementById("eEmail")?.value||"").trim();
+  const note=(document.getElementById("eNote")?.value||"").trim();
+  if(!username||!email){alert("Username dan email Google wajib diisi");return;}
+  try{
+    await api("/api/editors",{method:"POST",body:JSON.stringify({username,email,note,formId:_epFormId})});
+    document.getElementById("eUsername").value="";
+    document.getElementById("eEmail").value="";
+    document.getElementById("eNote").value="";
+    await refreshEditorsAndPerms();
+  }catch(e){
+    alert("Gagal: "+e.message);
+  }
+}
+
+async function deleteEditor(id,name){
+  if(!confirm(`Hapus editor "${name}"? Semua akses form editor ini akan ikut dihapus.`))return;
+  try{
+    await api("/api/editors/"+id+"?formId="+encodeURIComponent(_epFormId||""),{method:"DELETE"});
+    await refreshEditorsAndPerms();
+  }catch(e){
+    alert("Gagal: "+e.message);
+  }
+}
+
+async function refreshEditorPermList(){
+  const listEl=document.getElementById("epPermList");
+  if(!listEl||!_epFormId) return;
+  listEl.textContent="Memuat…";
+  try{
+    const {permissions}=await api("/api/forms/"+_epFormId+"/editor-permissions");
+
+    if(!permissions||!permissions.length){
+      listEl.innerHTML='<div class="muted" style="font-size:13px">Belum ada editor yang ditambahkan.</div>';
+      return;
+    }
+    listEl.innerHTML=permissions.map(p=>`
+      <div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <div style="flex:1;min-width:120px">
+          <b>${esc(p.editorName||"(editor)")}</b>
+          <div style="font-size:11px;color:var(--muted)">Akses kelola form aktif</div>
+        </div>
+        <div class="acts">
+          <button class="btn danger" style="font-size:12px" onclick="removeEditorPerm('${p.id}','${esc(p.editorName||"editor")}')">Cabut</button>
+        </div>
+      </div>`).join("");
+  }catch(e){
+    listEl.textContent="Gagal: "+e.message;
+  }
+}
+
+async function addEditorPermission(){
+  const editorId=document.getElementById("epEditorSel")?.value||"";
+  if(!editorId){alert("Pilih editor terlebih dahulu");return;}
+  try{
+    await api("/api/forms/"+_epFormId+"/editor-permissions",{
+      method:"POST",
+      body:JSON.stringify({editorId})
+    });
+    document.getElementById("epEditorSel").value="";
+    await refreshEditorPermList();
+  }catch(e){
+    alert("Gagal: "+e.message);
+  }
+}
+
+async function removeEditorPerm(permId,name){
+  if(!confirm(`Cabut akses editor "${name}" dari kuesioner ini?`)) return;
+  try{
+    await api("/api/editor-permissions/"+permId,{method:"DELETE"});
+    await refreshEditorPermList();
+  }catch(e){
+    alert("Gagal: "+e.message);
+  }
+}
 
 /* ======================================================
    VIEWER MANAGEMENT (superadmin)
@@ -283,7 +537,7 @@ async function refreshViewerList(){
   const el=document.getElementById("viewerList");
   el.textContent="Memuat…";
   try{
-    const {viewers}=await api("/api/viewers");
+    const {viewers}=await api("/api/viewers?formId="+encodeURIComponent(_vpFormId||""));
     const sel=document.getElementById("vpViewerSel");
     if(sel){
       const cur=sel.value;
@@ -319,7 +573,7 @@ async function createViewer(){
   const note=document.getElementById("vNote").value.trim();
   if(!username||!email){alert("Username dan email Google wajib diisi");return;}
   try{
-    await api("/api/viewers",{method:"POST",body:JSON.stringify({username,email,note})});
+    await api("/api/viewers",{method:"POST",body:JSON.stringify({username,email,note,formId:_vpFormId})});
     document.getElementById("vUsername").value="";
     document.getElementById("vEmail").value="";
     document.getElementById("vNote").value="";
@@ -329,7 +583,7 @@ async function createViewer(){
 
 async function deleteViewer(id,name){
   if(!confirm(`Hapus viewer "${name}"? Semua akses kuesioner viewer ini akan ikut dihapus.`))return;
-  try{await api("/api/viewers/"+id,{method:"DELETE"});await refreshViewerList();}
+  try{await api("/api/viewers/"+id+"?formId="+encodeURIComponent(_vpFormId||""),{method:"DELETE"});await refreshViewerList();}
   catch(e){alert("Gagal: "+e.message);}
 }
 

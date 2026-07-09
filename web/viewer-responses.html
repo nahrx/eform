@@ -108,7 +108,7 @@ async function init(){
     // Muat permission dan schema secara paralel
     const [perm,form]=await Promise.all([
       api("/api/viewer/forms/"+FORM_ID+"/permission"),
-      api("/api/forms/"+FORM_ID)
+      api("/api/viewer/forms/"+FORM_ID)
     ]);
     PERM=perm; SCHEMA=form.schema;
 

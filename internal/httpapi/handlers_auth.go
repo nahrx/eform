@@ -59,9 +59,9 @@ func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if in.Role == "" {
-		in.Role = "editor"
+		in.Role = "admin"
 	}
-	if in.Role != "superadmin" && in.Role != "admin" && in.Role != "editor" {
+	if in.Role != "superadmin" && in.Role != "admin" {
 		writeErr(w, http.StatusBadRequest, "role tidak valid")
 		return
 	}

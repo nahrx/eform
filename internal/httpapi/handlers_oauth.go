@@ -120,11 +120,11 @@ func (s *Server) googleCallback(w http.ResponseWriter, r *http.Request) {
 		next = "/"
 	}
 
-	// ── Alur Viewer: cari user berdasarkan email Google ──
+	// ── Alur Staff (viewer/editor): cari user berdasarkan email Google ──
 	if stateData.Mode == "viewer" {
 		user, err := s.st.GetUserByEmail(r.Context(), gUser.Email)
-		if err != nil || user.Role != "viewer" || !user.IsActive {
-			// Email tidak terdaftar sebagai viewer aktif
+		if err != nil || (user.Role != "viewer" && user.Role != "editor") || !user.IsActive {
+			// Email tidak terdaftar sebagai viewer/editor aktif
 			http.Redirect(w, r, "/viewer-portal?error=not_authorized&email="+url.QueryEscape(gUser.Email), http.StatusFound)
 			return
 		}
@@ -133,11 +133,17 @@ func (s *Server) googleCallback(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusInternalServerError, "gagal menerbitkan token")
 			return
 		}
-		// Simpan ke localStorage via done page dengan type=viewer
+		nextPage := "/viewer-portal"
+		typeParam := "viewer"
+		if user.Role == "editor" {
+			nextPage = "/admin"
+			typeParam = "editor"
+		}
+		// Simpan ke localStorage via done page
 		doneURL := "/auth/google/done?" + url.Values{
 			"token": {jwtToken},
-			"next":  {"/viewer-portal"},
-			"type":  {"viewer"},
+			"next":  {nextPage},
+			"type":  {typeParam},
 		}.Encode()
 		http.Redirect(w, r, doneURL, http.StatusFound)
 		return

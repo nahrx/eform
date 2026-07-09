@@ -16,7 +16,26 @@ import (
 )
 
 func (s *Server) listForms(w http.ResponseWriter, r *http.Request) {
-	forms, err := s.st.ListForms(r.Context())
+	u := userFrom(r.Context())
+	if u == nil {
+		writeErr(w, http.StatusUnauthorized, "perlu login")
+		return
+	}
+	var (
+		forms []models.Form
+		err   error
+	)
+	switch u.Role {
+	case "superadmin":
+		forms, err = s.st.ListForms(r.Context())
+	case "admin":
+		forms, err = s.st.ListFormsByOwner(r.Context(), u.Subject)
+	case "editor":
+		forms, err = s.st.ListFormsByEditor(r.Context(), u.Subject)
+	default:
+		writeErr(w, http.StatusForbidden, "akses ditolak")
+		return
+	}
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "gagal mengambil daftar")
 		return
@@ -28,6 +47,16 @@ func (s *Server) listForms(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) createForm(w http.ResponseWriter, r *http.Request) {
+	u := userFrom(r.Context())
+	if u == nil {
+		writeErr(w, http.StatusUnauthorized, "perlu login")
+		return
+	}
+	if u.Role != "superadmin" && u.Role != "admin" {
+		writeErr(w, http.StatusForbidden, "akses ditolak")
+		return
+	}
+
 	var in struct {
 		Title       string          `json:"title"`
 		Description string          `json:"description"`
@@ -46,7 +75,7 @@ func (s *Server) createForm(w http.ResponseWriter, r *http.Request) {
 		in.Version = "1.0.0"
 	}
 	slug := s.uniqueSlug(r, slugify(in.Title))
-	uid := userFrom(r.Context()).Subject
+	uid := u.Subject
 	f, err := s.st.CreateForm(r.Context(), slug, in.Title, in.Description, in.Schema, in.Version, &uid)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "gagal menyimpan")
@@ -68,19 +97,17 @@ func (s *Server) uniqueSlug(r *http.Request, base string) string {
 }
 
 func (s *Server) getForm(w http.ResponseWriter, r *http.Request) {
-	f, err := s.st.GetForm(r.Context(), r.PathValue("id"))
-	if errors.Is(err, store.ErrNotFound) {
-		writeErr(w, http.StatusNotFound, "kuesioner tidak ditemukan")
-		return
-	}
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+	f, ok := s.ensureFormAccess(w, r, r.PathValue("id"))
+	if !ok {
 		return
 	}
 	writeJSON(w, http.StatusOK, f)
 }
 
 func (s *Server) updateForm(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.ensureFormAccess(w, r, r.PathValue("id")); !ok {
+		return
+	}
 	var in struct {
 		Title       string          `json:"title"`
 		Description string          `json:"description"`
@@ -108,6 +135,9 @@ func (s *Server) updateForm(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) deleteForm(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	if _, ok := s.ensureFormAccess(w, r, id); !ok {
+		return
+	}
 	count, err := s.st.CountAllResponsesByForm(r.Context(), id, store.ResponseFilter{})
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "gagal memeriksa data jawaban")
@@ -128,6 +158,9 @@ func (s *Server) deleteForm(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) publishForm(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.ensureFormAccess(w, r, r.PathValue("id")); !ok {
+		return
+	}
 	var in struct {
 		Status string `json:"status"`
 	}
@@ -156,8 +189,7 @@ func (s *Server) publishForm(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) createShare(w http.ResponseWriter, r *http.Request) {
 	formID := r.PathValue("id")
-	if _, err := s.st.GetForm(r.Context(), formID); errors.Is(err, store.ErrNotFound) {
-		writeErr(w, http.StatusNotFound, "kuesioner tidak ditemukan")
+	if _, ok := s.ensureFormAccess(w, r, formID); !ok {
 		return
 	}
 	var in struct {
@@ -206,7 +238,11 @@ func (s *Server) createShare(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listShares(w http.ResponseWriter, r *http.Request) {
-	shares, err := s.st.ListSharesByForm(r.Context(), r.PathValue("id"))
+	formID := r.PathValue("id")
+	if _, ok := s.ensureFormAccess(w, r, formID); !ok {
+		return
+	}
+	shares, err := s.st.ListSharesByForm(r.Context(), formID)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
 		return
@@ -219,6 +255,9 @@ func (s *Server) listShares(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) revokeShare(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.ensureShareAccess(w, r, r.PathValue("id")); !ok {
+		return
+	}
 	err := s.st.RevokeShare(r.Context(), r.PathValue("id"))
 	if errors.Is(err, store.ErrNotFound) {
 		writeErr(w, http.StatusNotFound, "share tidak ditemukan")
@@ -232,6 +271,9 @@ func (s *Server) revokeShare(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) updateShare(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.ensureShareAccess(w, r, r.PathValue("id")); !ok {
+		return
+	}
 	var in struct {
 		Label          string `json:"label"`
 		AllowResponses *bool  `json:"allowResponses"`
@@ -290,13 +332,16 @@ func (s *Server) shareWithURL(sh *models.Share) map[string]any {
 		"isActive": sh.IsActive, "allowResponses": sh.AllowResponses,
 		"multiResponse": sh.MultiResponse, "accessMode": sh.AccessMode,
 		"hasPassword": sh.HasPassword,
-		"expiresAt": sh.ExpiresAt, "viewCount": sh.ViewCount, "createdAt": sh.CreatedAt,
+		"expiresAt":   sh.ExpiresAt, "viewCount": sh.ViewCount, "createdAt": sh.CreatedAt,
 		"shareUrl": s.cfg.PublicBaseURL + "/f/" + sh.Token,
 		"apiUrl":   s.cfg.PublicBaseURL + "/api/public/forms/" + sh.Token,
 	}
 }
 
 func (s *Server) deleteSharePermanent(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.ensureShareAccess(w, r, r.PathValue("id")); !ok {
+		return
+	}
 	err := s.st.DeleteShare(r.Context(), r.PathValue("id"))
 	if errors.Is(err, store.ErrNotFound) {
 		writeErr(w, http.StatusNotFound, "share tidak ditemukan atau masih aktif")
@@ -310,6 +355,9 @@ func (s *Server) deleteSharePermanent(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listAllowedEmails(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.ensureShareAccess(w, r, r.PathValue("id")); !ok {
+		return
+	}
 	emails, err := s.st.ListShareAllowedEmails(r.Context(), r.PathValue("id"))
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
@@ -322,6 +370,9 @@ func (s *Server) listAllowedEmails(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) addAllowedEmail(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.ensureShareAccess(w, r, r.PathValue("id")); !ok {
+		return
+	}
 	var in struct {
 		Email string `json:"email"`
 		Note  string `json:"note"`
@@ -339,6 +390,9 @@ func (s *Server) addAllowedEmail(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) removeAllowedEmail(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.ensureShareEmailAccess(w, r, r.PathValue("id")); !ok {
+		return
+	}
 	err := s.st.DeleteShareAllowedEmail(r.Context(), r.PathValue("id"))
 	if errors.Is(err, store.ErrNotFound) {
 		writeErr(w, http.StatusNotFound, "email tidak ditemukan")
@@ -354,7 +408,13 @@ func (s *Server) removeAllowedEmail(w http.ResponseWriter, r *http.Request) {
 /* ---------------- responses ---------------- */
 
 func (s *Server) listResponses(w http.ResponseWriter, r *http.Request) {
+	if !s.ensureResultAccess(w, r) {
+		return
+	}
 	formID := r.PathValue("id")
+	if _, ok := s.ensureFormAccess(w, r, formID); !ok {
+		return
+	}
 	q := r.URL.Query()
 	limit, _ := strconv.Atoi(q.Get("limit"))
 	offset, _ := strconv.Atoi(q.Get("offset"))
@@ -404,7 +464,13 @@ func (s *Server) listResponses(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getResponseDetail(w http.ResponseWriter, r *http.Request) {
+	if !s.ensureResultAccess(w, r) {
+		return
+	}
 	formID := r.PathValue("id")
+	if _, ok := s.ensureFormAccess(w, r, formID); !ok {
+		return
+	}
 	resp, err := s.st.GetResponseByID(r.Context(), r.PathValue("responseId"))
 	if errors.Is(err, store.ErrNotFound) || (err == nil && resp.FormID != formID) {
 		writeErr(w, http.StatusNotFound, "jawaban tidak ditemukan")
@@ -418,7 +484,13 @@ func (s *Server) getResponseDetail(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) exportResponses(w http.ResponseWriter, r *http.Request) {
+	if !s.ensureResultAccess(w, r) {
+		return
+	}
 	formID := r.PathValue("id")
+	if _, ok := s.ensureFormAccess(w, r, formID); !ok {
+		return
+	}
 	resp, err := s.st.ListResponsesByForm(r.Context(), formID, 1000, 0)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
@@ -454,6 +526,95 @@ func (s *Server) exportResponses(w http.ResponseWriter, r *http.Request) {
 		_ = cw.Write(row)
 	}
 	cw.Flush()
+}
+
+// ensureResultAccess membatasi akses hasil/jawaban: editor tidak boleh mengakses.
+func (s *Server) ensureResultAccess(w http.ResponseWriter, r *http.Request) bool {
+	u := userFrom(r.Context())
+	if u == nil {
+		writeErr(w, http.StatusUnauthorized, "perlu login")
+		return false
+	}
+	if u.Role == "editor" {
+		writeErr(w, http.StatusForbidden, "editor tidak memiliki akses ke hasil")
+		return false
+	}
+	return true
+}
+
+func (s *Server) ensureFormAccess(w http.ResponseWriter, r *http.Request, formID string) (*models.Form, bool) {
+	u := userFrom(r.Context())
+	if u == nil {
+		writeErr(w, http.StatusUnauthorized, "perlu login")
+		return nil, false
+	}
+
+	f, err := s.st.GetForm(r.Context(), formID)
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "kuesioner tidak ditemukan")
+		return nil, false
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		return nil, false
+	}
+
+	switch u.Role {
+	case "superadmin":
+		return f, true
+	case "admin":
+		if f.OwnerID == nil || *f.OwnerID != u.Subject {
+			writeErr(w, http.StatusForbidden, "akses ditolak")
+			return nil, false
+		}
+		return f, true
+	case "editor":
+		allowed, err := s.st.HasEditorFormPermission(r.Context(), u.Subject, formID)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "gagal memeriksa akses")
+			return nil, false
+		}
+		if !allowed {
+			writeErr(w, http.StatusForbidden, "akses ditolak")
+			return nil, false
+		}
+		return f, true
+	default:
+		writeErr(w, http.StatusForbidden, "akses ditolak")
+		return nil, false
+	}
+}
+
+func (s *Server) ensureShareAccess(w http.ResponseWriter, r *http.Request, shareID string) (*models.Share, bool) {
+	sh, err := s.st.GetShareByID(r.Context(), shareID)
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "share tidak ditemukan")
+		return nil, false
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		return nil, false
+	}
+	if _, ok := s.ensureFormAccess(w, r, sh.FormID); !ok {
+		return nil, false
+	}
+	return sh, true
+}
+
+func (s *Server) ensureShareEmailAccess(w http.ResponseWriter, r *http.Request, shareEmailID string) (*models.ShareAllowedEmail, bool) {
+	e, err := s.st.GetShareAllowedEmailByID(r.Context(), shareEmailID)
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "email tidak ditemukan")
+		return nil, false
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		return nil, false
+	}
+	if _, ok := s.ensureShareAccess(w, r, e.ShareID); !ok {
+		return nil, false
+	}
+	return e, true
 }
 
 func toStr(v any) string {
