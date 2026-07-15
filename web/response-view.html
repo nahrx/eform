@@ -84,12 +84,14 @@ button{font-family:inherit;cursor:pointer}
 .rv-row-num{font-family:var(--mono);font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:8px}
 .rv-empty{font-size:12.5px;color:var(--muted);font-style:italic}
 
-/* bottom nav */
-.bottom-nav{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:24px;padding-top:18px;border-top:1px solid var(--line)}
+/* fixed page nav footer */
+.pg-foot{position:fixed;bottom:0;left:0;right:0;z-index:20;background:var(--panel);border-top:1px solid var(--line);padding:0 20px;box-shadow:0 -2px 16px rgba(19,23,30,.06)}
+.pg-foot-in{max-width:760px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 0 14px}
+.pg-prog{font-size:12.5px;color:var(--muted);font-weight:500}
 
 @media(max-width:680px){
   .sidebar{display:none}
-  .content{padding:16px 14px 60px}
+  .content{padding:16px 14px 80px}
 }
 </style>
 </head>
@@ -107,6 +109,9 @@ button{font-family:inherit;cursor:pointer}
   <div class="content" id="content">
     <div style="padding:40px;text-align:center;color:var(--muted)">Memuat…</div>
   </div>
+</div>
+<div class="pg-foot" id="pgFoot" hidden>
+  <div class="pg-foot-in" id="pgFootIn"></div>
 </div>
 <script>
 const TOKEN=localStorage.getItem("eform_token");
@@ -182,30 +187,29 @@ function renderPage(){
     <span class="meta-time">${timeStr}</span>
   </div>`;
 
-  // Nav bar
-  const nav=pages.length>1?`<div class="nav-bar">
-    <button class="btn" ${CUR_PG===0?"disabled":""} onclick="goPage(${CUR_PG-1})">← Sebelumnya</button>
-    <span class="nav-prog">Halaman ${CUR_PG+1} / ${pages.length}</span>
-    <button class="btn" ${CUR_PG>=pages.length-1?"disabled":""} onclick="goPage(${CUR_PG+1})">Selanjutnya →</button>
-  </div>`:"";
-
   let body="";
   if(pages.length){
     const p=pages[CUR_PG];
     body+=`<div class="page-title">${esc(txt(p.title)||p.name||"Halaman "+(CUR_PG+1))}</div>`;
     body+=renderNodes(p.components||[],answers,"");
-    if(pages.length>1){
-      body+=`<div class="bottom-nav">
-        <button class="btn" ${CUR_PG===0?"disabled":""} onclick="goPage(${CUR_PG-1})">← Sebelumnya</button>
-        <span class="nav-prog">Halaman ${CUR_PG+1} / ${pages.length}</span>
-        <button class="btn" ${CUR_PG>=pages.length-1?"disabled":""} onclick="goPage(${CUR_PG+1})">Selanjutnya →</button>
-      </div>`;
-    }
   }else{
     body=renderFlatAnswers(answers);
   }
 
-  document.getElementById("content").innerHTML=metaCard+nav+body;
+  document.getElementById("content").innerHTML=metaCard+body;
+
+  // Fixed bottom nav footer
+  const foot=document.getElementById("pgFoot");
+  if(pages.length>1){
+    foot.hidden=false;
+    document.getElementById("pgFootIn").innerHTML=
+      `<button class="btn" ${CUR_PG===0?"disabled":""} onclick="goPage(${CUR_PG-1})">← Sebelumnya</button>`+
+      `<span class="pg-prog">Halaman ${CUR_PG+1} / ${pages.length}</span>`+
+      `<button class="btn" ${CUR_PG>=pages.length-1?"disabled":""} onclick="goPage(${CUR_PG+1})">Selanjutnya →</button>`;
+  }else{
+    foot.hidden=true;
+  }
+
   window.scrollTo({top:0,behavior:"instant"});
 }
 

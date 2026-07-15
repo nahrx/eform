@@ -1078,15 +1078,25 @@ function clearPageAnswers(pageIdx){
 function clearSkippedAnswers(fromIdx,toIdx){if(toIdx<=fromIdx+1)return;for(let i=fromIdx+1;i<toIdx;i++)clearPageAnswers(i);}
 
 /* ---- validasi sebelum lanjut/kirim ---- */
+function walkRosterComps(comps,rp,rowSkip,out){
+  (comps||[]).forEach(c=>{
+    if(!evalVisible(c.visibleWhen,rp))return;
+    if(c.kind==="field"){if(!rowSkip.has(c.name))out.push({c,rp});}
+    else if(c.kind!=="roster"&&c.components)walkRosterComps(c.components,rp,rowSkip,out);
+  });
+}
 function pageValidationTargets(page){
   const out=[];
   (function walk(n,prefix){(n.components||[]).forEach(c=>{
     if(!evalVisible(c.visibleWhen,prefix))return;
     if(c.kind==="field"){if(!SKIP_HIDDEN.has(c.name))out.push({c,rp:prefix});}
     else if(c.kind==="roster"){
-      if(c.rosterType==="inline"){
-        const cnt=rosterCount(c);
-        for(let i=0;i<cnt;i++){const rp2=`${c.name}#${i}#`;(c.components||[]).forEach(f=>{if(evalVisible(f.visibleWhen,rp2))out.push({c:f,rp:rp2});});}
+      const cnt=rosterCount(c,prefix);
+      for(let i=0;i<cnt;i++){
+        const rp2=rosterRowPrefix(c,i,prefix);
+        const rowSkipKey=rp2.slice(0,-1);
+        const rowSkip=ROW_SKIP_HIDDEN.has(rowSkipKey)?ROW_SKIP_HIDDEN.get(rowSkipKey):computeRosterRowSkipState(c,i);
+        walkRosterComps(c.components||[],rp2,rowSkip,out);
       }
     }else{walk(c,prefix);}
   });})(page,"");
@@ -1187,8 +1197,14 @@ function showErrorSummary(errors){
   document.querySelectorAll(".pv-err-fix").forEach(btn=>{
     btn.addEventListener("click",()=>{
       const pi=+btn.dataset.ep,k=btn.dataset.ek;
-      goToPage(pi);
-      setTimeout(()=>focusField(k),80);
+      const rosterMatch=k.match(/^([^#]+)#(\d+)#/);
+      if(rosterMatch){
+        goToPage(pi);
+        setTimeout(()=>{openRosterRow(rosterMatch[1],+rosterMatch[2]);setTimeout(()=>focusField(k),80);},80);
+      }else{
+        goToPage(pi);
+        setTimeout(()=>focusField(k),80);
+      }
     });
   });
 }
@@ -1360,13 +1376,32 @@ function renderRosterRow(){
   let html=`${userBar}<div class="pv-page"><div class="pv-rrow-hdr"><div class="pv-rrow-bread"><button id="pvBack" class="pv-rrow-back">← ${pageTitle}</button><span class="pv-rrow-sep">›</span><span class="pv-rrow-rname">${rosterTitle}</span><span class="pv-rrow-num">Baris ${rowIdx+1} dari ${total}</span></div><div class="pv-rrow-title">${rowLabel(roster,rowIdx)}</div></div>${fieldsHtml}</div>`;
   pvBody.innerHTML=html;pvBody.scrollTop=keepScroll;
   const navArea=document.getElementById("pvNavArea");
-  if(navArea)navArea.innerHTML=`<div class="pv-nav"><span></span><span></span><button class="btn primary" id="pvBackDone">Simpan &amp; kembali</button></div>`;
+  if(navArea)navArea.innerHTML=`<div class="pv-nav-err" id="pvNavErr"></div><div class="pv-nav"><span></span><span></span><button class="btn primary" id="pvBackDone">Simpan &amp; kembali</button></div>`;
   restoreAnswers();resolveOptions();wireFieldWidgets();
   document.querySelectorAll("[data-k]").forEach(el=>el.addEventListener("change",e=>{const f=e.target.closest(".pv-field"),fkey=f?.dataset?.fieldkey,top0=fkey?f.getBoundingClientRect().top:null;saveAnswers();renderRosterRow();if(fkey&&top0!=null)requestAnimationFrame(()=>snapScroll(fkey,top0));}));
   document.querySelectorAll("[data-kr]").forEach(el=>el.addEventListener("change",e=>{const f=e.target.closest(".pv-field"),fkey=f?.dataset?.fieldkey,top0=fkey?f.getBoundingClientRect().top:null;saveAnswers();renderRosterRow();if(fkey&&top0!=null)requestAnimationFrame(()=>snapScroll(fkey,top0));}));
   const backFn=()=>{saveAnswers();const rname=rosterView.roster.name;rosterView=null;renderSidebar();renderCurrentPage();setTimeout(()=>{const el=document.getElementById("pvroster_"+rname);if(el)el.scrollIntoView({behavior:"smooth",block:"center"});},40);};
+  const backDoneFn=()=>{
+    saveAnswers();
+    const {roster,rowIdx}=rosterView;
+    const rp=`${roster.name}#${rowIdx}#`;
+    const rowSkip=computeRosterRowSkipState(roster,rowIdx);
+    for(const f of flatRosterFields(roster)){
+      if(rowSkip.has(f.name))continue;
+      if(!evalVisible(f.visibleWhen,rp))continue;
+      if(f.type==="note"||f.type==="markdown"||f.type==="hidden"||(f.type==="calculated"&&!f.autofill))continue;
+      const isReq=!!f.required||!!(f.requiredWhen&&evalVisible(f.requiredWhen,rp));
+      if(isReq&&pvEmpty(answers[rp+f.name])){
+        const errEl=document.getElementById("pvNavErr");
+        if(errEl)errEl.textContent="Lengkapi isian wajib pada baris ini sebelum menyimpan.";
+        focusField(rp+f.name);
+        return;
+      }
+    }
+    backFn();
+  };
   document.getElementById("pvBack")?.addEventListener("click",backFn);
-  document.getElementById("pvBackDone")?.addEventListener("click",backFn);
+  document.getElementById("pvBackDone")?.addEventListener("click",backDoneFn);
 }
 
 /* ---- restore & bind ---- */

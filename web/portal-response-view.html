@@ -56,11 +56,13 @@ button,input,select,textarea{font-family:inherit}
 .meta-email{font-size:12.5px;color:var(--muted)}
 .meta-time{font-size:12px;color:var(--muted);margin-left:auto}
 
-/* page nav */
-.nav-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
-.nav-prog{font-size:12px;color:var(--muted)}
+/* page title */
 .page-title{font-size:18px;font-weight:700;margin:0 0 18px;color:var(--ink)}
-.bottom-nav{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:24px;padding-top:18px;border-top:1px solid var(--line)}
+
+/* fixed page nav footer */
+.pg-foot{position:fixed;bottom:0;left:0;right:0;z-index:20;background:var(--panel);border-top:1px solid var(--line);padding:0 20px;box-shadow:0 -2px 16px rgba(19,23,30,.06)}
+.pg-foot-in{max-width:760px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 0 14px}
+.pg-prog{font-size:12.5px;color:var(--muted);font-weight:500}
 
 /* READ-ONLY field display */
 .rv-block{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px 18px;margin-bottom:14px}
@@ -113,12 +115,12 @@ button,input,select,textarea{font-family:inherit}
 .roster-edit-note{font-size:11.5px;color:var(--muted);font-style:italic;margin-top:6px;padding:6px 10px;background:var(--panel-2);border-radius:6px}
 
 /* toast */
-.toast{position:fixed;bottom:24px;right:24px;background:var(--ink);color:#fff;padding:10px 18px;border-radius:var(--radius-s);font-size:13px;font-weight:500;z-index:999;animation:slideIn .2s ease;max-width:300px}
+.toast{position:fixed;bottom:78px;right:24px;background:var(--ink);color:#fff;padding:10px 18px;border-radius:var(--radius-s);font-size:13px;font-weight:500;z-index:999;animation:slideIn .2s ease;max-width:300px}
 .toast.ok{background:var(--ok)}
 .toast.err{background:var(--danger)}
 @keyframes slideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 
-@media(max-width:680px){.sidebar{display:none}.content{padding:16px 14px 60px}}
+@media(max-width:680px){.sidebar{display:none}.content{padding:16px 14px 80px}}
 </style>
 </head>
 <body>
@@ -139,6 +141,9 @@ button,input,select,textarea{font-family:inherit}
   <div class="content" id="content">
     <div style="padding:40px;text-align:center;color:var(--muted)">Memuat…</div>
   </div>
+</div>
+<div class="pg-foot" id="pgFoot" hidden>
+  <div class="pg-foot-in" id="pgFootIn"></div>
 </div>
 <script>
 const TOKEN=localStorage.getItem("eform_token");
@@ -322,29 +327,29 @@ function renderPage(){
     ${who}${email}<span class="meta-time">${timeStr}</span>
   </div>`;
 
-  const navBar=pages.length>1?`<div class="nav-bar">
-    <button class="btn" ${CUR_PG===0?"disabled":""} onclick="goPage(${CUR_PG-1})">← Sebelumnya</button>
-    <span class="nav-prog">Halaman ${CUR_PG+1} / ${pages.length}</span>
-    <button class="btn" ${CUR_PG>=pages.length-1?"disabled":""} onclick="goPage(${CUR_PG+1})">Selanjutnya →</button>
-  </div>`:"";
-
   let body="";
   if(pages.length){
     const p=pages[CUR_PG];
     body+=`<div class="page-title">${esc(txt(p.title)||p.name||"Halaman "+(CUR_PG+1))}</div>`;
     body+=renderNodes(p.components||[],answers,"");
-    if(pages.length>1){
-      body+=`<div class="bottom-nav">
-        <button class="btn" ${CUR_PG===0?"disabled":""} onclick="goPage(${CUR_PG-1})">← Sebelumnya</button>
-        <span class="nav-prog">Hal ${CUR_PG+1} / ${pages.length}</span>
-        <button class="btn" ${CUR_PG>=pages.length-1?"disabled":""} onclick="goPage(${CUR_PG+1})">Selanjutnya →</button>
-      </div>`;
-    }
   } else {
     body=renderFlatAnswers(answers);
   }
 
-  document.getElementById("content").innerHTML=metaCard+navBar+body;
+  document.getElementById("content").innerHTML=metaCard+body;
+
+  // Fixed bottom nav footer
+  const foot=document.getElementById("pgFoot");
+  if(pages.length>1){
+    foot.hidden=false;
+    document.getElementById("pgFootIn").innerHTML=
+      `<button class="btn" ${CUR_PG===0?"disabled":""} onclick="goPage(${CUR_PG-1})">← Sebelumnya</button>`+
+      `<span class="pg-prog">Halaman ${CUR_PG+1} / ${pages.length}</span>`+
+      `<button class="btn" ${CUR_PG>=pages.length-1?"disabled":""} onclick="goPage(${CUR_PG+1})">Selanjutnya →</button>`;
+  }else{
+    foot.hidden=true;
+  }
+
   window.scrollTo({top:0,behavior:"instant"});
 }
 
