@@ -1,11 +1,13 @@
 package httpapi
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/bpskaltim/eform-backend/internal/auth"
 	"github.com/bpskaltim/eform-backend/internal/models"
+	"github.com/bpskaltim/eform-backend/internal/store"
 )
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
@@ -88,4 +90,65 @@ func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) {
 		users = []models.User{}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"users": users})
+}
+
+func (s *Server) patchAdminUser(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var in struct {
+		Username string `json:"username"`
+		Email    string `json:"email"`
+		Role     string `json:"role"`
+		Password string `json:"password"`
+	}
+	if err := decodeJSON(r, &in); err != nil {
+		writeErr(w, http.StatusBadRequest, "format permintaan salah")
+		return
+	}
+	in.Username = strings.TrimSpace(in.Username)
+	in.Email = strings.TrimSpace(in.Email)
+	in.Password = strings.TrimSpace(in.Password)
+	if in.Username == "" {
+		writeErr(w, http.StatusBadRequest, "username wajib diisi")
+		return
+	}
+	if in.Role != "admin" && in.Role != "superadmin" {
+		in.Role = "admin"
+	}
+	if in.Password != "" && len(in.Password) < 6 {
+		writeErr(w, http.StatusBadRequest, "password minimal 6 karakter")
+		return
+	}
+	if err := s.st.UpdateAdminUser(r.Context(), id, in.Username, in.Email, in.Role); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "user tidak ditemukan")
+			return
+		}
+		writeErr(w, http.StatusConflict, "username/email mungkin sudah dipakai")
+		return
+	}
+	if in.Password != "" {
+		hash, err := auth.HashPassword(in.Password)
+		if err == nil {
+			_ = s.st.UpdateUserPassword(r.Context(), id, hash)
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+}
+
+func (s *Server) deleteAdminUser(w http.ResponseWriter, r *http.Request) {
+	caller := userFrom(r.Context())
+	id := r.PathValue("id")
+	if caller != nil && caller.Subject == id {
+		writeErr(w, http.StatusBadRequest, "tidak bisa menghapus akun sendiri")
+		return
+	}
+	if err := s.st.DeleteUser(r.Context(), id); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "user tidak ditemukan")
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, "gagal menghapus")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }

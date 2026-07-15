@@ -101,16 +101,16 @@ function initPortal(){
       const me=await api("/api/auth/me");
       if(me.role==="viewer"){
         document.getElementById("who").textContent=me.username+" · Viewer";
+        await loadForms(api,"viewer");
       }else if(me.role==="editor"){
         document.getElementById("who").textContent=me.username+" · Editor";
-        location.replace("/admin");
-        return;
+        await loadForms(api,"editor");
       }else{
         location.replace("/admin");
-        return;
       }
-    }catch{return;}
-    loadForms(api);
+    }catch(e){
+      document.getElementById("content").innerHTML=`<div class="empty">Gagal memuat: ${esc(e.message)}</div>`;
+    }
   })();
 
   document.getElementById("logout").addEventListener("click",()=>{
@@ -119,32 +119,37 @@ function initPortal(){
   });
 }
 
-async function loadForms(api){
+async function loadForms(api, role){
   const el=document.getElementById("content");
   try{
-    const {forms}=await api("/api/viewer/my-forms");
-    if(!forms||!forms.length){
+    const endpoint=role==="editor"?"/api/editor/my-forms":"/api/viewer/my-forms";
+    const data=await api(endpoint);
+    const forms=data.forms||[];
+    if(!forms.length){
       el.innerHTML='<div class="empty">Belum ada kuesioner yang dapat diakses.<br>Hubungi administrator untuk mendapatkan akses.</div>';
       return;
     }
-    el.innerHTML=`<div class="grid">${forms.map(f=>`
-      <div class="card">
-        <div class="card-title">${esc(f.formTitle)}</div>
+    const isViewer=role==="viewer";
+    el.innerHTML=`<div class="grid">${forms.map(f=>{
+      const respPage=isViewer?`/viewer-responses?id=${esc(f.formId||f.id)}`:`/editor-responses?id=${esc(f.id||f.formId)}`;
+      return`<div class="card">
+        <div class="card-title">${esc(f.formTitle||f.title)}</div>
         <div class="card-meta">
-          <span>
+          ${isViewer?`<span>
             <span class="badge">${f.respondentAccess==="all"?"Semua Responden":"Responden Terpilih"}</span>
           </span>
           ${f.visibleFields&&f.visibleFields.length
             ?`<span>Variabel: ${esc(f.visibleFields.slice(0,3).join(", "))}${f.visibleFields.length>3?` +${f.visibleFields.length-3} lainnya`:""}</span>`
-            :`<span>Semua variabel terlihat</span>`}
+            :`<span>Semua variabel terlihat</span>`}`
+          :`<span><span class="badge" style="background:#fef3c7;color:#92400e">Editor</span></span>`}
         </div>
         <div>
-          <a class="btn primary" href="/viewer-responses?id=${esc(f.formId)}" style="width:100%;justify-content:center">
+          <a class="btn primary" href="${respPage}" style="width:100%;justify-content:center">
             Lihat Jawaban →
           </a>
         </div>
-      </div>`).join("")}
-    </div>`;
+      </div>`;
+    }).join("")}</div>`;
   }catch(e){
     el.innerHTML=`<div class="empty">Gagal memuat: ${esc(e.message)}</div>`;
   }

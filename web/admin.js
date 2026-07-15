@@ -13,11 +13,14 @@ async function api(path,opts={}){
 }
 
 let MY_ROLE="admin";
+let MY_ID="";
 let ACTIVE_TAB="forms";
+let ACTIVE_USER_SUBTAB="viewer";
 (async()=>{
   try{
     const me=await api("/api/auth/me");
     MY_ROLE=me.role||"admin";
+    MY_ID=me.id||"";
     $("#who").textContent=me.username+" · "+me.role;
     setupAdminMenu();
   }catch(e){}
@@ -27,20 +30,32 @@ let ACTIVE_TAB="forms";
 function setupAdminMenu(){
   const tabUsersBtn=$("#tabUsersBtn");
   const btnNewForm=$("#btnNewForm");
-  if(tabUsersBtn){
-    tabUsersBtn.hidden=MY_ROLE!=="superadmin";
-  }
-  if(btnNewForm){
-    btnNewForm.style.display=(MY_ROLE==="admin"||MY_ROLE==="superadmin")?"":"none";
-  }
-  if(MY_ROLE!=="superadmin"){
-    switchTab("forms");
-    return;
-  }
+  const canManageUsers=MY_ROLE==="superadmin"||MY_ROLE==="admin";
+  if(tabUsersBtn) tabUsersBtn.hidden=!canManageUsers;
+  if(btnNewForm) btnNewForm.style.display=canManageUsers?"":"none";
+
+  // Sub-tab Admin: hanya superadmin
+  const subtabAdminBtn=$("#subtabAdminBtn");
+  if(subtabAdminBtn) subtabAdminBtn.hidden=MY_ROLE!=="superadmin";
+
+  // Default sub-tab berdasar role
+  ACTIVE_USER_SUBTAB=MY_ROLE==="superadmin"?"admin":"viewer";
+
+  if(!canManageUsers){ switchTab("forms"); return; }
+
   $("#tabFormsBtn")?.addEventListener("click",()=>switchTab("forms"));
   tabUsersBtn?.addEventListener("click",()=>switchTab("users"));
-  $("#refreshUsers")?.addEventListener("click",loadUsers);
-  $("#btnCreateUser")?.addEventListener("click",createUserFromPanel);
+  $("#refreshUsers")?.addEventListener("click",()=>{
+    if(ACTIVE_USER_SUBTAB==="admin") loadUsers();
+    else if(ACTIVE_USER_SUBTAB==="viewer") loadViewersTab();
+    else if(ACTIVE_USER_SUBTAB==="editor") loadEditorsTab();
+  });
+  if(MY_ROLE==="superadmin") $("#btnCreateUser")?.addEventListener("click",createUserFromPanel);
+  $("#btnCreateViewerTab")?.addEventListener("click",createViewerFromTab);
+  $("#btnCreateEditorTab")?.addEventListener("click",createEditorFromTab);
+  $("#subtabAdminBtn")?.addEventListener("click",()=>switchUserSubTab("admin"));
+  $("#subtabViewerBtn")?.addEventListener("click",()=>switchUserSubTab("viewer"));
+  $("#subtabEditorBtn")?.addEventListener("click",()=>switchUserSubTab("editor"));
 }
 
 function switchTab(tab){
@@ -58,7 +73,7 @@ function switchTab(tab){
   usersTab?.classList.toggle("active",isUsers);
   if(newFormBtn) newFormBtn.style.display=(!isUsers&&canCreateForm)?"":"none";
   if(isUsers){
-    loadUsers();
+    switchUserSubTab(ACTIVE_USER_SUBTAB);
   }
 }
 
@@ -96,27 +111,108 @@ async function load(){
   }
 }
 
+let _usersCache=[];
+
 async function loadUsers(){
   if(MY_ROLE!=="superadmin") return;
   const rows=$("#userRows");
   if(!rows) return;
-  rows.innerHTML='<tr><td colspan="5" class="empty">Memuat…</td></tr>';
+  rows.innerHTML='<tr><td colspan="6" class="empty">Memuat…</td></tr>';
   try{
     const {users}=await api("/api/users");
-    if(!users||!users.length){
-      rows.innerHTML='<tr><td colspan="5" class="empty">Belum ada user.</td></tr>';
-      return;
-    }
-    rows.innerHTML=users.map(u=>`<tr>
-      <td><b>${esc(u.username||"-")}</b></td>
-      <td class="muted">${esc(u.email||"-")}</td>
-      <td><span class="tag">${esc(u.role||"-")}</span></td>
-      <td><span class="tag ${u.isActive?"published":"archived"}">${u.isActive?"Aktif":"Nonaktif"}</span></td>
-      <td class="muted">${u.createdAt?new Date(u.createdAt).toLocaleString("id-ID"):"-"}</td>
-    </tr>`).join("");
+    _usersCache=users||[];
+    _renderUsersTab();
   }catch(e){
-    rows.innerHTML=`<tr><td colspan="5" class="empty">${esc(e.message)}</td></tr>`;
+    rows.innerHTML=`<tr><td colspan="6" class="empty">${esc(e.message)}</td></tr>`;
   }
+}
+
+function _renderUsersTab(){
+  const rows=$("#userRows");
+  if(!rows) return;
+  if(!_usersCache.length){rows.innerHTML='<tr><td colspan="6" class="empty">Belum ada user.</td></tr>';return;}
+  rows.innerHTML=_usersCache.map(u=>`<tr id="urow-${u.id}">
+    <td><b>${esc(u.username||"-")}</b></td>
+    <td class="muted">${esc(u.email||"-")}</td>
+    <td><span class="tag">${esc(u.role||"-")}</span></td>
+    <td><span class="tag ${u.isActive?"published":"archived"}">${u.isActive?"Aktif":"Nonaktif"}</span></td>
+    <td class="muted">${u.createdAt?new Date(u.createdAt).toLocaleString("id-ID"):"-"}</td>
+    <td style="text-align:right;white-space:nowrap">
+      <button class="btn" style="font-size:12px;padding:3px 8px" onclick="editAdminUser('${u.id}')">Edit</button>
+      <button class="btn danger" style="font-size:12px;padding:3px 8px" onclick="deleteAdminUser('${u.id}','${esc(u.username)}')"${u.id===MY_ID?' disabled title="Tidak bisa menghapus akun sendiri"':""}>Hapus</button>
+    </td>
+  </tr>`).join("");
+}
+
+function editAdminUser(id){
+  document.querySelectorAll("[id^='uedit-']").forEach(el=>el.remove());
+  const u=_usersCache.find(x=>x.id===id);
+  if(!u) return;
+  const tr=document.createElement("tr");
+  tr.id="uedit-"+id;
+  tr.innerHTML=`<td colspan="6" style="padding:12px;background:var(--surface);border-top:2px solid var(--accent)">
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end">
+      <div style="flex:1;min-width:120px">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:3px">Username</div>
+        <input id="ueu-${id}" style="width:100%;font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:6px" value="${esc(u.username||"")}">
+      </div>
+      <div style="flex:1;min-width:160px">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:3px">Email</div>
+        <input id="uem-${id}" type="email" style="width:100%;font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:6px" value="${esc(u.email||"")}">
+      </div>
+      <div style="min-width:110px">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:3px">Role</div>
+        <select id="uer-${id}" style="width:100%;font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:6px">
+          <option value="admin"${u.role==="admin"?" selected":""}>admin</option>
+          <option value="superadmin"${u.role==="superadmin"?" selected":""}>superadmin</option>
+        </select>
+      </div>
+      <div style="flex:1;min-width:180px">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:3px">Password baru <span style="font-weight:normal">(kosongkan jika tidak diubah)</span></div>
+        <input id="uepw-${id}" type="password" style="width:100%;font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:6px" placeholder="min. 6 karakter">
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        <button class="btn primary" style="font-size:13px" onclick="saveAdminUser('${id}')">Simpan</button>
+        <button class="btn" style="font-size:13px" onclick="cancelAdminUserEdit('${id}')">Batal</button>
+      </div>
+    </div>
+    <div id="uemsg-${id}" style="font-size:12px;color:#b91c1c;margin-top:6px"></div>
+  </td>`;
+  document.getElementById("urow-"+id)?.insertAdjacentElement("afterend",tr);
+  document.getElementById("ueu-"+id)?.focus();
+}
+
+function cancelAdminUserEdit(id){
+  document.getElementById("uedit-"+id)?.remove();
+}
+
+async function saveAdminUser(id){
+  const username=(document.getElementById("ueu-"+id)?.value||"").trim();
+  const email=(document.getElementById("uem-"+id)?.value||"").trim();
+  const role=document.getElementById("uer-"+id)?.value||"admin";
+  const password=(document.getElementById("uepw-"+id)?.value||"").trim();
+  const msg=document.getElementById("uemsg-"+id);
+  if(!username){if(msg)msg.textContent="Username wajib diisi.";return;}
+  if(password&&password.length<6){if(msg)msg.textContent="Password minimal 6 karakter.";return;}
+  if(msg)msg.textContent="";
+  try{
+    const body={username,email,role};
+    if(password) body.password=password;
+    await api("/api/users/"+id,{method:"PATCH",body:JSON.stringify(body)});
+    const u=_usersCache.find(x=>x.id===id);
+    if(u){u.username=username;u.email=email;u.role=role;}
+    document.getElementById("uedit-"+id)?.remove();
+    _renderUsersTab();
+  }catch(e){if(msg)msg.textContent="Gagal: "+e.message;}
+}
+
+async function deleteAdminUser(id,name){
+  if(id===MY_ID){alert("Tidak bisa menghapus akun sendiri.");return;}
+  if(!confirm(`Hapus user "${name}"? Tindakan ini tidak bisa dibatalkan.`))return;
+  try{
+    await api("/api/users/"+id,{method:"DELETE"});
+    await loadUsers();
+  }catch(e){alert("Gagal: "+e.message);}
 }
 
 async function createUserFromPanel(){
@@ -388,23 +484,209 @@ $("#makeShare").addEventListener("click",async()=>{
 $("#logout").addEventListener("click",()=>{localStorage.removeItem("eform_token");localStorage.removeItem("eform_user");location.replace("/login");});
 $("#refresh").addEventListener("click",()=>{
   if(ACTIVE_TAB==="users"){
-    loadUsers();
+    if(ACTIVE_USER_SUBTAB==="admin") loadUsers();
+    else if(ACTIVE_USER_SUBTAB==="viewer") loadViewersTab();
+    else if(ACTIVE_USER_SUBTAB==="editor") loadEditorsTab();
     return;
   }
   load();
 });
 
 /* ======================================================
+   USER TAB — sub-tab switching
+   ====================================================== */
+
+function switchUserSubTab(tab){
+  ACTIVE_USER_SUBTAB=tab;
+  ["admin","viewer","editor"].forEach(s=>{
+    const sec=document.getElementById(s+"SubSection");
+    const btn=document.getElementById("subtab"+s[0].toUpperCase()+s.slice(1)+"Btn");
+    if(sec) sec.hidden=s!==tab;
+    if(btn) btn.classList.toggle("active",s===tab);
+  });
+  if(tab==="admin") loadUsers();
+  else if(tab==="viewer") loadViewersTab();
+  else if(tab==="editor") loadEditorsTab();
+}
+
+/* ======================================================
+   USER TAB — viewer management
+   ====================================================== */
+
+let _viewersCache=[];
+
+async function loadViewersTab(){
+  const rows=document.getElementById("viewerTabRows");
+  if(!rows) return;
+  rows.innerHTML='<tr><td colspan="5" class="empty">Memuat…</td></tr>';
+  try{
+    const {viewers}=await api("/api/viewers");
+    _viewersCache=viewers||[];
+    _renderViewersTab();
+  }catch(e){rows.innerHTML=`<tr><td colspan="5" class="empty">${esc(e.message)}</td></tr>`;}
+}
+
+function _renderViewersTab(){
+  const rows=document.getElementById("viewerTabRows");
+  if(!rows) return;
+  if(!_viewersCache.length){rows.innerHTML='<tr><td colspan="5" class="empty">Belum ada viewer.</td></tr>';return;}
+  rows.innerHTML=_viewersCache.map(v=>`<tr>
+    <td><b>${esc(v.email||v.username||"-")}</b></td>
+    <td id="vnote-${v.id}" class="muted">${v.note?esc(v.note):"—"}</td>
+    <td><span class="tag ${v.isActive?"published":"archived"}">${v.isActive?"Aktif":"Nonaktif"}</span></td>
+    <td class="muted">${v.createdAt?new Date(v.createdAt).toLocaleString("id-ID"):"-"}</td>
+    <td style="text-align:right;white-space:nowrap" id="vact-${v.id}">
+      <button class="btn" style="font-size:12px;padding:3px 8px" onclick="editViewerNote('${v.id}')">Edit</button>
+      <button class="btn danger" style="font-size:12px;padding:3px 8px" onclick="deleteViewerFromTab('${v.id}','${esc(v.email||v.username)}')">Hapus</button>
+    </td>
+  </tr>`).join("");
+}
+
+function editViewerNote(id){
+  const v=_viewersCache.find(x=>x.id===id);
+  if(!v) return;
+  const noteCell=document.getElementById("vnote-"+id);
+  const actCell=document.getElementById("vact-"+id);
+  if(!noteCell||!actCell) return;
+  noteCell.innerHTML=`<input id="vni-${id}" style="width:100%;font-size:13px;padding:3px 6px;border:1px solid var(--line);border-radius:4px" value="${esc(v.note||"")}">`;
+  actCell.innerHTML=`<button class="btn primary" style="font-size:12px;padding:3px 8px" onclick="saveViewerNote('${id}')">Simpan</button>
+    <button class="btn" style="font-size:12px;padding:3px 8px" onclick="_renderViewersTab()">Batal</button>`;
+  document.getElementById("vni-"+id)?.focus();
+}
+
+async function saveViewerNote(id){
+  const inp=document.getElementById("vni-"+id);
+  if(!inp) return;
+  const note=inp.value.trim();
+  try{
+    await api("/api/viewers/"+id,{method:"PATCH",body:JSON.stringify({note})});
+    const v=_viewersCache.find(x=>x.id===id);
+    if(v) v.note=note;
+    _renderViewersTab();
+  }catch(e){alert("Gagal menyimpan: "+e.message);}
+}
+
+async function createViewerFromTab(){
+  const email=(document.getElementById("vtEmail")?.value||"").trim();
+  const note=(document.getElementById("vtNote")?.value||"").trim();
+  const msg=document.getElementById("viewerTabMsg");
+  if(!email){if(msg)msg.textContent="Email wajib diisi.";document.getElementById("vtEmail")?.focus();return;}
+  const btn=document.getElementById("btnCreateViewerTab");
+  if(btn){btn.disabled=true;btn.textContent="Menambahkan…";}
+  if(msg)msg.textContent="";
+  try{
+    await api("/api/viewers",{method:"POST",body:JSON.stringify({email,note})});
+    if(msg)msg.textContent="Viewer berhasil ditambahkan.";
+    if(document.getElementById("vtEmail"))document.getElementById("vtEmail").value="";
+    if(document.getElementById("vtNote"))document.getElementById("vtNote").value="";
+    await loadViewersTab();
+  }catch(e){if(msg)msg.textContent="Gagal: "+e.message;}
+  finally{if(btn){btn.disabled=false;btn.textContent="+ Tambah Viewer";}}
+}
+
+async function deleteViewerFromTab(id,name){
+  if(!confirm(`Hapus viewer "${name}"? Semua akses kuesioner viewer ini akan ikut dihapus.`))return;
+  try{await api("/api/viewers/"+id,{method:"DELETE"});await loadViewersTab();}
+  catch(e){alert("Gagal: "+e.message);}
+}
+
+/* ======================================================
+   USER TAB — editor management
+   ====================================================== */
+
+let _editorsCache=[];
+
+async function loadEditorsTab(){
+  const rows=document.getElementById("editorTabRows");
+  if(!rows) return;
+  rows.innerHTML='<tr><td colspan="5" class="empty">Memuat…</td></tr>';
+  try{
+    const {editors}=await api("/api/editors");
+    _editorsCache=editors||[];
+    _renderEditorsTab();
+  }catch(e){rows.innerHTML=`<tr><td colspan="5" class="empty">${esc(e.message)}</td></tr>`;}
+}
+
+function _renderEditorsTab(){
+  const rows=document.getElementById("editorTabRows");
+  if(!rows) return;
+  if(!_editorsCache.length){rows.innerHTML='<tr><td colspan="5" class="empty">Belum ada editor.</td></tr>';return;}
+  rows.innerHTML=_editorsCache.map(e=>`<tr>
+    <td><b>${esc(e.email||e.username||"-")}</b></td>
+    <td id="enote-${e.id}" class="muted">${e.note?esc(e.note):"—"}</td>
+    <td><span class="tag ${e.isActive?"published":"archived"}">${e.isActive?"Aktif":"Nonaktif"}</span></td>
+    <td class="muted">${e.createdAt?new Date(e.createdAt).toLocaleString("id-ID"):"-"}</td>
+    <td style="text-align:right;white-space:nowrap" id="eact-${e.id}">
+      <button class="btn" style="font-size:12px;padding:3px 8px" onclick="editEditorNote('${e.id}')">Edit</button>
+      <button class="btn danger" style="font-size:12px;padding:3px 8px" onclick="deleteEditorFromTab('${e.id}','${esc(e.email||e.username)}')">Hapus</button>
+    </td>
+  </tr>`).join("");
+}
+
+function editEditorNote(id){
+  const e=_editorsCache.find(x=>x.id===id);
+  if(!e) return;
+  const noteCell=document.getElementById("enote-"+id);
+  const actCell=document.getElementById("eact-"+id);
+  if(!noteCell||!actCell) return;
+  noteCell.innerHTML=`<input id="eni-${id}" style="width:100%;font-size:13px;padding:3px 6px;border:1px solid var(--line);border-radius:4px" value="${esc(e.note||"")}">`;
+  actCell.innerHTML=`<button class="btn primary" style="font-size:12px;padding:3px 8px" onclick="saveEditorNote('${id}')">Simpan</button>
+    <button class="btn" style="font-size:12px;padding:3px 8px" onclick="_renderEditorsTab()">Batal</button>`;
+  document.getElementById("eni-"+id)?.focus();
+}
+
+async function saveEditorNote(id){
+  const inp=document.getElementById("eni-"+id);
+  if(!inp) return;
+  const note=inp.value.trim();
+  try{
+    await api("/api/editors/"+id,{method:"PATCH",body:JSON.stringify({note})});
+    const e=_editorsCache.find(x=>x.id===id);
+    if(e) e.note=note;
+    _renderEditorsTab();
+  }catch(e){alert("Gagal menyimpan: "+e.message);}
+}
+
+async function createEditorFromTab(){
+  const email=(document.getElementById("etEmail")?.value||"").trim();
+  const note=(document.getElementById("etNote")?.value||"").trim();
+  const msg=document.getElementById("editorTabMsg");
+  if(!email){if(msg)msg.textContent="Email wajib diisi.";document.getElementById("etEmail")?.focus();return;}
+  const btn=document.getElementById("btnCreateEditorTab");
+  if(btn){btn.disabled=true;btn.textContent="Menambahkan…";}
+  if(msg)msg.textContent="";
+  try{
+    await api("/api/editors",{method:"POST",body:JSON.stringify({email,note})});
+    if(msg)msg.textContent="Editor berhasil ditambahkan.";
+    if(document.getElementById("etEmail"))document.getElementById("etEmail").value="";
+    if(document.getElementById("etNote"))document.getElementById("etNote").value="";
+    await loadEditorsTab();
+  }catch(e){if(msg)msg.textContent="Gagal: "+e.message;}
+  finally{if(btn){btn.disabled=false;btn.textContent="+ Tambah Editor";}}
+}
+
+async function deleteEditorFromTab(id,name){
+  if(!confirm(`Hapus editor "${name}"? Semua akses kuesioner editor ini akan ikut dihapus.`))return;
+  try{await api("/api/editors/"+id,{method:"DELETE"});await loadEditorsTab();}
+  catch(e){alert("Gagal: "+e.message);}
+}
+
+/* ======================================================
    EDITOR MANAGEMENT (superadmin)
    ====================================================== */
 
-let _epFormId=null;
+let _epFormId=null, _epFormSchema=null;
 
 async function openEditorPerm(formId,formTitle){
   _epFormId=formId;
+  _epFormSchema=null;
   document.getElementById("epFormTitle").textContent=formTitle;
   editorPermDlg.showModal();
   await refreshEditorsAndPerms();
+  try{
+    const formData=await api("/api/forms/"+formId);
+    _epFormSchema=formData.schema;
+  }catch{}
 }
 
 async function refreshEditorsAndPerms(){
@@ -452,15 +734,13 @@ async function refreshEditorList(){
 }
 
 async function createEditor(){
-  const username=(document.getElementById("eUsername")?.value||"").trim();
   const email=(document.getElementById("eEmail")?.value||"").trim();
   const note=(document.getElementById("eNote")?.value||"").trim();
-  if(!username||!email){alert("Username dan email Google wajib diisi");return;}
+  if(!email){alert("Email Google wajib diisi");return;}
   try{
-    await api("/api/editors",{method:"POST",body:JSON.stringify({username,email,note,formId:_epFormId})});
-    document.getElementById("eUsername").value="";
-    document.getElementById("eEmail").value="";
-    document.getElementById("eNote").value="";
+    await api("/api/editors",{method:"POST",body:JSON.stringify({email,note})});
+    if(document.getElementById("eEmail"))document.getElementById("eEmail").value="";
+    if(document.getElementById("eNote"))document.getElementById("eNote").value="";
     await refreshEditorsAndPerms();
   }catch(e){
     alert("Gagal: "+e.message);
@@ -488,16 +768,20 @@ async function refreshEditorPermList(){
       listEl.innerHTML='<div class="muted" style="font-size:13px">Belum ada editor yang ditambahkan.</div>';
       return;
     }
-    listEl.innerHTML=permissions.map(p=>`
-      <div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    listEl.innerHTML=permissions.map(p=>{
+      const filterCount=p.fieldFilters?Object.keys(p.fieldFilters).length:0;
+      const filterSummary=filterCount?`· ${filterCount} filter variabel aktif`:"";
+      return`<div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <div style="flex:1;min-width:120px">
           <b>${esc(p.editorName||"(editor)")}</b>
-          <div style="font-size:11px;color:var(--muted)">Akses kelola form aktif</div>
+          <div style="font-size:11px;color:var(--muted)">Akses kelola form aktif ${filterSummary}</div>
         </div>
         <div class="acts">
+          <button class="btn" style="font-size:12px" onclick="openEpDetail('${p.id}','${esc(p.editorName||"editor")}')">Konfigurasi</button>
           <button class="btn danger" style="font-size:12px" onclick="removeEditorPerm('${p.id}','${esc(p.editorName||"editor")}')">Cabut</button>
         </div>
-      </div>`).join("");
+      </div>`;
+    }).join("");
   }catch(e){
     listEl.textContent="Gagal: "+e.message;
   }
@@ -568,15 +852,13 @@ async function refreshViewerList(){
 }
 
 async function createViewer(){
-  const username=document.getElementById("vUsername").value.trim();
-  const email=document.getElementById("vEmail").value.trim();
-  const note=document.getElementById("vNote").value.trim();
-  if(!username||!email){alert("Username dan email Google wajib diisi");return;}
+  const email=(document.getElementById("vEmail")?.value||"").trim();
+  const note=(document.getElementById("vNote")?.value||"").trim();
+  if(!email){alert("Email Google wajib diisi");return;}
   try{
-    await api("/api/viewers",{method:"POST",body:JSON.stringify({username,email,note,formId:_vpFormId})});
-    document.getElementById("vUsername").value="";
-    document.getElementById("vEmail").value="";
-    document.getElementById("vNote").value="";
+    await api("/api/viewers",{method:"POST",body:JSON.stringify({email,note})});
+    if(document.getElementById("vEmail"))document.getElementById("vEmail").value="";
+    if(document.getElementById("vNote"))document.getElementById("vNote").value="";
     await refreshViewerList();
   }catch(e){alert("Gagal: "+e.message);}
 }
@@ -587,17 +869,123 @@ async function deleteViewer(id,name){
   catch(e){alert("Gagal: "+e.message);}
 }
 
+// --- Field filter helpers (shared for viewer + editor) ---
+let _vpAddFilters={};  // filter untuk dialog tambah viewer permission
+let _vpdFilters={};    // filter untuk dialog edit detail viewer permission
+let _epdPermId=null, _epdFilters={};  // filter untuk dialog detail editor permission
+
+function renderFilterChips(containerId,filters,removeFn){
+  const el=document.getElementById(containerId);
+  if(!el)return;
+  const entries=Object.entries(filters||{});
+  if(!entries.length){
+    el.innerHTML='<span style="font-size:11px;color:var(--muted)">Belum ada batasan filter.</span>';
+    return;
+  }
+  el.innerHTML=entries.map(([k,v])=>`
+    <span style="display:inline-flex;align-items:center;gap:3px;background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:2px 6px;margin:2px;font-size:11px">
+      ${esc(k)}: <b>${esc(v)}</b>
+      <button onclick="${removeFn}('${esc(k)}')" style="background:none;border:none;cursor:pointer;color:var(--muted);padding:0 2px;line-height:1;font-size:12px">✕</button>
+    </span>`).join('');
+}
+
+function buildFieldOptions(schema,selectId){
+  const sel=document.getElementById(selectId);
+  if(!sel)return;
+  const fields=[];
+  function walk(comps){
+    for(const c of comps||[]){
+      if(c.kind==="field"&&c.name&&c.type!=="note"&&c.type!=="hidden"&&c.type!=="markdown")
+        fields.push({name:c.name,label:typeof c.label==="string"?c.label:(c.label?.id||c.name)});
+      else if(c.components)walk(c.components);
+    }
+  }
+  for(const p of schema?.pages||[])walk(p.components||[]);
+  const cur=sel.value;
+  sel.innerHTML='<option value="">— variabel —</option>'+
+    fields.map(f=>`<option value="${esc(f.name)}">${esc(f.label)}</option>`).join('');
+  sel.value=cur;
+}
+
+// Viewer Add dialog filters
+function addVpAddFilter(){
+  const field=document.getElementById("vpAddFilterField").value;
+  const value=(document.getElementById("vpAddFilterValue").value||"").trim();
+  if(!field||!value){alert("Pilih variabel dan masukkan nilai");return;}
+  _vpAddFilters[field]=value;
+  document.getElementById("vpAddFilterValue").value="";
+  renderFilterChips("vpAddFilterList",_vpAddFilters,"removeVpAddFilter");
+}
+function removeVpAddFilter(field){
+  delete _vpAddFilters[field];
+  renderFilterChips("vpAddFilterList",_vpAddFilters,"removeVpAddFilter");
+}
+
+// Viewer Detail dialog filters
+function addVpdFilter(){
+  const field=document.getElementById("vpdFilterField").value;
+  const value=(document.getElementById("vpdFilterValue").value||"").trim();
+  if(!field||!value){alert("Pilih variabel dan masukkan nilai");return;}
+  _vpdFilters[field]=value;
+  document.getElementById("vpdFilterValue").value="";
+  renderFilterChips("vpdFilterList",_vpdFilters,"removeVpdFilter");
+}
+function removeVpdFilter(field){
+  delete _vpdFilters[field];
+  renderFilterChips("vpdFilterList",_vpdFilters,"removeVpdFilter");
+}
+
+// Editor Detail dialog filters
+function addEpdFilter(){
+  const field=document.getElementById("epdFilterField").value;
+  const value=(document.getElementById("epdFilterValue").value||"").trim();
+  if(!field||!value){alert("Pilih variabel dan masukkan nilai");return;}
+  _epdFilters[field]=value;
+  document.getElementById("epdFilterValue").value="";
+  renderFilterChips("epdFilterList",_epdFilters,"removeEpdFilter");
+}
+function removeEpdFilter(field){
+  delete _epdFilters[field];
+  renderFilterChips("epdFilterList",_epdFilters,"removeEpdFilter");
+}
+
+async function openEpDetail(permId,editorName){
+  _epdPermId=permId;
+  _epdFilters={};
+  document.getElementById("epdEditorName").textContent=editorName;
+  try{
+    const perm=await api("/api/editor-permissions/"+permId);
+    _epdFilters=perm.fieldFilters||{};
+    buildFieldOptions(_epFormSchema,"epdFilterField");
+    renderFilterChips("epdFilterList",_epdFilters,"removeEpdFilter");
+    epDetailDlg.showModal();
+  }catch(e){alert("Gagal memuat: "+e.message);}
+}
+
+async function saveEpDetail(){
+  try{
+    await api("/api/editor-permissions/"+_epdPermId,{
+      method:"PUT",body:JSON.stringify({fieldFilters:_epdFilters})
+    });
+    epDetailDlg.close();
+    await refreshEditorPermList();
+  }catch(e){alert("Gagal menyimpan: "+e.message);}
+}
+
 // --- Dialog akses viewer per kuesioner ---
 let _vpFormId=null, _vpFormSchema=null;
 async function openViewerPerm(formId,formTitle){
   _vpFormId=formId;
+  _vpAddFilters={};
   document.getElementById("vpFormTitle").textContent=formTitle;
+  renderFilterChips("vpAddFilterList",{},"removeVpAddFilter");
   viewerPermDlg.showModal();
   await refreshViewerList();
   try{
     const formData=await api("/api/forms/"+formId);
     _vpFormSchema=formData.schema;
     buildFieldCheckboxes("vpAddFieldList",formData.schema,[]);
+    buildFieldOptions(formData.schema,"vpAddFilterField");
   }catch{
     document.getElementById("vpAddFieldList").innerHTML=
       '<span style="font-size:12px;color:var(--muted)">Gagal memuat variabel.</span>';
@@ -611,20 +999,23 @@ async function refreshVpPermList(){
   try{
     const {permissions}=await api("/api/forms/"+_vpFormId+"/viewer-permissions");
     if(!permissions.length){el.innerHTML='<div class="muted" style="font-size:13px">Belum ada viewer yang ditambahkan.</div>';return;}
-    el.innerHTML=permissions.map(p=>`
-      <div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    el.innerHTML=permissions.map(p=>{
+      const filterCount=p.fieldFilters?Object.keys(p.fieldFilters).length:0;
+      return`<div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <div style="flex:1;min-width:120px">
           <b>${esc(p.viewerUsername)}</b>
           <div style="font-size:11px;color:var(--muted)">
             ${p.respondentAccess==="all"?"Semua responden":`${p.allowedCount} responden dipilih`}
             · ${p.visibleFields&&p.visibleFields.length?p.visibleFields.length+" variabel":"Semua variabel"}
+            ${filterCount?`· ${filterCount} filter variabel`:""}
           </div>
         </div>
         <div class="acts">
           <button class="btn" style="font-size:12px" onclick="openVpDetail('${p.id}','${esc(p.viewerUsername)}','${p.formId}')">Konfigurasi</button>
           <button class="btn danger" style="font-size:12px" onclick="removeViewerPerm('${p.id}','${esc(p.viewerUsername)}')">Hapus</button>
         </div>
-      </div>`).join("");
+      </div>`;
+    }).join("");
   }catch(e){el.textContent="Gagal: "+e.message;}
 }
 
@@ -638,12 +1029,14 @@ async function addViewerPermission(){
   const visibleFields=cbAll.length>0&&cbChecked.length<cbAll.length?cbChecked:[];
   try{
     await api("/api/forms/"+_vpFormId+"/viewer-permissions",{
-      method:"POST",body:JSON.stringify({viewerId,respondentAccess,visibleFields})
+      method:"POST",body:JSON.stringify({viewerId,respondentAccess,visibleFields,fieldFilters:_vpAddFilters})
     });
     document.getElementById("vpViewerSel").value="";
     document.querySelector("input[name='vpRA'][value='all']").checked=true;
     // Reset field list ke semua tercentang
     buildFieldCheckboxes("vpAddFieldList",_vpFormSchema,[]);
+    _vpAddFilters={};
+    renderFilterChips("vpAddFilterList",{},"removeVpAddFilter");
     await refreshVpPermList();
   }catch(e){alert("Gagal: "+e.message);}
 }
@@ -676,6 +1069,11 @@ async function openVpDetail(permId,viewerName,formId){
 
     // Isi daftar field
     buildVpdFieldList(formData.schema,curPerm.visibleFields||[]);
+
+    // Isi filter variabel
+    _vpdFilters=curPerm.fieldFilters||{};
+    buildFieldOptions(formData.schema,"vpdFilterField");
+    renderFilterChips("vpdFilterList",_vpdFilters,"removeVpdFilter");
 
     // Isi daftar allowed respondents
     renderAllowedRespondents(allowedData.respondents||[]);
@@ -789,7 +1187,7 @@ async function savePermDetail(){
   const visibleFields=checked.length===total?[]:checked;
   try{
     await api("/api/viewer-permissions/"+_vpdPermId,{
-      method:"PUT",body:JSON.stringify({respondentAccess,visibleFields})
+      method:"PUT",body:JSON.stringify({respondentAccess,visibleFields,fieldFilters:_vpdFilters})
     });
     vpDetailDlg.close();
     await refreshVpPermList();

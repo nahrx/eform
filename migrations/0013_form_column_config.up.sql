@@ -1,0 +1,2 @@
+ALTER TABLE forms
+  ADD COLUMN IF NOT EXISTS column_config JSONB NOT NULL DEFAULT '[]';

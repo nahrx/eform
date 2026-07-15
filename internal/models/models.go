@@ -18,16 +18,17 @@ type User struct {
 }
 
 type Form struct {
-	ID          string          `json:"id"`
-	Slug        string          `json:"slug"`
-	Title       string          `json:"title"`
-	Description string          `json:"description"`
-	Schema      json.RawMessage `json:"schema,omitempty"`
-	Status      string          `json:"status"`
-	Version     string          `json:"version"`
-	OwnerID     *string         `json:"ownerId,omitempty"`
-	CreatedAt   time.Time       `json:"createdAt"`
-	UpdatedAt   time.Time       `json:"updatedAt"`
+	ID           string          `json:"id"`
+	Slug         string          `json:"slug"`
+	Title        string          `json:"title"`
+	Description  string          `json:"description"`
+	Schema       json.RawMessage `json:"schema,omitempty"`
+	Status       string          `json:"status"`
+	Version      string          `json:"version"`
+	OwnerID      *string         `json:"ownerId,omitempty"`
+	ColumnConfig json.RawMessage `json:"columnConfig,omitempty"`
+	CreatedAt    time.Time       `json:"createdAt"`
+	UpdatedAt    time.Time       `json:"updatedAt"`
 }
 
 type Share struct {
@@ -93,13 +94,14 @@ type Respondent struct {
 
 // ViewerFormPermission menyimpan hak akses seorang viewer ke satu kuesioner.
 type ViewerFormPermission struct {
-	ID               string    `json:"id"`
-	ViewerID         string    `json:"viewerId"`
-	FormID           string    `json:"formId"`
-	RespondentAccess string    `json:"respondentAccess"` // 'all' | 'selected'
-	VisibleFields    []string  `json:"visibleFields"`    // nil = semua field
-	CreatedBy        *string   `json:"createdBy,omitempty"`
-	CreatedAt        time.Time `json:"createdAt"`
+	ID               string            `json:"id"`
+	ViewerID         string            `json:"viewerId"`
+	FormID           string            `json:"formId"`
+	RespondentAccess string            `json:"respondentAccess"` // 'all' | 'selected'
+	VisibleFields    []string          `json:"visibleFields"`    // nil = semua field
+	FieldFilters     map[string]string `json:"fieldFilters"`     // fieldName → nilai wajib (exact match)
+	CreatedBy        *string           `json:"createdBy,omitempty"`
+	CreatedAt        time.Time         `json:"createdAt"`
 	// Diisi saat listing (join)
 	ViewerUsername string `json:"viewerUsername,omitempty"`
 	FormTitle      string `json:"formTitle,omitempty"`
@@ -118,11 +120,12 @@ type ViewerAllowedRespondent struct {
 
 // EditorFormPermission menyimpan hak kelola seorang editor ke satu kuesioner.
 type EditorFormPermission struct {
-	ID         string    `json:"id"`
-	EditorID   string    `json:"editorId"`
-	FormID     string    `json:"formId"`
-	CreatedBy  *string   `json:"createdBy,omitempty"`
-	CreatedAt  time.Time `json:"createdAt"`
-	EditorName string    `json:"editorName,omitempty"`
-	FormTitle  string    `json:"formTitle,omitempty"`
+	ID           string            `json:"id"`
+	EditorID     string            `json:"editorId"`
+	FormID       string            `json:"formId"`
+	FieldFilters map[string]string `json:"fieldFilters"` // fieldName → nilai wajib (exact match)
+	CreatedBy    *string           `json:"createdBy,omitempty"`
+	CreatedAt    time.Time         `json:"createdAt"`
+	EditorName   string            `json:"editorName,omitempty"`
+	FormTitle    string            `json:"formTitle,omitempty"`
 }

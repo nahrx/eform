@@ -27,35 +27,76 @@
 
   <section id="usersSection" hidden>
     <div class="bar"><h2>Manajemen User</h2><button class="btn" id="refreshUsers" type="button">↻ Muat ulang</button></div>
-    <div class="user-card">
-      <div class="user-card-title">Buat User Baru</div>
-      <div class="user-grid">
-        <input id="uUsername" placeholder="Username" autocomplete="off">
-        <input id="uEmail" type="email" placeholder="Email (opsional)">
-        <input id="uPassword" type="password" placeholder="Password (min. 6 karakter)">
-        <select id="uRole">
-          <option value="admin">admin</option>
-          <option value="superadmin">superadmin</option>
-        </select>
-      </div>
-      <div class="user-actions">
-        <button class="btn primary" id="btnCreateUser" type="button">+ Buat User</button>
-      </div>
-      <div class="muted" id="userMsg"></div>
+
+    <div class="tabbar" id="userSubtabbar" style="margin-bottom:16px">
+      <button class="btn tab" id="subtabAdminBtn" type="button" hidden>Admin</button>
+      <button class="btn tab" id="subtabViewerBtn" type="button">Viewer</button>
+      <button class="btn tab" id="subtabEditorBtn" type="button">Editor</button>
     </div>
 
-    <table>
-      <thead>
-        <tr>
-          <th>Username</th>
-          <th>Email</th>
-          <th>Role</th>
-          <th>Status</th>
-          <th>Dibuat</th>
-        </tr>
-      </thead>
-      <tbody id="userRows"><tr><td colspan="5" class="empty">Memuat…</td></tr></tbody>
-    </table>
+    <!-- Sub-section: Admin & Superadmin -->
+    <div id="adminSubSection" hidden>
+      <div class="user-card">
+        <div class="user-card-title">Buat User Admin</div>
+        <div class="user-grid">
+          <input id="uUsername" placeholder="Username" autocomplete="off">
+          <input id="uEmail" type="email" placeholder="Email (opsional)">
+          <input id="uPassword" type="password" placeholder="Password (min. 6 karakter)">
+          <select id="uRole">
+            <option value="admin">admin</option>
+            <option value="superadmin">superadmin</option>
+          </select>
+        </div>
+        <div class="user-actions">
+          <button class="btn primary" id="btnCreateUser" type="button">+ Buat User</button>
+        </div>
+        <div class="muted" id="userMsg"></div>
+      </div>
+      <table>
+        <thead><tr><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Dibuat</th><th></th></tr></thead>
+        <tbody id="userRows"><tr><td colspan="6" class="empty">Memuat…</td></tr></tbody>
+      </table>
+    </div>
+
+    <!-- Sub-section: Viewer -->
+    <div id="viewerSubSection" hidden>
+      <div class="user-card">
+        <div class="user-card-title">Tambah Akun Viewer</div>
+        <div class="muted" style="font-size:12px;margin-bottom:10px">Viewer login dengan akun Google. Username otomatis menggunakan email yang didaftarkan.</div>
+        <div class="user-grid">
+          <input id="vtEmail" type="email" placeholder="Email Google viewer" autocomplete="off" style="grid-column:1/3">
+          <input id="vtNote" placeholder="Nama / Catatan (opsional)" style="grid-column:1/3">
+        </div>
+        <div class="user-actions">
+          <button class="btn primary" id="btnCreateViewerTab" type="button">+ Tambah Viewer</button>
+        </div>
+        <div class="muted" id="viewerTabMsg"></div>
+      </div>
+      <table>
+        <thead><tr><th>Email</th><th>Catatan</th><th>Status</th><th>Dibuat</th><th></th></tr></thead>
+        <tbody id="viewerTabRows"><tr><td colspan="5" class="empty">Memuat…</td></tr></tbody>
+      </table>
+    </div>
+
+    <!-- Sub-section: Editor -->
+    <div id="editorSubSection" hidden>
+      <div class="user-card">
+        <div class="user-card-title">Tambah Akun Editor</div>
+        <div class="muted" style="font-size:12px;margin-bottom:10px">Editor login dengan akun Google. Username otomatis menggunakan email yang didaftarkan.</div>
+        <div class="user-grid">
+          <input id="etEmail" type="email" placeholder="Email Google editor" autocomplete="off" style="grid-column:1/3">
+          <input id="etNote" placeholder="Nama / Catatan (opsional)" style="grid-column:1/3">
+        </div>
+        <div class="user-actions">
+          <button class="btn primary" id="btnCreateEditorTab" type="button">+ Tambah Editor</button>
+        </div>
+        <div class="muted" id="editorTabMsg"></div>
+      </div>
+      <table>
+        <thead><tr><th>Email</th><th>Catatan</th><th>Status</th><th>Dibuat</th><th></th></tr></thead>
+        <tbody id="editorTabRows"><tr><td colspan="5" class="empty">Memuat…</td></tr></tbody>
+      </table>
+    </div>
   </section>
 </main>
 
@@ -101,11 +142,10 @@
     <div style="border:1px solid var(--line);border-radius:var(--radius);padding:12px;margin-bottom:14px">
       <div style="font-size:12px;font-weight:600;margin-bottom:4px">Akun Viewer</div>
       <div style="font-size:11px;color:var(--muted);margin-bottom:8px">
-        Viewer login memakai akun Google — cukup masukkan email Google-nya di sini, lalu tambahkan ke kuesioner ini di bawah.
+        Viewer login memakai akun Google — masukkan email Google-nya. Username otomatis menggunakan email.
       </div>
       <div class="row" style="gap:8px;flex-wrap:wrap">
-        <input id="vUsername" placeholder="Username viewer" style="flex:1;min-width:110px">
-        <input id="vEmail" type="email" placeholder="Email Google viewer" style="flex:1;min-width:150px">
+        <input id="vEmail" type="email" placeholder="Email Google viewer" style="flex:2;min-width:150px">
         <input id="vNote" placeholder="Catatan (opsional)" style="flex:1;min-width:130px">
         <button class="btn primary" onclick="createViewer()">+ Buat Viewer</button>
       </div>
@@ -141,6 +181,19 @@
         <div style="font-size:11px;color:var(--muted);margin-bottom:5px">Centang variabel yang boleh dilihat. Jika semua dicentang, semua variabel terlihat.</div>
         <div id="vpAddFieldList" style="max-height:160px;overflow-y:auto;border:1px solid var(--line-2);border-radius:6px;padding:6px;background:var(--surface)">
           <span style="font-size:12px;color:var(--muted)">Memuat variabel…</span>
+        </div>
+      </div>
+      <!-- Batasan filter variabel -->
+      <div style="margin-top:10px">
+        <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:4px">Batasan Filter Variabel <span style="font-weight:400">(opsional)</span></div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:5px">Hanya tampilkan data yang nilai variabelnya sesuai nilai yang ditentukan.</div>
+        <div id="vpAddFilterList" style="margin-bottom:6px;min-height:20px"></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <select id="vpAddFilterField" style="flex:1;min-width:120px;font-size:12px;padding:4px 6px;border:1px solid var(--line);border-radius:5px">
+            <option value="">— variabel —</option>
+          </select>
+          <input id="vpAddFilterValue" placeholder="Nilai" style="flex:1;min-width:90px;font-size:12px;padding:4px 6px;border:1px solid var(--line);border-radius:5px">
+          <button class="btn" style="font-size:11px;padding:3px 8px" onclick="addVpAddFilter()">+ Tambah</button>
         </div>
       </div>
       <div style="margin-top:10px;text-align:right">
@@ -187,6 +240,20 @@
     <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Centang variabel yang boleh dilihat viewer. Jika semua dicentang, semua variabel terlihat.</div>
     <div id="vpdFieldList" style="max-height:200px;overflow-y:auto;border:1px solid var(--line);border-radius:6px;padding:8px"></div>
 
+    <!-- Batasan filter variabel -->
+    <div style="margin-top:12px">
+      <div style="font-size:12px;font-weight:600;margin-bottom:4px">Batasan Filter Variabel</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Hanya tampilkan data yang nilai variabelnya sesuai nilai yang ditentukan.</div>
+      <div id="vpdFilterList" style="margin-bottom:6px;min-height:20px"></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <select id="vpdFilterField" style="flex:1;min-width:120px;font-size:12px;padding:4px 6px;border:1px solid var(--line);border-radius:5px">
+          <option value="">— variabel —</option>
+        </select>
+        <input id="vpdFilterValue" placeholder="Nilai" style="flex:1;min-width:90px;font-size:12px;padding:4px 6px;border:1px solid var(--line);border-radius:5px">
+        <button class="btn" style="font-size:11px;padding:3px 8px" onclick="addVpdFilter()">+ Tambah</button>
+      </div>
+    </div>
+
     <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
       <button class="btn" onclick="vpDetailDlg.close()">Batal</button>
       <button class="btn primary" onclick="savePermDetail()">Simpan</button>
@@ -208,11 +275,10 @@
     <div style="border:1px solid var(--line);border-radius:var(--radius);padding:12px;margin-bottom:14px">
       <div style="font-size:12px;font-weight:600;margin-bottom:4px">Akun Editor</div>
       <div style="font-size:11px;color:var(--muted);margin-bottom:8px">
-        Editor login dengan akun Google. Buat akun editor dengan username dan email Google.
+        Editor login dengan akun Google. Username otomatis menggunakan email.
       </div>
       <div class="row" style="gap:8px;flex-wrap:wrap">
-        <input id="eUsername" placeholder="Username editor" style="flex:1;min-width:110px">
-        <input id="eEmail" type="email" placeholder="Email Google editor" style="flex:1;min-width:150px">
+        <input id="eEmail" type="email" placeholder="Email Google editor" style="flex:2;min-width:150px">
         <input id="eNote" placeholder="Catatan (opsional)" style="flex:1;min-width:130px">
         <button class="btn primary" type="button" onclick="createEditor()">+ Buat Editor</button>
       </div>
@@ -230,6 +296,32 @@
     </div>
 
     <div id="epPermList">Memuat…</div>
+  </div>
+</dialog>
+
+<!-- Dialog konfigurasi detail permission editor (field_filters) -->
+<dialog id="epDetailDlg">
+  <div class="dlg-h" style="justify-content:space-between">
+    <span>Konfigurasi Editor · <span id="epdEditorName"></span></span>
+    <button class="btn" onclick="epDetailDlg.close()">✕</button>
+  </div>
+  <div class="dlg-b">
+    <div style="font-size:12px;font-weight:600;margin-bottom:6px">Batasan Filter Variabel</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:8px">
+      Batasi data yang dapat dilihat dan diedit editor ini hanya pada data yang nilai variabelnya sesuai.
+    </div>
+    <div id="epdFilterList" style="margin-bottom:8px;min-height:20px"></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <select id="epdFilterField" style="flex:1;min-width:120px;font-size:12px;padding:4px 6px;border:1px solid var(--line);border-radius:5px">
+        <option value="">— variabel —</option>
+      </select>
+      <input id="epdFilterValue" placeholder="Nilai" style="flex:1;min-width:90px;font-size:12px;padding:4px 6px;border:1px solid var(--line);border-radius:5px">
+      <button class="btn" style="font-size:11px;padding:3px 8px" onclick="addEpdFilter()">+ Tambah</button>
+    </div>
+    <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn" onclick="epDetailDlg.close()">Batal</button>
+      <button class="btn primary" onclick="saveEpDetail()">Simpan</button>
+    </div>
   </div>
 </dialog>
 

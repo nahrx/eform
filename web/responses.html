@@ -202,9 +202,14 @@ async function init(){
     document.getElementById("btnCsv").addEventListener("click",downloadCsv);
 
     ALL_FIELDS=extractFields(SCHEMA);
-    SEL_COLS=loadColPref();
+    // Preferensi kolom: dari server (column_config) jika ada, fallback ke localStorage
+    const serverCols=form.columnConfig&&Array.isArray(form.columnConfig)&&form.columnConfig.length
+      ?form.columnConfig:null;
+    SEL_COLS=serverCols||loadColPref();
+    // Auto-sync: jika server kosong tapi localStorage punya config, langsung simpan ke server
+    if(!serverCols&&SEL_COLS.length)saveColsToServer(SEL_COLS);
 
-    if(MY_ROLE==="superadmin"&&ALL_FIELDS.length){
+    if((MY_ROLE==="superadmin"||MY_ROLE==="admin")&&ALL_FIELDS.length){
       document.getElementById("colWrap").hidden=false;
       buildColPicker();
       renderFieldFilters();
@@ -299,7 +304,7 @@ async function fetchApiOpts(src){
 /* ---- field filter bar (superadmin) ---- */
 function renderFieldFilters(){
   const bar=document.getElementById("ffBar");
-  if(MY_ROLE!=="superadmin"||!SEL_COLS.length){bar.innerHTML="";return;}
+  if((MY_ROLE!=="superadmin"&&MY_ROLE!=="admin")||!SEL_COLS.length){bar.innerHTML="";return;}
   // Hapus nilai cascade yang depnya belum terpenuhi (termasuk transitif)
   SEL_COLS.forEach(name=>{
     const fk=fieldFilterKind(findField(SCHEMA,name));
@@ -527,12 +532,17 @@ document.getElementById("btnKolom")?.addEventListener("click",e=>{
 document.addEventListener("click",()=>document.getElementById("colPanel")?.classList.remove("open"));
 document.getElementById("colPanel")?.addEventListener("click",e=>e.stopPropagation());
 
+function saveColsToServer(cols){
+  api("/api/forms/"+FORM_ID+"/column-config",{method:"PUT",body:JSON.stringify({cols})}).catch(()=>{});
+}
+
 document.getElementById("btnColApply")?.addEventListener("click",()=>{
   const newCols=[...document.querySelectorAll("#colList input:checked")].map(cb=>cb.value).slice(0,5);
   // bersihkan filter field yang kolomnya dihapus
   SEL_COLS.filter(c=>!newCols.includes(c)).forEach(c=>{delete FIELD_FILTERS[c];delete FIELD_EXACT_FILTERS[c];});
   SEL_COLS=newCols;
   saveColPref(SEL_COLS);
+  saveColsToServer(SEL_COLS);
   document.getElementById("colPanel").classList.remove("open");
   renderFieldFilters();
   loadPage(0);
@@ -540,6 +550,7 @@ document.getElementById("btnColApply")?.addEventListener("click",()=>{
 document.getElementById("btnColReset")?.addEventListener("click",()=>{
   SEL_COLS.forEach(c=>{delete FIELD_FILTERS[c];delete FIELD_EXACT_FILTERS[c];});
   SEL_COLS=[];saveColPref([]);
+  saveColsToServer([]);
   document.querySelectorAll("#colList input").forEach(cb=>cb.checked=false);
   document.getElementById("colPanel").classList.remove("open");
   renderFieldFilters();
@@ -561,11 +572,11 @@ function renderTable(){
     return;
   }
 
-  // Header kolom tambahan — sortable untuk superadmin
+  // Header kolom tambahan — sortable untuk superadmin dan admin
   const extraTh=SEL_COLS.map(name=>{
     const f=ALL_FIELDS.find(ff=>ff.name===name);
     const label=f?f.label:name;
-    return MY_ROLE==="superadmin"
+    return(MY_ROLE==="superadmin"||MY_ROLE==="admin")
       ?sortTh(name,esc(label),"td-val")
       :`<th class="td-val">${esc(label)}</th>`;
   }).join("");

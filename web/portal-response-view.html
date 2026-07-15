@@ -1,0 +1,566 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Detail Jawaban</title>
+<style>
+:root{
+  --ink:#13171e;--ink-soft:#4a525e;--muted:#79828f;
+  --surface:#eef1f5;--panel:#fff;--panel-2:#f7f9fb;
+  --line:#dfe4ea;--line-2:#eef1f5;
+  --accent:#0e7490;--accent-ink:#0b5563;--accent-soft:#d6edf1;
+  --ok:#15803d;--ok-soft:#dcfce7;
+  --warn-soft:#fef9c3;--warn-ink:#854d0e;
+  --danger:#dc2626;--danger-soft:#fee2e2;
+  --roster:#047857;
+  --radius:10px;--radius-s:7px;
+  --shadow:0 1px 3px rgba(19,23,30,.07),0 8px 28px -16px rgba(19,23,30,.22);
+  --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Inter,sans-serif;
+  --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:var(--surface);font-family:var(--sans);color:var(--ink);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font-family:inherit}
+
+/* topbar */
+.topbar{position:sticky;top:0;z-index:10;background:var(--panel);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;padding:10px 18px;min-height:52px;flex-wrap:wrap}
+.topbar-title{font-weight:600;font-size:15px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:100px}
+.btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:7px 13px;border-radius:var(--radius-s);font-size:13px;font-weight:500;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:5px;transition:.12s;white-space:nowrap}
+.btn:hover{border-color:#c6cdd6;background:var(--panel-2)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{background:var(--accent-ink)}
+.btn.danger{background:var(--panel);border-color:#fca5a5;color:var(--danger)}
+.btn.danger:hover{background:var(--danger-soft)}
+.btn[disabled]{opacity:.5;cursor:default;pointer-events:none}
+
+/* badge */
+.st-badge{font-size:11.5px;padding:4px 10px;border-radius:999px;font-weight:700;flex:none}
+.st-submitted{background:var(--ok-soft);color:var(--ok)}
+.st-draft{background:var(--warn-soft);color:var(--warn-ink)}
+.ro-badge{background:#f1f5f9;color:#475569;font-size:11.5px;padding:4px 10px;border-radius:999px;font-weight:600;flex:none}
+.edit-badge{background:var(--accent-soft);color:var(--accent-ink);font-size:11.5px;padding:4px 10px;border-radius:999px;font-weight:700;flex:none}
+
+/* layout */
+.shell{display:flex;min-height:calc(100vh - 52px)}
+.sidebar{width:200px;flex:none;padding:14px 10px;background:var(--panel);border-right:1px solid var(--line);position:sticky;top:52px;height:calc(100vh - 52px);overflow-y:auto}
+.sidebar-h{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);padding:0 6px;margin-bottom:8px}
+.pg-item{padding:8px 10px;border-radius:var(--radius-s);font-size:12.5px;font-weight:500;cursor:pointer;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pg-item:hover{background:var(--panel-2)}
+.pg-item.active{background:var(--accent-soft);color:var(--accent-ink)}
+.content{flex:1;padding:28px 20px 80px;max-width:760px;margin:0 auto;width:100%}
+
+/* meta card */
+.meta-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 18px;margin-bottom:24px;display:flex;flex-wrap:wrap;align-items:center;gap:10px;box-shadow:var(--shadow)}
+.meta-who{font-weight:600;font-size:14px}
+.meta-email{font-size:12.5px;color:var(--muted)}
+.meta-time{font-size:12px;color:var(--muted);margin-left:auto}
+
+/* page nav */
+.nav-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.nav-prog{font-size:12px;color:var(--muted)}
+.page-title{font-size:18px;font-weight:700;margin:0 0 18px;color:var(--ink)}
+.bottom-nav{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:24px;padding-top:18px;border-top:1px solid var(--line)}
+
+/* READ-ONLY field display */
+.rv-block{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px 18px;margin-bottom:14px}
+.rv-block-title{font-weight:700;font-size:14px;margin-bottom:12px;color:var(--ink)}
+.rv-section{border:1.5px solid var(--line);border-radius:9px;padding:12px 14px;margin-bottom:12px;background:var(--panel-2)}
+.rv-section-title{font-weight:600;font-size:13px;color:var(--ink-soft);margin-bottom:10px}
+.rv-field{padding:8px 0;border-bottom:1px solid var(--line-2);display:flex;flex-direction:column;gap:3px}
+.rv-field:last-child{border-bottom:none;padding-bottom:0}
+.rv-label{font-size:12px;color:var(--muted);font-weight:500}
+.rv-desc{font-size:11.5px;color:var(--muted);margin-bottom:2px}
+.rv-answer{font-size:13.5px;font-weight:500;color:var(--ink);word-break:break-word}
+.rv-answer.empty{color:var(--muted);font-style:italic;font-weight:400}
+.rv-answer-box{background:var(--surface);border:1px solid var(--line);border-radius:7px;padding:8px 11px;font-size:13px;color:var(--ink);min-height:36px;word-break:break-word}
+.rv-choice-list{display:flex;flex-direction:column;gap:5px;margin-top:2px}
+.rv-choice-item{display:flex;align-items:center;gap:8px;font-size:13px;padding:5px 10px;border-radius:6px}
+.rv-choice-item.selected{background:var(--accent-soft);color:var(--accent-ink);font-weight:600}
+.rv-choice-item.unsel{color:var(--muted)}
+.rv-choice-icon{width:16px;height:16px;border-radius:50%;border:2px solid;display:flex;align-items:center;justify-content:center;flex:none}
+.rv-choice-item.selected .rv-choice-icon{border-color:var(--accent);background:var(--accent)}
+.rv-choice-item.unsel .rv-choice-icon{border-color:var(--line)}
+.rv-choice-item.selected .rv-choice-icon::after{content:"";width:6px;height:6px;border-radius:50%;background:#fff}
+.rv-checkbox-icon{width:16px;height:16px;border-radius:4px;border:2px solid;display:flex;align-items:center;justify-content:center;flex:none}
+.rv-choice-item.selected .rv-checkbox-icon{border-color:var(--accent);background:var(--accent)}
+.rv-choice-item.unsel .rv-checkbox-icon{border-color:var(--line)}
+.rv-choice-item.selected .rv-checkbox-icon::after{content:"✓";font-size:10px;color:#fff;font-weight:700}
+
+/* EDIT MODE field inputs */
+.ed-field{padding:10px 0;border-bottom:1px solid var(--line-2);display:flex;flex-direction:column;gap:5px}
+.ed-field:last-child{border-bottom:none;padding-bottom:0}
+.ed-label{font-size:12px;color:var(--muted);font-weight:600}
+.ed-desc{font-size:11.5px;color:var(--muted)}
+.ed-input{font-size:13.5px;padding:8px 11px;border:1.5px solid var(--line);border-radius:var(--radius-s);background:var(--panel);color:var(--ink);width:100%;transition:.12s}
+.ed-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.ed-textarea{font-size:13.5px;padding:8px 11px;border:1.5px solid var(--line);border-radius:var(--radius-s);background:var(--panel);color:var(--ink);width:100%;min-height:90px;resize:vertical;transition:.12s}
+.ed-textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.ed-select{font-size:13.5px;padding:8px 11px;border:1.5px solid var(--line);border-radius:var(--radius-s);background:var(--panel);color:var(--ink);width:100%;transition:.12s}
+.ed-select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.ed-radio-group,.ed-check-group{display:flex;flex-direction:column;gap:6px;margin-top:2px}
+.ed-radio-item,.ed-check-item{display:flex;align-items:center;gap:8px;font-size:13px;padding:6px 10px;border-radius:6px;cursor:pointer;border:1.5px solid transparent;transition:.12s}
+.ed-radio-item:hover,.ed-check-item:hover{background:var(--panel-2)}
+.ed-radio-item input,.ed-check-item input{accent-color:var(--accent);width:15px;height:15px;cursor:pointer;flex:none}
+
+/* roster */
+.rv-roster{border:1.5px dashed var(--roster);border-radius:10px;padding:14px;margin-bottom:14px;background:#eefaf3}
+.rv-roster-title{font-weight:700;font-size:13.5px;color:var(--roster);margin-bottom:10px}
+.rv-row{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-bottom:8px}
+.rv-row:last-child{margin-bottom:0}
+.rv-row-num{font-family:var(--mono);font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:8px}
+.rv-empty{font-size:12.5px;color:var(--muted);font-style:italic}
+.roster-edit-note{font-size:11.5px;color:var(--muted);font-style:italic;margin-top:6px;padding:6px 10px;background:var(--panel-2);border-radius:6px}
+
+/* toast */
+.toast{position:fixed;bottom:24px;right:24px;background:var(--ink);color:#fff;padding:10px 18px;border-radius:var(--radius-s);font-size:13px;font-weight:500;z-index:999;animation:slideIn .2s ease;max-width:300px}
+.toast.ok{background:var(--ok)}
+.toast.err{background:var(--danger)}
+@keyframes slideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+@media(max-width:680px){.sidebar{display:none}.content{padding:16px 14px 60px}}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <span id="modeBadge" class="ro-badge">Hanya Baca</span>
+  <span class="topbar-title" id="topTitle">Memuat…</span>
+  <span class="st-badge" id="statusBadge" hidden></span>
+  <button class="btn" id="btnToggleEdit" hidden>✏️ Mode Edit</button>
+  <button class="btn primary" id="btnSave" hidden disabled>Simpan</button>
+  <button class="btn danger" id="btnCancel" hidden>Batal</button>
+  <button class="btn" onclick="window.close()">✕ Tutup</button>
+</header>
+<div class="shell">
+  <nav class="sidebar" id="sidebar" hidden>
+    <div class="sidebar-h">Halaman</div>
+    <div id="pgList"></div>
+  </nav>
+  <div class="content" id="content">
+    <div style="padding:40px;text-align:center;color:var(--muted)">Memuat…</div>
+  </div>
+</div>
+<script>
+const TOKEN=localStorage.getItem("eform_token");
+if(!TOKEN){document.getElementById("content").innerHTML='<p style="padding:40px;text-align:center;color:#b91c1c">Sesi habis. Silakan login ulang.</p>';}
+
+const qp=new URLSearchParams(location.search);
+const FORM_ID=qp.get("form"), RESP_ID=qp.get("resp");
+if(!FORM_ID||!RESP_ID){document.getElementById("content").innerHTML='<p style="padding:40px;text-align:center;color:#b91c1c">Parameter tidak lengkap.</p>';}
+
+const H={"Authorization":"Bearer "+TOKEN,"Content-Type":"application/json"};
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const txt=v=>v==null?"":(typeof v==="object"?(v.id||Object.values(v)[0]||""):String(v));
+
+let MY_ROLE="", SCHEMA=null, RESP=null, CUR_PG=0;
+let EDIT_MODE=false;
+let editedAnswers={};  // berjalan saat edit mode, berisi salinan answers yang sedang diedit
+
+async function api(path,opts){
+  opts=opts||{};
+  const r=await fetch(path,{...opts,headers:{...H,...(opts.headers||{})}});
+  if(r.status===401){localStorage.removeItem("eform_token");location.replace("/login");throw new Error("sesi habis");}
+  const data=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(data.error||"HTTP "+r.status);
+  return data;
+}
+
+async function init(){
+  try{
+    const me=await api("/api/auth/me");
+    MY_ROLE=me.role;
+
+    let formUrl, respUrl;
+    if(MY_ROLE==="viewer"){
+      formUrl=`/api/viewer/forms/${FORM_ID}`;
+      respUrl=`/api/viewer/forms/${FORM_ID}/responses/${RESP_ID}`;
+    } else if(MY_ROLE==="editor"){
+      formUrl=`/api/editor/forms/${FORM_ID}`;
+      respUrl=`/api/editor/forms/${FORM_ID}/responses/${RESP_ID}`;
+    } else {
+      location.replace("/admin"); return;
+    }
+
+    const [form,resp]=await Promise.all([api(formUrl),api(respUrl)]);
+    SCHEMA=form.schema;
+    RESP=resp;
+
+    const title=txt(form.title)||"Kuesioner";
+    document.title="Detail Jawaban · "+title;
+    document.getElementById("topTitle").textContent=title;
+
+    const badge=document.getElementById("statusBadge");
+    badge.hidden=false;
+    badge.className="st-badge "+(resp.status==="draft"?"st-draft":"st-submitted");
+    badge.textContent=resp.status==="draft"?"Draf":"Terkirim";
+
+    if(MY_ROLE==="editor"){
+      document.getElementById("btnToggleEdit").hidden=false;
+      document.getElementById("btnToggleEdit").addEventListener("click",toggleEdit);
+      document.getElementById("btnSave").addEventListener("click",saveEdits);
+      document.getElementById("btnCancel").addEventListener("click",cancelEdit);
+    }
+
+    CUR_PG=0;
+    renderPage();
+  }catch(e){
+    document.getElementById("content").innerHTML=
+      `<div style="padding:40px;text-align:center;color:#b91c1c">${esc(e.message)}</div>`;
+  }
+}
+
+/* ---- toggle edit mode ---- */
+function toggleEdit(){
+  if(EDIT_MODE){cancelEdit();return;}
+  EDIT_MODE=true;
+  // Salin answers saat ini sebagai titik awal edit
+  editedAnswers=parseAnswers(RESP.answers);
+  document.getElementById("modeBadge").className="edit-badge";
+  document.getElementById("modeBadge").textContent="Mode Edit";
+  document.getElementById("btnToggleEdit").textContent="👁 Mode Lihat";
+  document.getElementById("btnSave").hidden=false;
+  document.getElementById("btnSave").disabled=false;
+  document.getElementById("btnCancel").hidden=false;
+  renderPage();
+}
+
+function cancelEdit(){
+  // Jika sedang edit, kumpulkan dulu nilai saat ini ke editedAnswers (untuk render ulang)
+  EDIT_MODE=false;
+  editedAnswers={};
+  document.getElementById("modeBadge").className="ro-badge";
+  document.getElementById("modeBadge").textContent="Hanya Baca";
+  document.getElementById("btnToggleEdit").textContent="✏️ Mode Edit";
+  document.getElementById("btnSave").hidden=true;
+  document.getElementById("btnCancel").hidden=true;
+  renderPage();
+}
+
+async function saveEdits(){
+  // Kumpulkan nilai dari input di halaman saat ini sebelum simpan
+  collectCurrentPageAnswers();
+
+  const btn=document.getElementById("btnSave");
+  btn.disabled=true;
+  btn.textContent="Menyimpan…";
+  try{
+    await api(`/api/editor/forms/${FORM_ID}/responses/${RESP_ID}`,{
+      method:"PATCH",
+      body:JSON.stringify({answers:editedAnswers,status:RESP.status})
+    });
+    // Perbarui RESP.answers dengan hasil edit
+    RESP.answers=editedAnswers;
+    cancelEdit();
+    showToast("Jawaban berhasil disimpan","ok");
+  }catch(e){
+    showToast("Gagal menyimpan: "+e.message,"err");
+    btn.disabled=false;
+    btn.textContent="Simpan";
+  }
+}
+
+/* Kumpulkan nilai dari form input di halaman yang sedang ditampilkan ke editedAnswers */
+function collectCurrentPageAnswers(){
+  if(!EDIT_MODE)return;
+  const pages=(SCHEMA&&SCHEMA.pages)||[];
+  if(!pages.length)return;
+  const pg=pages[CUR_PG];
+  collectFromNodes(pg.components||[],"",editedAnswers);
+}
+
+function collectFromNodes(comps,rp,out){
+  for(const c of comps||[]){
+    if(c.kind==="block"||c.kind==="section"){collectFromNodes(c.components||[],rp,out);continue;}
+    if(c.kind==="roster"){
+      // Roster tidak diedit — skip
+      continue;
+    }
+    collectFieldValue(c,rp,out);
+  }
+}
+
+function collectFieldValue(c,rp,out){
+  if(c.type==="note"||c.type==="markdown"||c.type==="hidden")return;
+  const key=rp+c.name;
+  const el=document.getElementById("ed_"+CSS.escape(key));
+  if(!el)return;
+
+  if(c.type==="checkbox"||c.type==="multiselect"){
+    const checks=document.querySelectorAll(`input[name="ed_${CSS.escape(key)}"]`);
+    out[key]=[...checks].filter(cb=>cb.checked).map(cb=>cb.value);
+  } else if(c.type==="radio"||c.type==="boolean"){
+    const radios=document.querySelectorAll(`input[name="ed_${CSS.escape(key)}"]`);
+    const checked=[...radios].find(rb=>rb.checked);
+    out[key]=checked?checked.value:"";
+  } else if(c.type==="number"){
+    out[key]=el.value===""?null:Number(el.value);
+  } else {
+    out[key]=el.value;
+  }
+}
+
+/* ---- render page ---- */
+function renderPage(){
+  const answers=EDIT_MODE?editedAnswers:parseAnswers(RESP.answers);
+  const meta=parseAnswers(RESP.meta);
+  const pages=(SCHEMA&&SCHEMA.pages)||[];
+  if(CUR_PG>=pages.length)CUR_PG=Math.max(0,pages.length-1);
+
+  // Sidebar
+  if(pages.length>1){
+    document.getElementById("sidebar").hidden=false;
+    document.getElementById("pgList").innerHTML=pages.map((p,i)=>
+      `<div class="pg-item${i===CUR_PG?" active":""}" onclick="goPage(${i})">${esc(txt(p.title)||p.name||"Hal "+(i+1))}</div>`
+    ).join("");
+  }
+
+  const who=meta.name?`<span class="meta-who">${esc(meta.name)}</span>`:""
+  const email=meta.email?`<span class="meta-email">${esc(meta.email)}</span>`:""
+  const timeStr=formatDate(RESP.submittedAt);
+  const metaCard=`<div class="meta-card">
+    <span class="st-badge ${RESP.status==="draft"?"st-draft":"st-submitted"}">${RESP.status==="draft"?"Draf":"Terkirim"}</span>
+    ${who}${email}<span class="meta-time">${timeStr}</span>
+  </div>`;
+
+  const navBar=pages.length>1?`<div class="nav-bar">
+    <button class="btn" ${CUR_PG===0?"disabled":""} onclick="goPage(${CUR_PG-1})">← Sebelumnya</button>
+    <span class="nav-prog">Halaman ${CUR_PG+1} / ${pages.length}</span>
+    <button class="btn" ${CUR_PG>=pages.length-1?"disabled":""} onclick="goPage(${CUR_PG+1})">Selanjutnya →</button>
+  </div>`:"";
+
+  let body="";
+  if(pages.length){
+    const p=pages[CUR_PG];
+    body+=`<div class="page-title">${esc(txt(p.title)||p.name||"Halaman "+(CUR_PG+1))}</div>`;
+    body+=renderNodes(p.components||[],answers,"");
+    if(pages.length>1){
+      body+=`<div class="bottom-nav">
+        <button class="btn" ${CUR_PG===0?"disabled":""} onclick="goPage(${CUR_PG-1})">← Sebelumnya</button>
+        <span class="nav-prog">Hal ${CUR_PG+1} / ${pages.length}</span>
+        <button class="btn" ${CUR_PG>=pages.length-1?"disabled":""} onclick="goPage(${CUR_PG+1})">Selanjutnya →</button>
+      </div>`;
+    }
+  } else {
+    body=renderFlatAnswers(answers);
+  }
+
+  document.getElementById("content").innerHTML=metaCard+navBar+body;
+  window.scrollTo({top:0,behavior:"instant"});
+}
+
+function goPage(idx){
+  if(EDIT_MODE)collectCurrentPageAnswers();
+  CUR_PG=idx;
+  renderPage();
+}
+
+/* ---- render nodes (read + edit mode) ---- */
+function renderNodes(comps,answers,rp){
+  return(comps||[]).map(c=>renderNode(c,answers,rp)).join("");
+}
+function renderNode(c,answers,rp){
+  if(c.kind==="block")
+    return`<div class="rv-block">${c.title?`<div class="rv-block-title">${esc(txt(c.title))}</div>`:""}${renderNodes(c.components||[],answers,rp)}</div>`;
+  if(c.kind==="section")
+    return`<div class="rv-section">${c.title?`<div class="rv-section-title">${esc(txt(c.title))}</div>`:""}${renderNodes(c.components||[],answers,rp)}</div>`;
+  if(c.kind==="roster")return renderRoster(c,answers,rp);
+  return EDIT_MODE?renderEditField(c,answers,rp):renderReadField(c,answers,rp);
+}
+
+/* ---- READ-ONLY field ---- */
+function renderReadField(c,answers,rp){
+  if(c.type==="note"||c.type==="markdown"||c.type==="hidden")return"";
+  const key=rp+c.name;
+  const val=answers[key];
+  const label=esc(txt(c.label)||c.name);
+  const desc=c.description?`<div class="rv-desc">${esc(txt(c.description))}</div>`:"";
+
+  if(c.type==="radio"||c.type==="select"){
+    const opts=getOptions(c);
+    if(opts.length){
+      const items=opts.map(o=>{
+        const sel=String(val)===String(o.value);
+        return`<div class="rv-choice-item ${sel?"selected":"unsel"}">
+          <span class="rv-choice-icon"></span>${esc(o.label)}</div>`;
+      }).join("");
+      return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-choice-list">${items}</div></div>`;
+    }
+  }
+  if(c.type==="checkbox"||c.type==="multiselect"){
+    const selected=Array.isArray(val)?val.map(String):(val?[String(val)]:[]);
+    const opts=getOptions(c);
+    if(opts.length){
+      const items=opts.map(o=>{
+        const sel=selected.includes(String(o.value));
+        return`<div class="rv-choice-item ${sel?"selected":"unsel"}">
+          <span class="rv-checkbox-icon"></span>${esc(o.label)}</div>`;
+      }).join("");
+      return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-choice-list">${items}</div></div>`;
+    }
+    const display=selected.length?selected.join(", "):"—";
+    return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer-box">${esc(display)}</div></div>`;
+  }
+  if(c.type==="boolean"){
+    const items=[{value:"true",label:"Ya"},{value:"false",label:"Tidak"}].map(o=>{
+      const sel=String(val)===o.value;
+      return`<div class="rv-choice-item ${sel?"selected":"unsel"}"><span class="rv-choice-icon"></span>${o.label}</div>`;
+    }).join("");
+    return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-choice-list">${items}</div></div>`;
+  }
+  const display=val==null||val===""?null:String(val);
+  const isEmpty=display==null;
+  if(c.type==="textarea"||c.type==="text_long")
+    return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer-box">${isEmpty?`<span style="color:var(--muted);font-style:italic">—</span>`:esc(display)}</div></div>`;
+  return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer${isEmpty?" empty":""}">${isEmpty?"—":esc(display)}</div></div>`;
+}
+
+/* ---- EDIT field ---- */
+function renderEditField(c,answers,rp){
+  if(c.type==="note"||c.type==="markdown"||c.type==="hidden")return"";
+  const key=rp+c.name;
+  const val=answers[key];
+  const label=esc(txt(c.label)||c.name);
+  const safeKey=CSS.escape(key);
+  const desc=c.description?`<div class="ed-desc">${esc(txt(c.description))}</div>`:"";
+
+  // Radio / select
+  if(c.type==="radio"||c.type==="select"){
+    const opts=getOptions(c);
+    if(opts.length){
+      // Untuk sedikit opsi: radio buttons. Untuk banyak: <select>
+      if(opts.length<=6){
+        const items=opts.map(o=>`<label class="ed-radio-item">
+          <input type="radio" name="ed_${safeKey}" value="${esc(o.value)}" ${String(val)===String(o.value)?"checked":""}>
+          ${esc(o.label)}</label>`).join("");
+        return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<div class="ed-radio-group">${items}</div></div>`;
+      }
+      const optHtml=`<option value="">— Pilih —</option>`+opts.map(o=>
+        `<option value="${esc(o.value)}"${String(val)===String(o.value)?" selected":""}>${esc(o.label)}</option>`
+      ).join("");
+      return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<select id="ed_${safeKey}" class="ed-select">${optHtml}</select></div>`;
+    }
+    // Fallback ke text
+    return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<input id="ed_${safeKey}" class="ed-input" value="${esc(val??"")}"></div>`;
+  }
+
+  // Checkbox / multiselect
+  if(c.type==="checkbox"||c.type==="multiselect"){
+    const selected=Array.isArray(val)?val.map(String):(val?[String(val)]:[]);
+    const opts=getOptions(c);
+    if(opts.length){
+      const items=opts.map(o=>`<label class="ed-check-item">
+        <input type="checkbox" name="ed_${safeKey}" value="${esc(o.value)}" ${selected.includes(String(o.value))?"checked":""}>
+        ${esc(o.label)}</label>`).join("");
+      return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<div class="ed-check-group">${items}</div></div>`;
+    }
+  }
+
+  // Boolean
+  if(c.type==="boolean"){
+    const items=[{value:"true",label:"Ya"},{value:"false",label:"Tidak"}].map(o=>
+      `<label class="ed-radio-item">
+        <input type="radio" name="ed_${safeKey}" value="${o.value}" ${String(val)===o.value?"checked":""}>
+        ${o.label}</label>`
+    ).join("");
+    return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<div class="ed-radio-group">${items}</div></div>`;
+  }
+
+  // Textarea
+  if(c.type==="textarea"||c.type==="text_long")
+    return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<textarea id="ed_${safeKey}" class="ed-textarea">${esc(val??"")}</textarea></div>`;
+
+  // Number
+  if(c.type==="number")
+    return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<input id="ed_${safeKey}" type="number" class="ed-input" value="${esc(val??"")}"></div>`;
+
+  // Date
+  if(c.type==="date")
+    return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<input id="ed_${safeKey}" type="date" class="ed-input" value="${esc(val??"")}"></div>`;
+
+  // Default text
+  return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<input id="ed_${safeKey}" class="ed-input" value="${esc(val??"")}"></div>`;
+}
+
+/* ---- roster (always read-only) ---- */
+function renderRoster(r,answers,rp){
+  rp=rp||"";
+  const count=getRosterCount(r,answers,rp);
+  const title=esc(txt(r.title)||r.name);
+  let html=`<div class="rv-roster"><div class="rv-roster-title">${title} <span style="font-weight:400;font-size:12px">(${count} baris)</span></div>`;
+  if(count<=0){html+=`<div class="rv-empty">Tidak ada data</div>`;}
+  else{
+    const rowLbl=i=>r.rowTitle?`${esc(txt(r.rowTitle))} #${i+1}`:`Baris #${i+1}`;
+    for(let i=0;i<count;i++){
+      const childRp=rosterRowPrefix(r,i,rp);
+      html+=`<div class="rv-row"><div class="rv-row-num">${rowLbl(i)}</div>${renderNodes(r.components||[],answers,childRp)}</div>`;
+    }
+  }
+  if(EDIT_MODE)html+=`<div class="roster-edit-note">Data roster tidak dapat diubah melalui tampilan ini.</div>`;
+  return html+`</div>`;
+}
+
+function renderFlatAnswers(answers){
+  const entries=Object.entries(answers).filter(([k])=>!k.includes("#"));
+  if(!entries.length)return`<div class="rv-block"><div class="rv-empty">Tidak ada data</div></div>`;
+  return`<div class="rv-block">`+entries.map(([k,v])=>
+    `<div class="rv-field"><div class="rv-label" style="font-family:var(--mono);font-size:11.5px">${esc(k)}</div><div class="rv-answer">${esc(valStr(v))}</div></div>`
+  ).join("")+`</div>`;
+}
+
+/* ---- helpers ---- */
+function parseAnswers(raw){
+  if(typeof raw==="object"&&raw!==null)return JSON.parse(JSON.stringify(raw));
+  try{return JSON.parse(raw)||{};}catch{return{};}
+}
+function formatDate(iso){
+  if(!iso||iso==="0001-01-01T00:00:00Z")return"—";
+  try{return new Date(iso).toLocaleString("id-ID",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});}catch{return iso;}
+}
+function valStr(v){if(v==null||v==="")return"";if(Array.isArray(v))return v.join(", ");return String(v);}
+function getOptions(c){
+  const opts=[];
+  if(c.optionsRef&&SCHEMA){
+    const t=(SCHEMA.referenceData||{})[c.optionsRef];
+    if(t&&t.items)t.items.forEach(it=>opts.push({value:String(it.code),label:txt(it.label)}));
+  }
+  if(!opts.length&&c.options)c.options.forEach(o=>opts.push({value:String(o.value),label:txt(o.label)||String(o.value)}));
+  return opts;
+}
+
+function getRosterCount(r,answers,rowPrefix){
+  const from=String(r.countFrom||"").trim();
+  if(from){
+    const raw=rowPrefix&&((rowPrefix+from) in answers)?answers[rowPrefix+from]:answers[from];
+    const cf=Math.floor(Number(raw));
+    if(!Number.isFinite(cf)||cf<0)return 0;
+    if(r.max!=null&&r.max!==""&&cf>Number(r.max))return Number(r.max);
+    return cf;
+  }
+  const stored=answers[rosterCountKey(r,rowPrefix)];
+  if(stored!=null){const n=Math.floor(Number(stored));return Number.isFinite(n)&&n>=0?n:0;}
+  let max=-1;
+  const prefix=rosterScopePrefix(r,rowPrefix);
+  for(const k of Object.keys(answers)){
+    if(k.startsWith(prefix)&&k!==rosterCountKey(r,rowPrefix)){
+      const m=k.slice(prefix.length).match(/^(\d+)#/);
+      if(m)max=Math.max(max,+m[1]);
+    }
+  }
+  return max+1;
+}
+function rosterScopePrefix(r,rp){return`${rp||""}${r.name}#`;}
+function rosterCountKey(r,rp){return`${rosterScopePrefix(r,rp)}count`;}
+function rosterRowPrefix(r,rowIdx,rp){return`${rosterScopePrefix(r,rp)}${rowIdx}#`;}
+
+function showToast(msg,type){
+  const t=document.createElement("div");
+  t.className="toast"+(type?" "+type:"");
+  t.textContent=msg;
+  document.body.appendChild(t);
+  setTimeout(()=>t.remove(),3000);
+}
+
+if(FORM_ID&&RESP_ID)init();
+</script>
+</body>
+</html>

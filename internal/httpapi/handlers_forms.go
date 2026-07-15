@@ -542,6 +542,30 @@ func (s *Server) ensureResultAccess(w http.ResponseWriter, r *http.Request) bool
 	return true
 }
 
+// saveFormColumnConfig menyimpan konfigurasi kolom tabel jawaban yang dipilih admin/superadmin.
+func (s *Server) saveFormColumnConfig(w http.ResponseWriter, r *http.Request) {
+	formID := r.PathValue("id")
+	if _, ok := s.ensureFormAccess(w, r, formID); !ok {
+		return
+	}
+	var in struct {
+		Cols json.RawMessage `json:"cols"`
+	}
+	if err := decodeJSON(r, &in); err != nil {
+		writeErr(w, http.StatusBadRequest, "format permintaan salah")
+		return
+	}
+	if err := s.st.SaveFormColumnConfig(r.Context(), formID, in.Cols); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "kuesioner tidak ditemukan")
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, "gagal menyimpan konfigurasi kolom")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 func (s *Server) ensureFormAccess(w http.ResponseWriter, r *http.Request, formID string) (*models.Form, bool) {
 	u := userFrom(r.Context())
 	if u == nil {

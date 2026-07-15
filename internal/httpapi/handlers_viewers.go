@@ -18,26 +18,20 @@ import (
 
 func (s *Server) createViewer(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Username string `json:"username"`
-		Email    string `json:"email"`
-		Note     string `json:"note"`
-		FormID   string `json:"formId"`
+		Email string `json:"email"`
+		Note  string `json:"note"`
 	}
 	if err := decodeJSON(r, &in); err != nil {
 		writeErr(w, http.StatusBadRequest, "format permintaan salah")
 		return
 	}
-	if !s.ensureAdminFormScope(w, r, strings.TrimSpace(in.FormID)) {
-		return
-	}
-	in.Username = strings.TrimSpace(in.Username)
-	in.Email = strings.TrimSpace(in.Email)
+	in.Email = strings.TrimSpace(strings.ToLower(in.Email))
 	in.Note = strings.TrimSpace(in.Note)
-	if in.Username == "" || in.Email == "" {
-		writeErr(w, http.StatusBadRequest, "username dan email wajib diisi")
+	if in.Email == "" {
+		writeErr(w, http.StatusBadRequest, "email wajib diisi")
 		return
 	}
-	// Viewer login via Google, jadi buat password acak (tidak dipakai untuk login)
+	// Viewer login via Google — username = email, password acak (tidak dipakai untuk login)
 	b := make([]byte, 24)
 	if _, err := rand.Read(b); err != nil {
 		writeErr(w, http.StatusInternalServerError, "gagal membuat password acak")
@@ -49,18 +43,15 @@ func (s *Server) createViewer(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "gagal memproses password")
 		return
 	}
-	u, err := s.st.CreateUser(r.Context(), in.Username, in.Email, hash, "viewer", in.Note)
+	u, err := s.st.CreateUser(r.Context(), in.Email, in.Email, hash, "viewer", in.Note)
 	if err != nil {
-		writeErr(w, http.StatusConflict, "username/email mungkin sudah dipakai")
+		writeErr(w, http.StatusConflict, "email mungkin sudah terdaftar")
 		return
 	}
 	writeJSON(w, http.StatusCreated, u)
 }
 
 func (s *Server) listViewers(w http.ResponseWriter, r *http.Request) {
-	if !s.ensureAdminFormScope(w, r, strings.TrimSpace(r.URL.Query().Get("formId"))) {
-		return
-	}
 	viewers, err := s.st.ListViewers(r.Context())
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
@@ -69,10 +60,27 @@ func (s *Server) listViewers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"viewers": viewers})
 }
 
-func (s *Server) deleteViewer(w http.ResponseWriter, r *http.Request) {
-	if !s.ensureAdminFormScope(w, r, strings.TrimSpace(r.URL.Query().Get("formId"))) {
+func (s *Server) patchUserNote(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var in struct {
+		Note string `json:"note"`
+	}
+	if err := decodeJSON(r, &in); err != nil {
+		writeErr(w, http.StatusBadRequest, "format permintaan salah")
 		return
 	}
+	if err := s.st.UpdateUserNote(r.Context(), id, strings.TrimSpace(in.Note)); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "user tidak ditemukan")
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, "gagal memperbarui")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+}
+
+func (s *Server) deleteViewer(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if err := s.st.DeleteUser(r.Context(), id); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
@@ -95,9 +103,10 @@ func (s *Server) createViewerPermission(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	var in struct {
-		ViewerID         string   `json:"viewerId"`
-		RespondentAccess string   `json:"respondentAccess"`
-		VisibleFields    []string `json:"visibleFields"`
+		ViewerID         string            `json:"viewerId"`
+		RespondentAccess string            `json:"respondentAccess"`
+		VisibleFields    []string          `json:"visibleFields"`
+		FieldFilters     map[string]string `json:"fieldFilters"`
 	}
 	if err := decodeJSON(r, &in); err != nil {
 		writeErr(w, http.StatusBadRequest, "format permintaan salah")
@@ -111,7 +120,7 @@ func (s *Server) createViewerPermission(w http.ResponseWriter, r *http.Request) 
 		in.RespondentAccess = "all"
 	}
 	createdBy := userFrom(r.Context()).Subject
-	p, err := s.st.CreateViewerPermission(r.Context(), in.ViewerID, formID, in.RespondentAccess, in.VisibleFields, &createdBy)
+	p, err := s.st.CreateViewerPermission(r.Context(), in.ViewerID, formID, in.RespondentAccess, in.VisibleFields, in.FieldFilters, &createdBy)
 	if err != nil {
 		writeErr(w, http.StatusConflict, "viewer mungkin sudah memiliki akses ke kuesioner ini")
 		return
@@ -163,8 +172,9 @@ func (s *Server) updateViewerPermission(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var in struct {
-		RespondentAccess string   `json:"respondentAccess"`
-		VisibleFields    []string `json:"visibleFields"`
+		RespondentAccess string            `json:"respondentAccess"`
+		VisibleFields    []string          `json:"visibleFields"`
+		FieldFilters     map[string]string `json:"fieldFilters"`
 	}
 	if err := decodeJSON(r, &in); err != nil {
 		writeErr(w, http.StatusBadRequest, "format permintaan salah")
@@ -173,7 +183,7 @@ func (s *Server) updateViewerPermission(w http.ResponseWriter, r *http.Request) 
 	if in.RespondentAccess != "all" && in.RespondentAccess != "selected" {
 		in.RespondentAccess = "all"
 	}
-	p, err := s.st.UpdateViewerPermission(r.Context(), r.PathValue("permId"), in.RespondentAccess, in.VisibleFields)
+	p, err := s.st.UpdateViewerPermission(r.Context(), r.PathValue("permId"), in.RespondentAccess, in.VisibleFields, in.FieldFilters)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeErr(w, http.StatusNotFound, "permission tidak ditemukan")
@@ -409,9 +419,23 @@ func (s *Server) viewerListResponses(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(q.Get("limit"))
 	offset, _ := strconv.Atoi(q.Get("offset"))
 	f := store.ResponseFilter{
+		Status:  q.Get("status"),
 		Search:  strings.TrimSpace(q.Get("search")),
 		SortBy:  q.Get("sortBy"),
 		SortDir: q.Get("sortDir"),
+	}
+	for key, vals := range q {
+		if strings.HasPrefix(key, "f_") && len(vals) > 0 && vals[0] != "" {
+			if f.FieldFilters == nil {
+				f.FieldFilters = make(map[string]string)
+			}
+			f.FieldFilters[strings.TrimPrefix(key, "f_")] = vals[0]
+		} else if strings.HasPrefix(key, "fe_") && len(vals) > 0 && vals[0] != "" {
+			if f.FieldExactFilters == nil {
+				f.FieldExactFilters = make(map[string]string)
+			}
+			f.FieldExactFilters[strings.TrimPrefix(key, "fe_")] = vals[0]
+		}
 	}
 
 	resp, err := s.st.ListViewerResponses(r.Context(), viewerID, formID, f, limit, offset)
@@ -421,4 +445,22 @@ func (s *Server) viewerListResponses(w http.ResponseWriter, r *http.Request) {
 	}
 	count, _ := s.st.CountViewerResponses(r.Context(), viewerID, formID, f)
 	writeJSON(w, http.StatusOK, map[string]any{"responses": resp, "total": count})
+}
+
+// viewerGetResponse mengembalikan detail satu respons yang boleh dilihat viewer.
+func (s *Server) viewerGetResponse(w http.ResponseWriter, r *http.Request) {
+	viewerID := userFrom(r.Context()).Subject
+	formID := r.PathValue("id")
+	responseID := r.PathValue("responseId")
+
+	resp, err := s.st.GetViewerResponseByID(r.Context(), viewerID, formID, responseID)
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "respons tidak ditemukan atau akses tidak diizinkan")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
 }

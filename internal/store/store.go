@@ -155,6 +155,38 @@ func (s *Store) ListUsers(ctx context.Context) ([]models.User, error) {
 	return out, rows.Err()
 }
 
+// UpdateAdminUser mengupdate username, email, dan role user admin/superadmin.
+func (s *Store) UpdateAdminUser(ctx context.Context, id, username, email, role string) error {
+	var emailArg any
+	if email != "" {
+		emailArg = email
+	}
+	ct, err := s.pool.Exec(ctx,
+		`UPDATE users SET username=$1, email=$2, role=$3, updated_at=now() WHERE id=$4`,
+		username, emailArg, role, id)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// UpdateUserPassword mengupdate password hash user.
+func (s *Store) UpdateUserPassword(ctx context.Context, id, hash string) error {
+	ct, err := s.pool.Exec(ctx,
+		`UPDATE users SET password_hash=$1, updated_at=now() WHERE id=$2`,
+		hash, id)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 /* ---------------- forms ---------------- */
 
 func (s *Store) CreateForm(ctx context.Context, slug, title, desc string, schema json.RawMessage, version string, ownerID *string) (*models.Form, error) {
@@ -177,13 +209,26 @@ func (s *Store) CreateForm(ctx context.Context, slug, title, desc string, schema
 func (s *Store) GetForm(ctx context.Context, id string) (*models.Form, error) {
 	f := &models.Form{}
 	err := s.pool.QueryRow(ctx,
-		`SELECT id,slug,title,description,schema,status,version,owner_id,created_at,updated_at
+		`SELECT id,slug,title,description,schema,status,version,owner_id,column_config,created_at,updated_at
 		 FROM forms WHERE id=$1`, id,
-	).Scan(&f.ID, &f.Slug, &f.Title, &f.Description, &f.Schema, &f.Status, &f.Version, &f.OwnerID, &f.CreatedAt, &f.UpdatedAt)
+	).Scan(&f.ID, &f.Slug, &f.Title, &f.Description, &f.Schema, &f.Status, &f.Version, &f.OwnerID, &f.ColumnConfig, &f.CreatedAt, &f.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	return f, err
+}
+
+// SaveFormColumnConfig menyimpan konfigurasi kolom tabel jawaban (dipilih admin/superadmin).
+func (s *Store) SaveFormColumnConfig(ctx context.Context, formID string, config json.RawMessage) error {
+	ct, err := s.pool.Exec(ctx,
+		`UPDATE forms SET column_config=$2 WHERE id=$1`, formID, config)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // ListForms tidak mengembalikan schema (hemat payload untuk daftar).
@@ -931,6 +976,20 @@ func (s *Store) ListEditors(ctx context.Context) ([]models.User, error) {
 	return out, rows.Err()
 }
 
+// UpdateUserNote mengupdate kolom catatan (note) pada user viewer/editor.
+func (s *Store) UpdateUserNote(ctx context.Context, id, note string) error {
+	ct, err := s.pool.Exec(ctx,
+		`UPDATE users SET note=$1, updated_at=now() WHERE id=$2`,
+		note, id)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // DeleteUser menghapus user secara permanen (dimaksudkan untuk viewer).
 func (s *Store) DeleteUser(ctx context.Context, id string) error {
 	ct, err := s.pool.Exec(ctx, `DELETE FROM users WHERE id=$1`, id)
@@ -943,26 +1002,61 @@ func (s *Store) DeleteUser(ctx context.Context, id string) error {
 	return nil
 }
 
+// buildPermissionFieldFilter membuat klausa SQL AND untuk membatasi answers berdasarkan field_filters permission.
+// Digunakan di ListViewerResponses, CountViewerResponses, editorListResponses, dll.
+func buildPermissionFieldFilter(filters map[string]string, args []any) (string, []any) {
+	clause := ""
+	for fieldName, val := range filters {
+		if isSafeIdentifier(fieldName) && val != "" {
+			n := len(args) + 1
+			clause += fmt.Sprintf(" AND answers->>'%s'=$%d", fieldName, n)
+			args = append(args, val)
+		}
+	}
+	return clause, args
+}
+
+func scanViewerPerm(p *models.ViewerFormPermission, row interface {
+	Scan(...any) error
+}, cols ...any) error {
+	var ffRaw json.RawMessage
+	all := append(cols, &ffRaw)
+	if err := row.Scan(all...); err != nil {
+		return err
+	}
+	if len(ffRaw) > 0 {
+		_ = json.Unmarshal(ffRaw, &p.FieldFilters)
+	}
+	return nil
+}
+
 // CreateViewerPermission memberikan akses viewer ke satu kuesioner.
-func (s *Store) CreateViewerPermission(ctx context.Context, viewerID, formID, respondentAccess string, visibleFields []string, createdBy *string) (*models.ViewerFormPermission, error) {
+func (s *Store) CreateViewerPermission(ctx context.Context, viewerID, formID, respondentAccess string, visibleFields []string, fieldFilters map[string]string, createdBy *string) (*models.ViewerFormPermission, error) {
 	p := &models.ViewerFormPermission{}
-	err := s.pool.QueryRow(ctx,
-		`INSERT INTO viewer_form_permissions(viewer_id,form_id,respondent_access,visible_fields,created_by)
-		 VALUES ($1,$2,$3,$4,$5)
-		 RETURNING id,viewer_id,form_id,respondent_access,visible_fields,created_by,created_at`,
-		viewerID, formID, respondentAccess, visibleFields, createdBy,
-	).Scan(&p.ID, &p.ViewerID, &p.FormID, &p.RespondentAccess, &p.VisibleFields, &p.CreatedBy, &p.CreatedAt)
+	ffBytes, _ := json.Marshal(fieldFilters)
+	err := scanViewerPerm(p,
+		s.pool.QueryRow(ctx,
+			`INSERT INTO viewer_form_permissions(viewer_id,form_id,respondent_access,visible_fields,field_filters,created_by)
+			 VALUES ($1,$2,$3,$4,$5,$6)
+			 RETURNING id,viewer_id,form_id,respondent_access,visible_fields,created_by,created_at,field_filters`,
+			viewerID, formID, respondentAccess, visibleFields, ffBytes, createdBy,
+		),
+		&p.ID, &p.ViewerID, &p.FormID, &p.RespondentAccess, &p.VisibleFields, &p.CreatedBy, &p.CreatedAt,
+	)
 	return p, err
 }
 
 // GetViewerPermission mengambil permission viewer-form, atau ErrNotFound.
 func (s *Store) GetViewerPermission(ctx context.Context, viewerID, formID string) (*models.ViewerFormPermission, error) {
 	p := &models.ViewerFormPermission{}
-	err := s.pool.QueryRow(ctx,
-		`SELECT id,viewer_id,form_id,respondent_access,visible_fields,created_by,created_at
-		 FROM viewer_form_permissions WHERE viewer_id=$1 AND form_id=$2`,
-		viewerID, formID,
-	).Scan(&p.ID, &p.ViewerID, &p.FormID, &p.RespondentAccess, &p.VisibleFields, &p.CreatedBy, &p.CreatedAt)
+	err := scanViewerPerm(p,
+		s.pool.QueryRow(ctx,
+			`SELECT id,viewer_id,form_id,respondent_access,visible_fields,created_by,created_at,field_filters
+			 FROM viewer_form_permissions WHERE viewer_id=$1 AND form_id=$2`,
+			viewerID, formID,
+		),
+		&p.ID, &p.ViewerID, &p.FormID, &p.RespondentAccess, &p.VisibleFields, &p.CreatedBy, &p.CreatedAt,
+	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -972,10 +1066,13 @@ func (s *Store) GetViewerPermission(ctx context.Context, viewerID, formID string
 // GetViewerPermissionByID mengambil permission berdasarkan ID-nya.
 func (s *Store) GetViewerPermissionByID(ctx context.Context, permID string) (*models.ViewerFormPermission, error) {
 	p := &models.ViewerFormPermission{}
-	err := s.pool.QueryRow(ctx,
-		`SELECT id,viewer_id,form_id,respondent_access,visible_fields,created_by,created_at
-		 FROM viewer_form_permissions WHERE id=$1`, permID,
-	).Scan(&p.ID, &p.ViewerID, &p.FormID, &p.RespondentAccess, &p.VisibleFields, &p.CreatedBy, &p.CreatedAt)
+	err := scanViewerPerm(p,
+		s.pool.QueryRow(ctx,
+			`SELECT id,viewer_id,form_id,respondent_access,visible_fields,created_by,created_at,field_filters
+			 FROM viewer_form_permissions WHERE id=$1`, permID,
+		),
+		&p.ID, &p.ViewerID, &p.FormID, &p.RespondentAccess, &p.VisibleFields, &p.CreatedBy, &p.CreatedAt,
+	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -1000,7 +1097,8 @@ func (s *Store) ListFormViewerPermissions(ctx context.Context, formID string) ([
 	rows, err := s.pool.Query(ctx,
 		`SELECT p.id, p.viewer_id, p.form_id, p.respondent_access, p.visible_fields,
 		        p.created_by, p.created_at, u.username,
-		        (SELECT count(*) FROM viewer_allowed_respondents WHERE permission_id=p.id)
+		        (SELECT count(*) FROM viewer_allowed_respondents WHERE permission_id=p.id),
+		        p.field_filters
 		 FROM viewer_form_permissions p
 		 JOIN users u ON u.id=p.viewer_id
 		 WHERE p.form_id=$1
@@ -1012,9 +1110,13 @@ func (s *Store) ListFormViewerPermissions(ctx context.Context, formID string) ([
 	var out []models.ViewerFormPermission
 	for rows.Next() {
 		p := models.ViewerFormPermission{}
+		var ffRaw json.RawMessage
 		if err := rows.Scan(&p.ID, &p.ViewerID, &p.FormID, &p.RespondentAccess, &p.VisibleFields,
-			&p.CreatedBy, &p.CreatedAt, &p.ViewerUsername, &p.AllowedCount); err != nil {
+			&p.CreatedBy, &p.CreatedAt, &p.ViewerUsername, &p.AllowedCount, &ffRaw); err != nil {
 			return nil, err
+		}
+		if len(ffRaw) > 0 {
+			_ = json.Unmarshal(ffRaw, &p.FieldFilters)
 		}
 		out = append(out, p)
 	}
@@ -1028,7 +1130,7 @@ func (s *Store) ListFormViewerPermissions(ctx context.Context, formID string) ([
 func (s *Store) ListViewerForms(ctx context.Context, viewerID string) ([]models.ViewerFormPermission, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT p.id, p.viewer_id, p.form_id, p.respondent_access, p.visible_fields,
-		        p.created_by, p.created_at, f.title
+		        p.created_by, p.created_at, f.title, p.field_filters
 		 FROM viewer_form_permissions p
 		 JOIN forms f ON f.id=p.form_id
 		 WHERE p.viewer_id=$1
@@ -1040,9 +1142,13 @@ func (s *Store) ListViewerForms(ctx context.Context, viewerID string) ([]models.
 	var out []models.ViewerFormPermission
 	for rows.Next() {
 		p := models.ViewerFormPermission{}
+		var ffRaw json.RawMessage
 		if err := rows.Scan(&p.ID, &p.ViewerID, &p.FormID, &p.RespondentAccess, &p.VisibleFields,
-			&p.CreatedBy, &p.CreatedAt, &p.FormTitle); err != nil {
+			&p.CreatedBy, &p.CreatedAt, &p.FormTitle, &ffRaw); err != nil {
 			return nil, err
+		}
+		if len(ffRaw) > 0 {
+			_ = json.Unmarshal(ffRaw, &p.FieldFilters)
 		}
 		out = append(out, p)
 	}
@@ -1052,15 +1158,19 @@ func (s *Store) ListViewerForms(ctx context.Context, viewerID string) ([]models.
 	return out, rows.Err()
 }
 
-// UpdateViewerPermission memperbarui respondent_access dan visible_fields.
-func (s *Store) UpdateViewerPermission(ctx context.Context, permID, respondentAccess string, visibleFields []string) (*models.ViewerFormPermission, error) {
+// UpdateViewerPermission memperbarui respondent_access, visible_fields, dan field_filters.
+func (s *Store) UpdateViewerPermission(ctx context.Context, permID, respondentAccess string, visibleFields []string, fieldFilters map[string]string) (*models.ViewerFormPermission, error) {
 	p := &models.ViewerFormPermission{}
-	err := s.pool.QueryRow(ctx,
-		`UPDATE viewer_form_permissions SET respondent_access=$2, visible_fields=$3
-		 WHERE id=$1
-		 RETURNING id,viewer_id,form_id,respondent_access,visible_fields,created_by,created_at`,
-		permID, respondentAccess, visibleFields,
-	).Scan(&p.ID, &p.ViewerID, &p.FormID, &p.RespondentAccess, &p.VisibleFields, &p.CreatedBy, &p.CreatedAt)
+	ffBytes, _ := json.Marshal(fieldFilters)
+	err := scanViewerPerm(p,
+		s.pool.QueryRow(ctx,
+			`UPDATE viewer_form_permissions SET respondent_access=$2, visible_fields=$3, field_filters=$4
+			 WHERE id=$1
+			 RETURNING id,viewer_id,form_id,respondent_access,visible_fields,created_by,created_at,field_filters`,
+			permID, respondentAccess, visibleFields, ffBytes,
+		),
+		&p.ID, &p.ViewerID, &p.FormID, &p.RespondentAccess, &p.VisibleFields, &p.CreatedBy, &p.CreatedAt,
+	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -1175,9 +1285,10 @@ func (s *Store) ListViewerResponses(ctx context.Context, viewerID, formID string
 		sortDir = "ASC"
 	}
 	sortCol := map[string]string{
-		"waktu": "submitted_at",
-		"share": "share_id",
-		"who":   "meta->>'name'",
+		"waktu":  "submitted_at",
+		"share":  "share_id",
+		"who":    "meta->>'name'",
+		"status": "status",
 	}[f.SortBy]
 	if sortCol == "" {
 		sortCol = "submitted_at"
@@ -1186,7 +1297,6 @@ func (s *Store) ListViewerResponses(ctx context.Context, viewerID, formID string
 	where, wArgs := buildResponseWhere(f)
 	args := append([]any{formID}, wArgs...)
 
-	// Gunakan subquery agar tidak perlu manajemen array UUID
 	respondentClause := ""
 	if perm.RespondentAccess == "selected" {
 		n := len(args) + 1 // $1=formID, $2..wArgs, $n=permID
@@ -1195,16 +1305,22 @@ func (s *Store) ListViewerResponses(ctx context.Context, viewerID, formID string
 		args = append(args, perm.ID)
 	}
 
+	permClause, args := buildPermissionFieldFilter(perm.FieldFilters, args)
 	args = append(args, limit, offset)
 	limitN, offsetN := len(args)-1, len(args)
 
 	q := fmt.Sprintf(`
-		SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at
-		FROM form_responses
-		WHERE form_id=$1 AND status='submitted'%s%s
+		SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at FROM (
+		  SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at
+		    FROM form_responses WHERE form_id=$1
+		  UNION ALL
+		  SELECT id,form_id,share_id,respondent_id,'draft'::text,answers,'{}'::jsonb,saved_at
+		    FROM response_drafts WHERE form_id=$1
+		) combined
+		WHERE 1=1%s%s%s
 		ORDER BY %s %s NULLS LAST
 		LIMIT $%d OFFSET $%d`,
-		where, respondentClause, sortCol, sortDir, limitN, offsetN)
+		where, respondentClause, permClause, sortCol, sortDir, limitN, offsetN)
 
 	rows, err := s.pool.Query(ctx, q, args...)
 	if err != nil {
@@ -1244,39 +1360,128 @@ func (s *Store) CountViewerResponses(ctx context.Context, viewerID, formID strin
 		args = append(args, perm.ID)
 	}
 
+	permClause, args := buildPermissionFieldFilter(perm.FieldFilters, args)
 	var n int64
 	err = s.pool.QueryRow(ctx, fmt.Sprintf(`
-		SELECT count(*) FROM form_responses
-		WHERE form_id=$1 AND status='submitted'%s%s`,
-		where, respondentClause),
+		SELECT count(*) FROM (
+		  SELECT status,share_id,meta,answers,respondent_id FROM form_responses WHERE form_id=$1
+		  UNION ALL
+		  SELECT 'draft'::text,share_id,'{}'::jsonb,answers,respondent_id FROM response_drafts WHERE form_id=$1
+		) combined
+		WHERE 1=1%s%s%s`, where, respondentClause, permClause),
 		args...,
 	).Scan(&n)
 	return n, err
 }
 
+// GetViewerResponseByID mengambil satu respons untuk viewer, dengan masking visibleFields dan cek respondentAccess.
+func (s *Store) GetViewerResponseByID(ctx context.Context, viewerID, formID, responseID string) (*models.Response, error) {
+	perm, err := s.GetViewerPermission(ctx, viewerID, formID)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := s.GetResponseByFormAndID(ctx, formID, responseID)
+	if err != nil {
+		return nil, err
+	}
+	if perm.RespondentAccess == "selected" && resp.RespondentID != nil {
+		allowed, err := s.IsRespondentAllowedForViewer(ctx, perm.ID, *resp.RespondentID)
+		if err != nil || !allowed {
+			return nil, ErrNotFound
+		}
+	}
+	if !matchesFieldFilters(resp.Answers, perm.FieldFilters) {
+		return nil, ErrNotFound
+	}
+	resp.Answers = maskAnswers(resp.Answers, perm.VisibleFields)
+	return resp, nil
+}
+
+// GetResponseByFormAndID mengambil satu respons (submitted atau draft) dari form tertentu.
+func (s *Store) GetResponseByFormAndID(ctx context.Context, formID, responseID string) (*models.Response, error) {
+	r := &models.Response{}
+	err := s.pool.QueryRow(ctx, `
+		SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at FROM (
+		  SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at
+		    FROM form_responses WHERE form_id=$1 AND id=$2
+		  UNION ALL
+		  SELECT id,form_id,share_id,respondent_id,'draft'::text,answers,'{}'::jsonb,saved_at
+		    FROM response_drafts WHERE form_id=$1 AND id=$2
+		) combined LIMIT 1`,
+		formID, responseID,
+	).Scan(&r.ID, &r.FormID, &r.ShareID, &r.RespondentID, &r.Status, &r.Answers, &r.Meta, &r.SubmittedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return r, err
+}
+
+// IsRespondentAllowedForViewer mengecek apakah responden tertentu ada dalam daftar izin viewer.
+func (s *Store) IsRespondentAllowedForViewer(ctx context.Context, permID, respondentID string) (bool, error) {
+	var exists bool
+	err := s.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM viewer_allowed_respondents WHERE permission_id=$1 AND respondent_id=$2)`,
+		permID, respondentID,
+	).Scan(&exists)
+	return exists, err
+}
+
+// UpdateResponseAnswers memperbarui jawaban respons (submitted atau draft) oleh editor.
+func (s *Store) UpdateResponseAnswers(ctx context.Context, formID, responseID, status string, answers json.RawMessage) error {
+	var ct interface{ RowsAffected() int64 }
+	var err error
+	if status == "draft" {
+		res, e := s.pool.Exec(ctx,
+			`UPDATE response_drafts SET answers=$1, saved_at=now() WHERE id=$2 AND form_id=$3`,
+			answers, responseID, formID)
+		ct, err = res, e
+	} else {
+		res, e := s.pool.Exec(ctx,
+			`UPDATE form_responses SET answers=$1 WHERE id=$2 AND form_id=$3`,
+			answers, responseID, formID)
+		ct, err = res, e
+	}
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 /* ---------------- editors ---------------- */
 
 // CreateEditorPermission memberikan akses editor ke satu kuesioner.
-func (s *Store) CreateEditorPermission(ctx context.Context, editorID, formID string, createdBy *string) (*models.EditorFormPermission, error) {
+func (s *Store) CreateEditorPermission(ctx context.Context, editorID, formID string, fieldFilters map[string]string, createdBy *string) (*models.EditorFormPermission, error) {
 	p := &models.EditorFormPermission{}
+	ffBytes, _ := json.Marshal(fieldFilters)
+	var ffRaw json.RawMessage
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO editor_form_permissions(editor_id,form_id,created_by)
-		 VALUES ($1,$2,$3)
-		 RETURNING id,editor_id,form_id,created_by,created_at`,
-		editorID, formID, createdBy,
-	).Scan(&p.ID, &p.EditorID, &p.FormID, &p.CreatedBy, &p.CreatedAt)
+		`INSERT INTO editor_form_permissions(editor_id,form_id,field_filters,created_by)
+		 VALUES ($1,$2,$3,$4)
+		 RETURNING id,editor_id,form_id,created_by,created_at,field_filters`,
+		editorID, formID, ffBytes, createdBy,
+	).Scan(&p.ID, &p.EditorID, &p.FormID, &p.CreatedBy, &p.CreatedAt, &ffRaw)
+	if err == nil && len(ffRaw) > 0 {
+		_ = json.Unmarshal(ffRaw, &p.FieldFilters)
+	}
 	return p, err
 }
 
 // GetEditorPermissionByID mengambil permission editor berdasarkan ID.
 func (s *Store) GetEditorPermissionByID(ctx context.Context, permID string) (*models.EditorFormPermission, error) {
 	p := &models.EditorFormPermission{}
+	var ffRaw json.RawMessage
 	err := s.pool.QueryRow(ctx,
-		`SELECT id,editor_id,form_id,created_by,created_at
+		`SELECT id,editor_id,form_id,created_by,created_at,field_filters
 		 FROM editor_form_permissions WHERE id=$1`, permID,
-	).Scan(&p.ID, &p.EditorID, &p.FormID, &p.CreatedBy, &p.CreatedAt)
+	).Scan(&p.ID, &p.EditorID, &p.FormID, &p.CreatedBy, &p.CreatedAt, &ffRaw)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
+	}
+	if err == nil && len(ffRaw) > 0 {
+		_ = json.Unmarshal(ffRaw, &p.FieldFilters)
 	}
 	return p, err
 }
@@ -1284,7 +1489,7 @@ func (s *Store) GetEditorPermissionByID(ctx context.Context, permID string) (*mo
 // ListFormEditorPermissions mengembalikan semua editor yang punya akses ke satu kuesioner.
 func (s *Store) ListFormEditorPermissions(ctx context.Context, formID string) ([]models.EditorFormPermission, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT p.id,p.editor_id,p.form_id,p.created_by,p.created_at,u.username
+		`SELECT p.id,p.editor_id,p.form_id,p.created_by,p.created_at,u.username,p.field_filters
 		 FROM editor_form_permissions p
 		 JOIN users u ON u.id=p.editor_id
 		 WHERE p.form_id=$1
@@ -1296,8 +1501,12 @@ func (s *Store) ListFormEditorPermissions(ctx context.Context, formID string) ([
 	var out []models.EditorFormPermission
 	for rows.Next() {
 		p := models.EditorFormPermission{}
-		if err := rows.Scan(&p.ID, &p.EditorID, &p.FormID, &p.CreatedBy, &p.CreatedAt, &p.EditorName); err != nil {
+		var ffRaw json.RawMessage
+		if err := rows.Scan(&p.ID, &p.EditorID, &p.FormID, &p.CreatedBy, &p.CreatedAt, &p.EditorName, &ffRaw); err != nil {
 			return nil, err
+		}
+		if len(ffRaw) > 0 {
+			_ = json.Unmarshal(ffRaw, &p.FieldFilters)
 		}
 		out = append(out, p)
 	}
@@ -1305,6 +1514,60 @@ func (s *Store) ListFormEditorPermissions(ctx context.Context, formID string) ([
 		out = []models.EditorFormPermission{}
 	}
 	return out, rows.Err()
+}
+
+// GetEditorPermissionByEditorAndForm mengambil permission editor berdasarkan editorID dan formID.
+func (s *Store) GetEditorPermissionByEditorAndForm(ctx context.Context, editorID, formID string) (*models.EditorFormPermission, error) {
+	p := &models.EditorFormPermission{}
+	var ffRaw json.RawMessage
+	err := s.pool.QueryRow(ctx,
+		`SELECT id,editor_id,form_id,created_by,created_at,field_filters
+		 FROM editor_form_permissions WHERE editor_id=$1 AND form_id=$2`,
+		editorID, formID,
+	).Scan(&p.ID, &p.EditorID, &p.FormID, &p.CreatedBy, &p.CreatedAt, &ffRaw)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err == nil && len(ffRaw) > 0 {
+		_ = json.Unmarshal(ffRaw, &p.FieldFilters)
+	}
+	return p, err
+}
+
+// UpdateEditorPermission memperbarui field_filters permission editor.
+func (s *Store) UpdateEditorPermission(ctx context.Context, permID string, fieldFilters map[string]string) (*models.EditorFormPermission, error) {
+	p := &models.EditorFormPermission{}
+	ffBytes, _ := json.Marshal(fieldFilters)
+	var ffRaw json.RawMessage
+	err := s.pool.QueryRow(ctx,
+		`UPDATE editor_form_permissions SET field_filters=$2
+		 WHERE id=$1
+		 RETURNING id,editor_id,form_id,created_by,created_at,field_filters`,
+		permID, ffBytes,
+	).Scan(&p.ID, &p.EditorID, &p.FormID, &p.CreatedBy, &p.CreatedAt, &ffRaw)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err == nil && len(ffRaw) > 0 {
+		_ = json.Unmarshal(ffRaw, &p.FieldFilters)
+	}
+	return p, err
+}
+
+// GetEditorResponseByID mengambil satu respons untuk editor, dengan cek field_filters permission.
+func (s *Store) GetEditorResponseByID(ctx context.Context, editorID, formID, responseID string) (*models.Response, error) {
+	perm, err := s.GetEditorPermissionByEditorAndForm(ctx, editorID, formID)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := s.GetResponseByFormAndID(ctx, formID, responseID)
+	if err != nil {
+		return nil, err
+	}
+	if !matchesFieldFilters(resp.Answers, perm.FieldFilters) {
+		return nil, ErrNotFound
+	}
+	return resp, nil
 }
 
 // DeleteEditorPermission mencabut akses editor dari kuesioner.
@@ -1327,6 +1590,23 @@ func (s *Store) HasEditorFormPermission(ctx context.Context, editorID, formID st
 		editorID, formID,
 	).Scan(&exists)
 	return exists, err
+}
+
+// matchesFieldFilters memeriksa bahwa answers memenuhi semua batasan field_filters (exact match).
+func matchesFieldFilters(answers json.RawMessage, filters map[string]string) bool {
+	if len(filters) == 0 {
+		return true
+	}
+	var m map[string]any
+	if err := json.Unmarshal(answers, &m); err != nil {
+		return false
+	}
+	for fieldName, val := range filters {
+		if v, ok := m[fieldName]; !ok || fmt.Sprint(v) != val {
+			return false
+		}
+	}
+	return true
 }
 
 // maskAnswers menyaring kunci answers JSONB agar hanya field yang diizinkan terlihat.
