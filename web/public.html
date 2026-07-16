@@ -374,6 +374,24 @@ const Expr=(function(){
   };
 })();
 function coerceVal(v){if(v==="true")return true;if(v==="false")return false;if(typeof v==="string"&&v.trim()!==""&&!isNaN(Number(v)))return Number(v);return v;}
+function ancestorPrefixes(rowPrefix){
+  const out=[];
+  let p=String(rowPrefix||"");
+  while(p){
+    out.push(p);
+    const m=p.match(/^(.*?)(?:[^#]+#\d+#)$/);
+    if(!m||m[1]===p)break;
+    p=m[1];
+  }
+  return out;
+}
+function resolveScopedAnswer(name,rowPrefix){
+  for(const p of ancestorPrefixes(rowPrefix)){
+    const k=p+name;
+    if(k in answers)return coerceVal(answers[k]);
+  }
+  return undefined;
+}
 function refResolve(name,rowPrefix){
   name=String(name).trim();
   if(name.includes(".")){
@@ -381,12 +399,12 @@ function refResolve(name,rowPrefix){
     const r=findRoster(rn);
     if(r){const cnt=rosterCount(r);const arr=[];for(let i=0;i<cnt;i++)arr.push(coerceVal(answers[`${rn}#${i}#${fn}`]));return arr;}
     // Bukan notasi roster.field — nama field biasa yang kebetulan mengandung titik
-    if(rowPrefix){const k=rowPrefix+name;if(k in answers)return coerceVal(answers[k]);}
+    if(rowPrefix){const v=resolveScopedAnswer(name,rowPrefix);if(v!==undefined)return v;}
     return name in answers?coerceVal(answers[name]):undefined;
   }
   const rn=findRoster(name);
   if(rn){const cnt=rosterCount(rn);return Array.from({length:cnt},(_,i)=>i);}
-  if(rowPrefix){const k=rowPrefix+name;if(k in answers)return coerceVal(answers[k]);}
+  if(rowPrefix){const v=resolveScopedAnswer(name,rowPrefix);if(v!==undefined)return v;}
   return coerceVal(answers[name]);
 }
 function evalExprSrc(src,rowPrefix){return Expr.evalSrc(src,name=>refResolve(name,rowPrefix||""));}
@@ -1081,8 +1099,21 @@ function clearSkippedAnswers(fromIdx,toIdx){if(toIdx<=fromIdx+1)return;for(let i
 function walkRosterComps(comps,rp,rowSkip,out){
   (comps||[]).forEach(c=>{
     if(!evalVisible(c.visibleWhen,rp))return;
-    if(c.kind==="field"){if(!rowSkip.has(c.name))out.push({c,rp});}
-    else if(c.kind!=="roster"&&c.components)walkRosterComps(c.components,rp,rowSkip,out);
+    if(c.kind==="field"){
+      if(!rowSkip.has(c.name))out.push({c,rp});
+      return;
+    }
+    if(c.kind==="roster"){
+      const cnt=rosterCount(c,rp);
+      for(let i=0;i<cnt;i++){
+        const childRp=rosterRowPrefix(c,i,rp);
+        const childSkipKey=childRp.slice(0,-1);
+        const childSkip=ROW_SKIP_HIDDEN.has(childSkipKey)?ROW_SKIP_HIDDEN.get(childSkipKey):computeRosterRowSkipState(c,i);
+        walkRosterComps(c.components||[],childRp,childSkip,out);
+      }
+      return;
+    }
+    if(c.components)walkRosterComps(c.components,rp,rowSkip,out);
   });
 }
 function pageValidationTargets(page){
@@ -1386,16 +1417,32 @@ function renderRosterRow(){
     const {roster,rowIdx}=rosterView;
     const rp=`${roster.name}#${rowIdx}#`;
     const rowSkip=computeRosterRowSkipState(roster,rowIdx);
-    for(const f of flatRosterFields(roster)){
-      if(rowSkip.has(f.name))continue;
-      if(!evalVisible(f.visibleWhen,rp))continue;
-      if(f.type==="note"||f.type==="markdown"||f.type==="hidden"||(f.type==="calculated"&&!f.autofill))continue;
-      const isReq=!!f.required||!!(f.requiredWhen&&evalVisible(f.requiredWhen,rp));
-      if(isReq&&pvEmpty(answers[rp+f.name])){
+    const targets=[];
+    walkRosterComps(roster.components||[],rp,rowSkip,targets);
+    for(const {c,rp:keyRp} of targets){
+      if(c.type==="note"||c.type==="markdown"||c.type==="hidden"||(c.type==="calculated"&&!c.autofill))continue;
+      if(!evalVisible(c.enableWhen,keyRp))continue;
+      const key=keyRp+c.name;
+      const isReq=!!c.required||!!(c.requiredWhen&&evalVisible(c.requiredWhen,keyRp));
+      if(isReq&&pvEmpty(answers[key])){
         const errEl=document.getElementById("pvNavErr");
+        console.log("Roster row validation failed:",roster.name,rowIdx,c.name);
         if(errEl)errEl.textContent="Lengkapi isian wajib pada baris ini sebelum menyimpan.";
-        focusField(rp+f.name);
+        focusField(key);
         return;
+      }
+      if(!pvEmpty(answers[key])){
+        for(const v of (c.validations||[])){
+          if(!v.test||v.severity==="warning")continue;
+          const r=evalExprSrc(v.test,keyRp);
+          if(r===undefined)continue;
+          if(!r){
+            const errEl=document.getElementById("pvNavErr");
+            if(errEl)errEl.textContent=txt(v.message)||"Isian tidak valid.";
+            focusField(key);
+            return;
+          }
+        }
       }
     }
     backFn();

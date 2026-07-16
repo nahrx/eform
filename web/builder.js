@@ -760,12 +760,30 @@ function setupSidebarToggle(side){
   if(bd){bd.replaceWith(bd.cloneNode(true));document.getElementById("pvSideBd").addEventListener("click",()=>{side.classList.remove("open");document.getElementById("pvSideBd").classList.remove("show");});}
 }
 function coerceVal(v){if(v==="true")return true;if(v==="false")return false;if(typeof v==="string"&&v.trim()!==""&&!isNaN(Number(v)))return Number(v);return v;}
+function ancestorPrefixes(rowPrefix){
+  const out=[];
+  let p=String(rowPrefix||"");
+  while(p){
+    out.push(p);
+    const m=p.match(/^(.*?)(?:[^#]+#\d+#)$/);
+    if(!m||m[1]===p)break;
+    p=m[1];
+  }
+  return out;
+}
+function resolveScopedValue(name,rowPrefix){
+  for(const p of ancestorPrefixes(rowPrefix)){
+    const k=p+name;
+    if(k in pv.values)return coerceVal(pv.values[k]);
+  }
+  return undefined;
+}
 function refResolve(name,rowPrefix){
   name=String(name).trim();
-  if(name.includes(".")){const dot=name.indexOf(".");const rn=name.slice(0,dot),fn=name.slice(dot+1);const r=allNodes().find(x=>x.kind==="roster"&&x.name===rn);if(r){const cnt=rosterCount(r);const arr=[];for(let i=0;i<cnt;i++)arr.push(coerceVal(pv.values[`${rn}#${i}#${fn}`]));return arr;}if(rowPrefix){const k=rowPrefix+name;if(k in pv.values)return coerceVal(pv.values[k]);}return name in pv.values?coerceVal(pv.values[name]):undefined;}
+  if(name.includes(".")){const dot=name.indexOf(".");const rn=name.slice(0,dot),fn=name.slice(dot+1);const r=allNodes().find(x=>x.kind==="roster"&&x.name===rn);if(r){const cnt=rosterCount(r);const arr=[];for(let i=0;i<cnt;i++)arr.push(coerceVal(pv.values[`${rn}#${i}#${fn}`]));return arr;}if(rowPrefix){const v=resolveScopedValue(name,rowPrefix);if(v!==undefined)return v;}return name in pv.values?coerceVal(pv.values[name]):undefined;}
   const rn=allNodes().find(x=>x.kind==="roster"&&x.name===name);
   if(rn){const cnt=rosterCount(rn);return Array.from({length:cnt},(_,i)=>i);}
-  if(rowPrefix){const k=rowPrefix+name;if(k in pv.values)return coerceVal(pv.values[k]);}
+  if(rowPrefix){const v=resolveScopedValue(name,rowPrefix);if(v!==undefined)return v;}
   return coerceVal(pv.values[name]);
 }
 function evalExprSrc(src,rowPrefix){return Expr.evalSrc(src,name=>refResolve(name,rowPrefix||""));}
