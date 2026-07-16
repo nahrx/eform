@@ -23,10 +23,10 @@
 
   function titleOf(inst) {
     var t = inst && inst.title;
-    if (!t) return "Kuesioner Tanpa Judul";
+    if (!t) return "";
     if (typeof t === "string") return t;
     for (var k in t) if (t[k]) return t[k];
-    return "Kuesioner Tanpa Judul";
+    return "";
   }
 
   var _toastTimer = null;
@@ -40,8 +40,14 @@
     _toastTimer = setTimeout(function () { el.classList.remove("show"); }, 3500);
   }
 
+  var _saving = false;
   function doSave() {
+    if (_saving) return;
     if (typeof serialize !== "function") { toast("fungsi builder tak ditemukan", true); return; }
+    var btn = document.getElementById("btnSave");
+    var origText = btn ? btn.textContent : "";
+    _saving = true;
+    if (btn) { btn.disabled = true; btn.textContent = "Menyimpan…"; }
     var inst = serialize();
     var body = JSON.stringify({
       title: titleOf(inst),
@@ -56,7 +62,11 @@
       currentId = f.id;
       history.replaceState(null, "", "/builder?id=" + f.id);
       toast("Tersimpan");
-    }).catch(function (e) { toast(e.message, true); });
+    }).catch(function (e) { toast(e.message, true); })
+    .finally(function () {
+      _saving = false;
+      if (btn) { btn.disabled = false; btn.textContent = origText; }
+    });
   }
 
   function doLogout() {

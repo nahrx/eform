@@ -24,6 +24,10 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "username dan password wajib diisi")
 		return
 	}
+	if !loginRL.allow(r) {
+		writeErr(w, http.StatusTooManyRequests, "terlalu banyak percobaan login, coba lagi dalam 1 menit")
+		return
+	}
 	u, err := s.st.GetUserByUsername(r.Context(), in.Username)
 	if err != nil || !u.IsActive || !auth.CheckPassword(u.PasswordHash, in.Password) {
 		writeErr(w, http.StatusUnauthorized, "username atau password salah")
@@ -118,6 +122,12 @@ func (s *Server) patchAdminUser(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "password minimal 6 karakter")
 		return
 	}
+	// Pastikan target adalah admin/superadmin — cegah eskalasi privilege viewer/editor
+	target, err := s.st.GetUser(r.Context(), id)
+	if err != nil || (target.Role != "admin" && target.Role != "superadmin") {
+		writeErr(w, http.StatusNotFound, "user tidak ditemukan")
+		return
+	}
 	if err := s.st.UpdateAdminUser(r.Context(), id, in.Username, in.Email, in.Role); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeErr(w, http.StatusNotFound, "user tidak ditemukan")
@@ -142,7 +152,7 @@ func (s *Server) deleteAdminUser(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "tidak bisa menghapus akun sendiri")
 		return
 	}
-	if err := s.st.DeleteUser(r.Context(), id); err != nil {
+	if err := s.st.DeleteAdminUser(r.Context(), id); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeErr(w, http.StatusNotFound, "user tidak ditemukan")
 			return

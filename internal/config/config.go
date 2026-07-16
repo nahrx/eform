@@ -14,11 +14,12 @@ import (
 )
 
 type Config struct {
-	Port          string
-	DatabaseURL   string
-	JWTSecret     []byte
-	JWTTTL        time.Duration
-	CORSOrigins   []string
+	Port                 string
+	DatabaseURL          string
+	JWTSecret            []byte
+	JWTRespondentSecret  []byte
+	JWTTTL               time.Duration
+	CORSOrigins          []string
 	PublicBaseURL string // dipakai untuk membentuk URL share, mis. https://eform.bpskaltim.go.id
 	WebDir        string // folder berisi login.html, admin.html, public.html, builder.html
 	PublicDir     string // folder berisi landing page publik (index.html), disajikan di "/"
@@ -57,7 +58,7 @@ func Load() *Config {
 		Seed: SeedConfig{
 			Username: env("SUPERADMIN_USERNAME", "admin"),
 			Email:    env("SUPERADMIN_EMAIL", "admin@bps.go.id"),
-			Password: env("SUPERADMIN_PASSWORD", "admin12345"),
+			Password: resolveSuperadminPassword(),
 		},
 		GoogleClientID:     env("GOOGLE_CLIENT_ID", ""),
 		GoogleClientSecret: env("GOOGLE_CLIENT_SECRET", ""),
@@ -72,6 +73,15 @@ func Load() *Config {
 		log.Println("[WARN] JWT_SECRET kosong — memakai secret acak (token akan invalid setelah restart). Set JWT_SECRET di produksi.")
 	}
 	c.JWTSecret = []byte(secret)
+
+	respSecret := os.Getenv("JWT_RESPONDENT_SECRET")
+	if respSecret == "" {
+		b := make([]byte, 32)
+		_, _ = rand.Read(b)
+		respSecret = hex.EncodeToString(b)
+		log.Println("[WARN] JWT_RESPONDENT_SECRET kosong — memakai secret acak terpisah. Set JWT_RESPONDENT_SECRET di produksi.")
+	}
+	c.JWTRespondentSecret = []byte(respSecret)
 
 	ttlHours := 24
 	if v := os.Getenv("JWT_TTL_HOURS"); v != "" {
@@ -103,6 +113,19 @@ func resolveDBURL() string {
 	name := env("POSTGRES_DB", "eform")
 	ssl  := env("POSTGRES_SSLMODE", "disable")
 	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s", user, pass, host, port, name, ssl)
+}
+
+// resolveSuperadminPassword mengembalikan password superadmin dari env, atau
+// men-generate password acak sekali pakai jika env tidak disetel (cetak ke stdout).
+func resolveSuperadminPassword() string {
+	if pw := os.Getenv("SUPERADMIN_PASSWORD"); pw != "" {
+		return pw
+	}
+	b := make([]byte, 12)
+	_, _ = rand.Read(b)
+	pw := hex.EncodeToString(b)
+	log.Printf("[WARN] SUPERADMIN_PASSWORD tidak disetel — password sementara: %s (set env untuk produksi)", pw)
+	return pw
 }
 
 // loadDotEnv memuat file .env (jika ada) memakai joho/godotenv.

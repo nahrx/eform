@@ -35,6 +35,7 @@ func (s *Server) googleStartOAuth(w http.ResponseWriter, r *http.Request, next, 
 		Path:     "/",
 		MaxAge:   300,
 		HttpOnly: true,
+		Secure:   true,
 		SameSite: http.SameSiteLaxMode,
 	})
 
@@ -139,8 +140,8 @@ func (s *Server) googleCallback(w http.ResponseWriter, r *http.Request) {
 			nextPage = "/admin"
 			typeParam = "editor"
 		}
-		// Simpan ke localStorage via done page
-		doneURL := "/auth/google/done?" + url.Values{
+		// Simpan ke localStorage via done page — gunakan fragment (#) agar token tidak masuk server log
+		doneURL := "/auth/google/done#" + url.Values{
 			"token": {jwtToken},
 			"next":  {nextPage},
 			"type":  {typeParam},
@@ -160,7 +161,7 @@ func (s *Server) googleCallback(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "gagal menerbitkan token")
 		return
 	}
-	doneURL := "/auth/google/done?" + url.Values{
+	doneURL := "/auth/google/done#" + url.Values{
 		"token": {jwtToken},
 		"next":  {next},
 	}.Encode()

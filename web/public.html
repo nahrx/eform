@@ -124,6 +124,7 @@ textarea.pv-in{width:100%;resize:vertical;min-height:72px}
 
 /* ---- roster ---- */
 .pv-roster{border:1.5px solid #b5dfc7;border-radius:10px;padding:16px;margin-bottom:16px;background:#f4fcf8}
+.pv-roster-err{border-color:var(--bad)!important;outline:2px solid var(--bad);outline-offset:2px}
 .pv-rh{font-weight:700;font-size:13.5px;color:var(--roster);margin-bottom:12px;display:flex;align-items:center;gap:8px}
 .pv-tag{font-family:var(--mono);font-size:9.5px;background:#d8f3e5;padding:2px 6px;border-radius:4px;color:var(--roster);font-weight:600;vertical-align:middle}
 .pv-rowempty{font-size:12px;color:var(--muted);padding:4px 0 10px}
@@ -400,11 +401,34 @@ function pubHeaders(extra){
   return h;
 }
 
+/* ---- sanitizer HTML untuk field note (hanya tag aman) ---- */
+function sanitizeHtml(html){
+  const ALLOWED={A:['href','target','rel'],B:[],STRONG:[],I:[],EM:[],U:[],S:[],
+    P:[],BR:[],UL:[],OL:[],LI:[],BLOCKQUOTE:[],H1:[],H2:[],H3:[],H4:[],H5:[],H6:[],CODE:[],PRE:[],HR:[]};
+  const tmp=document.createElement('div');
+  tmp.innerHTML=html;
+  (function clean(node){
+    for(const n of [...node.childNodes]){
+      if(n.nodeType===3)continue;
+      if(n.nodeType!==1){n.remove();continue;}
+      if(!ALLOWED[n.tagName]){n.replaceWith(document.createTextNode(n.textContent));continue;}
+      for(const a of [...n.attributes])if(!ALLOWED[n.tagName].includes(a.name))n.removeAttribute(a.name);
+      if(n.tagName==='A'){
+        const href=n.getAttribute('href')||'';
+        if(!/^https?:\/\//.test(href)&&!href.startsWith('/'))n.setAttribute('href','#');
+        n.setAttribute('rel','noopener noreferrer');
+      }
+      clean(n);
+    }
+  })(tmp);
+  return tmp.innerHTML;
+}
+
 /* ---- markdown ---- */
 function mdToHtml(src){
   if(!src)return"";
   const e=s=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-  const inl=s=>e(s).replace(/`([^`]+)`/g,"<code>$1</code>").replace(/\*\*([^*]+)\*\*/g,"<strong>$1</strong>").replace(/(^|[^*])\*([^*]+)\*/g,"$1<em>$2</em>").replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+  const inl=s=>e(s).replace(/`([^`]+)`/g,"<code>$1</code>").replace(/\*\*([^*]+)\*\*/g,"<strong>$1</strong>").replace(/(^|[^*])\*([^*]+)\*/g,"$1<em>$2</em>").replace(/\[([^\]]+)\]\(([^)]+)\)/g,(_,text,url)=>{const safe=/^https?:\/\//.test(url)||url.startsWith('/')?url:'#';return`<a href="${safe}" target="_blank" rel="noopener noreferrer">${text}</a>`;});
   const L=String(src).replace(/\r\n/g,"\n").split("\n");let h="",i=0;
   while(i<L.length){const l=L[i];
     let m=l.match(/^\s*(#{1,6})\s+(.*)$/);if(m){h+=`<h${m[1].length}>${inl(m[2])}</h${m[1].length}>`;i++;continue;}
@@ -470,9 +494,18 @@ async function fetchForm(){
   }
 
   // Single-response: coba muat jawaban lama
-  EXISTING_RESPONSE=await fetchMyResponse();
-  if(EXISTING_RESPONSE){
-    answers=parseAnswers(EXISTING_RESPONSE.answers);
+  const lastResp=await fetchMyResponse();
+  if(lastResp&&lastResp.status==="draft"){
+    // Respons yang baru dibatalkan pengirimannya (unsubmit) - lanjutkan mengedit
+    // sebagai draf, bukan sebagai jawaban final.
+    EXISTING_RESPONSE=null;
+    EDITING_RESPONSE_ID=lastResp.id;
+    answers=parseAnswers(lastResp.answers);
+  }else{
+    EXISTING_RESPONSE=lastResp;
+    if(EXISTING_RESPONSE){
+      answers=parseAnswers(EXISTING_RESPONSE.answers);
+    }
   }
 
   // Pilih sumber data terbaru: jawaban final, draf server, atau draf lokal
@@ -547,9 +580,11 @@ function renderAccessDenied(meta){
   </div></div>`);
 }
 
+let _responseMap={};
 function renderMyResponsesList(meta,responses){
   const title=txt(meta.title||txt(SCHEMA?.title)||"Kuesioner");
   document.title=title;
+  _responseMap={};responses.forEach(r=>{_responseMap[r.id]=r;});
   const fmt=iso=>{try{return new Date(iso).toLocaleString("id-ID",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});}catch{return iso;}};
   const userBar=RESP_USER?`<div class="gate-ubar">
     ${RESP_USER.picture?`<img class="pv-uavatar" src="${esc(RESP_USER.picture)}" referrerpolicy="no-referrer">`:`<div class="pv-uavatar"></div>`}
@@ -563,11 +598,11 @@ function renderMyResponsesList(meta,responses){
       ?`<span class="resp-badge resp-badge-draft">Draf</span>`
       :`<span class="resp-badge resp-badge-ok">Terkirim</span>`;
     const action=isDraft
-      ?`<button class="btn btn-xs" onclick='editDraftResponse(${JSON.stringify(r)})'>Lanjutkan</button>`
+      ?`<button class="btn btn-xs" onclick="editDraftResponseById('${esc(r.id)}')">Lanjutkan</button>`
       :`<button class="btn btn-xs" onclick="unsubmitResponseAPI('${r.id}')">Batalkan Submit</button>`;
     return `<div class="resp-item">
       <div class="resp-item-left"><span class="resp-num">Respons ${responses.length-i}</span>${badge}</div>
-      <span class="resp-date">${isDraft?"Draf tersimpan":fmt(r.submittedAt)}</span>
+      <span class="resp-date">${isDraft?"Draf · "+fmt(r.submittedAt):fmt(r.submittedAt)}</span>
       ${ALLOW?action:""}
     </div>`;
   }).join("");
@@ -579,7 +614,7 @@ function renderMyResponsesList(meta,responses){
     ${userBar}
     <div class="gate-icon">📋</div>
     <h2>${esc(title)}</h2>
-    <p class="gate-sub">Anda memiliki ${responses.length} respons untuk kuesioner ini.</p>
+    <p class="gate-sub">${responses.length===0?"Anda belum memiliki respons untuk kuesioner ini.":"Anda memiliki "+responses.length+" respons untuk kuesioner ini."}</p>
     <div class="resp-list">${emptyNote}${rows}</div>
     ${newBtn}
   </div></div>`);
@@ -594,6 +629,9 @@ function startNewResponse(){
   goToPage(0);
 }
 
+function editDraftResponseById(id){
+  const r=_responseMap[id];if(r)editDraftResponse(r);
+}
 function editDraftResponse(resp){
   EDITING_RESPONSE_ID=resp.id;
   EXISTING_RESPONSE=null;
@@ -603,16 +641,45 @@ function editDraftResponse(resp){
   goToPage(0);
 }
 
+function pvDialog(msg,onConfirm,opts){
+  opts=opts||{};
+  const cancelBtn=opts.noCancel?"":`<button id="pvDlgCancel" style="padding:8px 16px;border:1px solid #dfe4ea;border-radius:7px;background:#fff;color:#13171e;font-family:inherit;font-size:13px;cursor:pointer">${opts.cancelLabel||"Batal"}</button>`;
+  const ovl=document.createElement("div");
+  ovl.style.cssText="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45)";
+  ovl.innerHTML=`<div style="background:#fff;border-radius:12px;padding:28px 24px;max-width:380px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,.18);font-family:inherit">
+    <div style="font-weight:700;font-size:15px;margin-bottom:10px;color:${opts.danger?"#b91c1c":"#13171e"}">${opts.title||"Konfirmasi"}</div>
+    <div style="font-size:13.5px;color:#4a525e;margin-bottom:20px">${esc(msg)}</div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      ${cancelBtn}
+      <button id="pvDlgOk" style="padding:8px 16px;border:none;border-radius:7px;background:${opts.danger?"#b91c1c":"#0e7490"};color:#fff;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">${opts.confirmLabel||"Ya"}</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ovl);
+  if(!opts.noCancel)ovl.querySelector("#pvDlgCancel").onclick=()=>ovl.remove();
+  ovl.querySelector("#pvDlgOk").onclick=()=>{ovl.remove();if(onConfirm)onConfirm();};
+}
+
 async function unsubmitResponseAPI(responseId){
-  if(!confirm("Batalkan pengiriman respons ini? Respons akan berubah menjadi draf dan bisa diedit kembali."))return;
-  try{
-    const r=await fetch(`/api/public/forms/${encodeURIComponent(SHARE_TOKEN)}/responses/${encodeURIComponent(responseId)}/unsubmit`,
-      {method:"POST",headers:pubHeaders({})});
-    const d=await r.json();
-    if(!r.ok)throw new Error(d.error||"Gagal membatalkan pengiriman");
-    const resps=await fetchMyResponses();
-    renderMyResponsesList({title:txt(SCHEMA?.title)||"Kuesioner"},resps);
-  }catch(e){alert(e.message);}
+  pvDialog(
+    "Batalkan pengiriman respons ini? Respons akan berubah menjadi draf dan bisa diedit kembali.",
+    async()=>{
+      try{
+        const r=await fetch(`/api/public/forms/${encodeURIComponent(SHARE_TOKEN)}/responses/${encodeURIComponent(responseId)}/unsubmit`,
+          {method:"POST",headers:pubHeaders({})});
+        const d=await r.json();
+        if(!r.ok)throw new Error(d.error||"Gagal membatalkan pengiriman");
+        if(MULTI_RESPONSE){
+          const resps=await fetchMyResponses();
+          renderMyResponsesList({title:txt(SCHEMA?.title)||"Kuesioner"},resps);
+        }else{
+          EXISTING_RESPONSE=null;
+          EDITING_RESPONSE_ID=d.id;
+          renderCurrentPage();
+        }
+      }catch(e){pvDialog(e.message,null,{title:"Gagal membatalkan",confirmLabel:"Tutup",noCancel:true,danger:true});}
+    },
+    {title:"Batalkan Submit",confirmLabel:"Ya, Batalkan",danger:true}
+  );
 }
 
 async function fetchMyDraft(){
@@ -727,7 +794,7 @@ function fieldHtml(c,rp,scopes){
   if(!evalVisible(c.visibleWhen,rp))return"";
   if(rp?ROW_SKIP_HIDDEN.get(rp.slice(0,-1))?.has(c.name):SKIP_HIDDEN.has(c.name))return""; // disembunyikan oleh skip-to
   const key=rp+c.name, ke=esc(key);
-  if(c.type==="note")    return`<div class="pv-note pv-field">${txt(c.html)||""}</div>`;
+  if(c.type==="note")    return`<div class="pv-note pv-field">${sanitizeHtml(txt(c.html)||"")}</div>`;
   if(c.type==="markdown")return`<div class="pv-note pv-field pv-md">${mdToHtml(txt(c.markdown))}</div>`;
   if(c.type==="hidden")  return"";
   const isRequired=!!c.required||!!(c.requiredWhen&&evalVisible(c.requiredWhen,rp));
@@ -1120,14 +1187,16 @@ function validateCurrentPage(){
       }
     }
   }
+  let rosterGate=null;
+  (function walkR(comps,pfx){if(rosterGate)return;(comps||[]).forEach(c=>{if(rosterGate||!evalVisible(c.visibleWhen,pfx))return;if(c.kind==="roster"){if(c.requiredRows&&rosterCount(c,pfx)===0)rosterGate={ok:false,key:"pvroster_"+c.name};}else if(c.kind!=="field"&&c.components)walkR(c.components,pfx);});})(PAGES[curPage].components||[],"");
+  if(rosterGate)return rosterGate;
   return{ok:true,key:null};
 }
 function focusField(key){
   const el=document.querySelector(`[data-fieldkey="${CSS.escape(key)}"]`);
-  if(!el)return;
-  el.classList.add("pv-field-err");
-  el.scrollIntoView({behavior:"smooth",block:"center"});
-  setTimeout(()=>el.classList.remove("pv-field-err"),2500);
+  if(el){el.classList.add("pv-field-err");el.scrollIntoView({behavior:"smooth",block:"center"});setTimeout(()=>el.classList.remove("pv-field-err"),2500);return;}
+  const byId=document.getElementById(key);
+  if(byId){byId.classList.add("pv-roster-err");byId.scrollIntoView({behavior:"smooth",block:"center"});setTimeout(()=>byId.classList.remove("pv-roster-err"),2500);}
 }
 
 /* ---- kumpulkan semua error di seluruh halaman ---- */
@@ -1156,6 +1225,7 @@ function collectAllErrors(){
         }
       }
     }
+    (function walkR(comps,pfx){(comps||[]).forEach(c=>{if(!evalVisible(c.visibleWhen,pfx))return;if(c.kind==="roster"){if(c.requiredRows&&rosterCount(c,pfx)===0)errors.push({pageIdx:pi,key:"pvroster_"+c.name,label:txt(c.title)||c.name,rp:"",msg:"Belum ada baris yang ditambahkan"});}else if(c.kind!=="field"&&c.components)walkR(c.components,pfx);});})(page.components||[],"");
   }
   return errors;
 }
@@ -1335,10 +1405,12 @@ function renderCurrentPage(){
   html+=`</div>`;
   if(isLast)html+=`<div class="msg" id="msg"></div>`;
   if(isLast&&!ALLOW)html+=`<div class="view-hint">Tautan ini hanya untuk melihat kuesioner — tidak menerima jawaban.</div>`;
-  const isEdit=!!EXISTING_RESPONSE;
+  const isEdit=!!EXISTING_RESPONSE||(!MULTI_RESPONSE&&!!EDITING_RESPONSE_ID);
   const prevBtn=prevVisibleIndex(curPage)!==-1?`<button class="btn" id="pvPrev">← Sebelumnya</button>`:
     (MULTI_RESPONSE?`<button class="btn" id="pvBackToList">← Daftar</button>`:`<span></span>`);
   const saveDraftBtn=ALLOW?`<button class="pv-savedraft" id="pvSaveDraft">Simpan Draf</button>`:"";
+  const canUnsubmit=!MULTI_RESPONSE&&ALLOW&&EXISTING_RESPONSE&&EXISTING_RESPONSE.status==="submitted";
+  const unsubmitBtn=isLast&&canUnsubmit?`<button class="btn btn-xs" id="pvUnsubmit" type="button">Batalkan Submit</button>`:"";
   const nextBtn=isLast
     ?(ALLOW?`<button class="btn primary" id="pvSubmit">${isEdit?"Perbarui Jawaban":"Kirim Jawaban"}</button>`:`<span></span>`)
     :`<button class="btn primary" id="pvNext">Lanjut →</button>`;
@@ -1347,7 +1419,7 @@ function renderCurrentPage(){
   const navArea=document.getElementById("pvNavArea");
   if(navArea){
     const pct=totalVis>1?Math.round((posInVis/totalVis)*100):100;
-    navArea.innerHTML=`<div class="pv-nav-err" id="pvNavErr"></div><div class="pv-nav">${prevBtn}<div class="pv-prog-wrap"><div class="pv-progbar-track"><div class="pv-progbar" style="width:${pct}%"></div></div><span class="pv-prog">Halaman ${posInVis} / ${totalVis}</span></div><div style="display:flex;gap:8px;align-items:center">${saveDraftBtn}${nextBtn}</div></div>`;
+    navArea.innerHTML=`<div class="pv-nav-err" id="pvNavErr"></div><div class="pv-nav">${prevBtn}<div class="pv-prog-wrap"><div class="pv-progbar-track"><div class="pv-progbar" style="width:${pct}%"></div></div><span class="pv-prog">Halaman ${posInVis} / ${totalVis}</span></div><div style="display:flex;gap:8px;align-items:center">${unsubmitBtn}${saveDraftBtn}${nextBtn}</div></div>`;
   }
   restoreAnswers();bindPageEvents();resolveOptions();
 }
@@ -1368,7 +1440,7 @@ function renderRosterRow(){
   rowSkip.forEach(n=>{delete answers[rp+n];});
   pending=[];
   const userBar=document.getElementById("pvUserBar")?.outerHTML||"";
-  const total=rosterCount(roster,rp);
+  const total=rosterCount(roster,"");
   const rosterTitle=esc(rowInterp(txt(roster.title)||roster.name,[rp]));
   const hasStructure=(roster.components||[]).some(c=>c.kind==="block"||c.kind==="section");
   let fieldsHtml=(roster.components||[]).map(f=>nodeHtml(f,rp)).join("");
@@ -1418,7 +1490,7 @@ function bindPageEvents(){
   document.getElementById("pvNext")?.addEventListener("click",()=>{
     const gate=validateCurrentPage();
     if(!gate.ok){
-      const err=document.getElementById("pvNavErr");if(err)err.textContent="Lengkapi pertanyaan wajib / perbaiki isian yang tidak valid sebelum melanjutkan.";
+      const err=document.getElementById("pvNavErr");if(err){err.textContent="Lengkapi pertanyaan wajib / perbaiki isian yang tidak valid sebelum melanjutkan.";setTimeout(()=>{err.textContent="";},3000);}
       focusField(gate.key);
       return;
     }
@@ -1434,6 +1506,7 @@ function bindPageEvents(){
     submit();
   });
   document.getElementById("pvSaveDraft")?.addEventListener("click",()=>saveDraftToServer());
+  document.getElementById("pvUnsubmit")?.addEventListener("click",()=>{if(EXISTING_RESPONSE)unsubmitResponseAPI(EXISTING_RESPONSE.id);});
   document.querySelectorAll("[data-addrow]").forEach(btn=>btn.addEventListener("click",()=>{
     const rname=btn.dataset.addrow,roster=findRoster(rname);if(!roster)return;
     openAddRowModal(roster);
@@ -1681,12 +1754,13 @@ async function submit(){
   try{
     const headers=pubHeaders({"Content-Type":"application/json"});
     const body={answers:ans};
-    if(MULTI_RESPONSE&&EDITING_RESPONSE_ID)body.responseId=EDITING_RESPONSE_ID;
+    if(EDITING_RESPONSE_ID)body.responseId=EDITING_RESPONSE_ID;
     const r=await fetch("/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/responses",
       {method:"POST",headers,body:JSON.stringify(body)});
     const d=await r.json();
-    if(r.status===401){msg.className="msg err";msg.textContent="Sesi habis. Silakan login ulang.";btn.disabled=false;btn.textContent=EXISTING_RESPONSE?"Perbarui Jawaban":"Kirim Jawaban";return;}
+    if(r.status===401){msg.className="msg err";msg.textContent="Sesi habis. Silakan login ulang.";btn.disabled=false;btn.textContent=(EXISTING_RESPONSE||EDITING_RESPONSE_ID)?"Perbarui Jawaban":"Kirim Jawaban";return;}
     if(!r.ok)throw new Error(d.error||"Gagal mengirim");
+    const wasEditingCancelled=!!EDITING_RESPONSE_ID;
     clearDraft();
     EDITING_RESPONSE_ID=null;
     document.getElementById("draftNote")?.remove();
@@ -1701,13 +1775,17 @@ async function submit(){
         renderMyResponsesList({title:txt(SCHEMA?.title)||"Kuesioner"},prevResps);
       },1800);
     }else{
+      const isFirstSend=!EXISTING_RESPONSE&&!wasEditingCancelled;
       EXISTING_RESPONSE=d;
-      msg.className="msg ok";
-      msg.textContent="Jawaban berhasil diperbarui.";
-      btn.textContent="Perbarui Jawaban";btn.disabled=false;
+      renderCurrentPage();
+      const msg2=document.getElementById("msg");
+      if(msg2){
+        msg2.className="msg ok";
+        msg2.textContent=isFirstSend?"Jawaban berhasil dikirim.":"Jawaban berhasil diperbarui.";
+      }
       document.getElementById("pvBody")?.scrollTo({top:0,behavior:"smooth"});
     }
-  }catch(e){msg.className="msg err";msg.textContent=e.message;btn.disabled=false;btn.textContent=MULTI_RESPONSE?"Kirim Jawaban":(EXISTING_RESPONSE?"Perbarui Jawaban":"Kirim Jawaban");}
+  }catch(e){msg.className="msg err";msg.textContent=e.message;btn.disabled=false;btn.textContent=MULTI_RESPONSE?"Kirim Jawaban":((EXISTING_RESPONSE||EDITING_RESPONSE_ID)?"Perbarui Jawaban":"Kirim Jawaban");}
 }
 
 fetchForm().catch(e=>showErr(e.message));

@@ -9,12 +9,19 @@ import (
 )
 
 type Manager struct {
-	secret []byte
-	ttl    time.Duration
+	secret           []byte
+	respondentSecret []byte
+	ttl              time.Duration
+	respondentTTL    time.Duration
 }
 
-func NewManager(secret []byte, ttl time.Duration) *Manager {
-	return &Manager{secret: secret, ttl: ttl}
+func NewManager(secret, respondentSecret []byte, ttl time.Duration) *Manager {
+	return &Manager{secret: secret, respondentSecret: respondentSecret, ttl: ttl, respondentTTL: 30 * 24 * time.Hour}
+}
+
+func (m *Manager) WithRespondentTTL(d time.Duration) *Manager {
+	m.respondentTTL = d
+	return m
 }
 
 type Claims struct {
@@ -72,7 +79,7 @@ type RespondentClaims struct {
 	jwt.RegisteredClaims
 }
 
-// GenerateRespondent menerbitkan JWT untuk responden publik, berlaku 30 hari.
+// GenerateRespondent menerbitkan JWT untuk responden publik, TTL dikonfigurasi via Manager.
 func (m *Manager) GenerateRespondent(respondentID, email, name, picture string) (string, error) {
 	now := time.Now()
 	claims := RespondentClaims{
@@ -83,10 +90,10 @@ func (m *Manager) GenerateRespondent(respondentID, email, name, picture string) 
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   respondentID,
 			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(30 * 24 * time.Hour)),
+			ExpiresAt: jwt.NewNumericDate(now.Add(m.respondentTTL)),
 		},
 	}
-	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(m.secret)
+	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(m.respondentSecret)
 }
 
 func (m *Manager) ParseRespondent(tokenStr string) (*RespondentClaims, error) {
@@ -95,7 +102,7 @@ func (m *Manager) ParseRespondent(tokenStr string) (*RespondentClaims, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, ErrInvalidToken
 		}
-		return m.secret, nil
+		return m.respondentSecret, nil
 	})
 	if err != nil || !tok.Valid || claims.RespondentID == "" {
 		return nil, ErrInvalidToken

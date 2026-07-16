@@ -4,6 +4,29 @@ const H={"Authorization":"Bearer "+token,"Content-Type":"application/json"};
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
+let _toastTimer=null;
+function adminToast(msg,isErr){
+  let el=document.getElementById("adminToast");
+  if(!el){el=document.createElement("div");el.id="adminToast";el.style.cssText="position:fixed;bottom:24px;right:24px;z-index:9999;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:600;box-shadow:0 4px 20px rgba(0,0,0,.18);transition:.2s;opacity:0;pointer-events:none";document.body.appendChild(el);}
+  el.textContent=msg;
+  el.style.background=isErr?"#b91c1c":"#15803d";
+  el.style.color="#fff";
+  el.style.opacity="1";
+  clearTimeout(_toastTimer);
+  _toastTimer=setTimeout(()=>{el.style.opacity="0";},3000);
+}
+
+function adminConfirm(msg,onConfirm){
+  const dlg=document.getElementById("confirmDlg");
+  document.getElementById("confirmMsg").textContent=msg;
+  const yes=document.getElementById("confirmYes");
+  const no=document.getElementById("confirmNo");
+  const cleanup=()=>{dlg.close();yes.onclick=null;no.onclick=null;};
+  yes.onclick=()=>{cleanup();onConfirm();};
+  no.onclick=cleanup;
+  dlg.showModal();
+}
+
 async function api(path,opts={}){
   const r=await fetch(path,{...opts,headers:{...H,...(opts.headers||{})}});
   if(r.status===401){localStorage.removeItem("eform_token");location.replace("/login");throw new Error("sesi habis");}
@@ -97,7 +120,7 @@ async function load(){
       <td><div class="acts">
         <button class="btn" onclick="location.href='/builder?id=${f.id}'">Buka</button>
         <button class="btn" onclick="togglePub('${f.id}','${f.status}')">${f.status==="published"?"Tarik":"Publikasikan"}</button>
-        <button class="btn" onclick="openShare('${f.id}','${esc(f.title)}','${f.status}')">Bagikan</button>
+        ${(MY_ROLE==="superadmin"||MY_ROLE==="admin")?`<button class="btn" onclick="openShare('${f.id}','${esc(f.title)}','${f.status}')">Bagikan</button>`:""}
         ${canViewResults?`<button class="btn" onclick="location.href='/responses?id=${f.id}'">Jawaban${counts[i]>0?` (${counts[i]})`:""}</button>`:""}
         ${(MY_ROLE==="superadmin"||MY_ROLE==="admin")?`<button class="btn" onclick="openEditorPerm('${f.id}','${esc(f.title)}')">Akses Editor</button>`:""}
         ${(MY_ROLE==="superadmin"||MY_ROLE==="admin")?`<button class="btn" onclick="openViewerPerm('${f.id}','${esc(f.title)}')">Akses Viewer</button>`:""}
@@ -207,12 +230,13 @@ async function saveAdminUser(id){
 }
 
 async function deleteAdminUser(id,name){
-  if(id===MY_ID){alert("Tidak bisa menghapus akun sendiri.");return;}
-  if(!confirm(`Hapus user "${name}"? Tindakan ini tidak bisa dibatalkan.`))return;
-  try{
-    await api("/api/users/"+id,{method:"DELETE"});
-    await loadUsers();
-  }catch(e){alert("Gagal: "+e.message);}
+  if(id===MY_ID){adminToast("Tidak bisa menghapus akun sendiri.",true);return;}
+  adminConfirm(`Hapus user "${name}"? Tindakan ini tidak bisa dibatalkan.`,async()=>{
+    try{
+      await api("/api/users/"+id,{method:"DELETE"});
+      await loadUsers();
+    }catch(e){adminToast("Gagal: "+e.message,true);}
+  });
 }
 
 async function createUserFromPanel(){
@@ -263,11 +287,12 @@ async function dl(ev,id){ // unduh CSV dengan header auth
 }
 async function togglePub(id,status){
   const next=status==="published"?"draft":"published";
-  try{await api("/api/forms/"+id+"/publish",{method:"POST",body:JSON.stringify({status:next})});load();}catch(e){alert(e.message);}
+  try{await api("/api/forms/"+id+"/publish",{method:"POST",body:JSON.stringify({status:next})});load();}catch(e){adminToast(e.message,true);}
 }
 async function del(id,title){
-  if(!confirm("Hapus kuesioner \""+title+"\" beserta semua jawabannya?"))return;
-  try{await api("/api/forms/"+id,{method:"DELETE"});load();}catch(e){alert(e.message);}
+  adminConfirm("Hapus kuesioner \""+title+"\"? Kuesioner hanya dapat dihapus jika belum ada jawaban.",async()=>{
+    try{await api("/api/forms/"+id,{method:"DELETE"});load();}catch(e){adminToast(e.message,true);}
+  });
 }
 
 let shareFormId=null;
@@ -310,7 +335,7 @@ $("#btnAddNewEmail").addEventListener("click",()=>{
   const email=$("#newEmailInput").value.trim().toLowerCase();
   const note=$("#newEmailNote").value.trim();
   if(!email){$("#newEmailInput").focus();return;}
-  if(pendingEmails.some(e=>e.email===email)){alert("Email sudah ada di daftar");return;}
+  if(pendingEmails.some(e=>e.email===email)){adminToast("Email sudah ada di daftar",true);return;}
   pendingEmails.push({email,note});
   $("#newEmailInput").value="";$("#newEmailNote").value="";
   $("#newEmailInput").focus();
@@ -352,7 +377,7 @@ async function saveShareEdit(id,hasPassword){
       updateExpiry:true,expiresAt
     })});
     editingShareId=null;refreshShares();
-  }catch(e){alert(e.message);if(btn){btn.disabled=false;btn.textContent="Simpan";}}
+  }catch(e){adminToast(e.message,true);if(btn){btn.disabled=false;btn.textContent="Simpan";}}
 }
 
 async function refreshShares(){
@@ -447,15 +472,16 @@ async function addEmailToShare(shareId){
     await api("/api/shares/"+shareId+"/allowed-emails",{method:"POST",body:JSON.stringify({email,note})});
     if(inEl)inEl.value="";if(noteEl)noteEl.value="";
     refreshShares();
-  }catch(e){alert(e.message);}
+  }catch(e){adminToast(e.message,true);}
 }
 async function removeEmail(id){
-  try{await api("/api/share-emails/"+id,{method:"DELETE"});refreshShares();}catch(e){alert(e.message);}
+  try{await api("/api/share-emails/"+id,{method:"DELETE"});refreshShares();}catch(e){adminToast(e.message,true);}
 }
-async function revoke(id){ try{await api("/api/shares/"+id,{method:"DELETE"});refreshShares();}catch(e){alert(e.message);} }
+async function revoke(id){ try{await api("/api/shares/"+id,{method:"DELETE"});refreshShares();}catch(e){adminToast(e.message,true);} }
 async function deleteShare(id){
-  if(!confirm("Hapus permanen tautan ini beserta semua konfigurasinya?"))return;
-  try{await api("/api/shares/"+id+"/permanent",{method:"DELETE"});refreshShares();}catch(e){alert(e.message);}
+  adminConfirm("Hapus permanen tautan ini beserta semua konfigurasinya?",async()=>{
+    try{await api("/api/shares/"+id+"/permanent",{method:"DELETE"});refreshShares();}catch(e){adminToast(e.message,true);}
+  });
 }
 $("#makeShare").addEventListener("click",async()=>{
   try{
@@ -478,7 +504,7 @@ $("#makeShare").addEventListener("click",async()=>{
     document.getElementById("shareAccessPublic").checked=true;
     $("#restrictedSection").style.display="none";
     refreshShares();
-  }catch(e){alert(e.message);}
+  }catch(e){adminToast(e.message,true);}
 });
 
 $("#logout").addEventListener("click",()=>{localStorage.removeItem("eform_token");localStorage.removeItem("eform_user");location.replace("/login");});
@@ -563,7 +589,7 @@ async function saveViewerNote(id){
     const v=_viewersCache.find(x=>x.id===id);
     if(v) v.note=note;
     _renderViewersTab();
-  }catch(e){alert("Gagal menyimpan: "+e.message);}
+  }catch(e){adminToast("Gagal menyimpan: "+e.message,true);}
 }
 
 async function createViewerFromTab(){
@@ -585,9 +611,10 @@ async function createViewerFromTab(){
 }
 
 async function deleteViewerFromTab(id,name){
-  if(!confirm(`Hapus viewer "${name}"? Semua akses kuesioner viewer ini akan ikut dihapus.`))return;
-  try{await api("/api/viewers/"+id,{method:"DELETE"});await loadViewersTab();}
-  catch(e){alert("Gagal: "+e.message);}
+  adminConfirm(`Hapus viewer "${name}"? Semua akses kuesioner viewer ini akan ikut dihapus.`,async()=>{
+    try{await api("/api/viewers/"+id,{method:"DELETE"});await loadViewersTab();}
+    catch(e){adminToast("Gagal: "+e.message,true);}
+  });
 }
 
 /* ======================================================
@@ -644,7 +671,7 @@ async function saveEditorNote(id){
     const e=_editorsCache.find(x=>x.id===id);
     if(e) e.note=note;
     _renderEditorsTab();
-  }catch(e){alert("Gagal menyimpan: "+e.message);}
+  }catch(e){adminToast("Gagal menyimpan: "+e.message,true);}
 }
 
 async function createEditorFromTab(){
@@ -666,9 +693,10 @@ async function createEditorFromTab(){
 }
 
 async function deleteEditorFromTab(id,name){
-  if(!confirm(`Hapus editor "${name}"? Semua akses kuesioner editor ini akan ikut dihapus.`))return;
-  try{await api("/api/editors/"+id,{method:"DELETE"});await loadEditorsTab();}
-  catch(e){alert("Gagal: "+e.message);}
+  adminConfirm(`Hapus editor "${name}"? Semua akses kuesioner editor ini akan ikut dihapus.`,async()=>{
+    try{await api("/api/editors/"+id,{method:"DELETE"});await loadEditorsTab();}
+    catch(e){adminToast("Gagal: "+e.message,true);}
+  });
 }
 
 /* ======================================================
@@ -699,7 +727,7 @@ async function refreshEditorList(){
   if(!el||!sel) return;
   el.textContent="Memuat…";
   try{
-    const {editors}=await api("/api/editors?formId="+encodeURIComponent(_epFormId||""));
+    const {editors}=await api("/api/editors");
     const cur=sel.value;
     sel.innerHTML='<option value="">— pilih editor —</option>'+
       (editors||[]).map(u=>`<option value="${esc(u.id)}">${esc(u.username)}</option>`).join("");
@@ -736,25 +764,26 @@ async function refreshEditorList(){
 async function createEditor(){
   const email=(document.getElementById("eEmail")?.value||"").trim();
   const note=(document.getElementById("eNote")?.value||"").trim();
-  if(!email){alert("Email Google wajib diisi");return;}
+  if(!email){adminToast("Email Google wajib diisi",true);return;}
   try{
     await api("/api/editors",{method:"POST",body:JSON.stringify({email,note})});
     if(document.getElementById("eEmail"))document.getElementById("eEmail").value="";
     if(document.getElementById("eNote"))document.getElementById("eNote").value="";
     await refreshEditorsAndPerms();
   }catch(e){
-    alert("Gagal: "+e.message);
+    adminToast("Gagal: "+e.message,true);
   }
 }
 
 async function deleteEditor(id,name){
-  if(!confirm(`Hapus editor "${name}"? Semua akses form editor ini akan ikut dihapus.`))return;
-  try{
-    await api("/api/editors/"+id+"?formId="+encodeURIComponent(_epFormId||""),{method:"DELETE"});
-    await refreshEditorsAndPerms();
-  }catch(e){
-    alert("Gagal: "+e.message);
-  }
+  adminConfirm(`Hapus editor "${name}"? Semua akses form editor ini akan ikut dihapus.`,async()=>{
+    try{
+      await api("/api/editors/"+id,{method:"DELETE"});
+      await refreshEditorsAndPerms();
+    }catch(e){
+      adminToast("Gagal: "+e.message,true);
+    }
+  });
 }
 
 async function refreshEditorPermList(){
@@ -789,7 +818,7 @@ async function refreshEditorPermList(){
 
 async function addEditorPermission(){
   const editorId=document.getElementById("epEditorSel")?.value||"";
-  if(!editorId){alert("Pilih editor terlebih dahulu");return;}
+  if(!editorId){adminToast("Pilih editor terlebih dahulu",true);return;}
   try{
     await api("/api/forms/"+_epFormId+"/editor-permissions",{
       method:"POST",
@@ -798,18 +827,19 @@ async function addEditorPermission(){
     document.getElementById("epEditorSel").value="";
     await refreshEditorPermList();
   }catch(e){
-    alert("Gagal: "+e.message);
+    adminToast("Gagal: "+e.message,true);
   }
 }
 
 async function removeEditorPerm(permId,name){
-  if(!confirm(`Cabut akses editor "${name}" dari kuesioner ini?`)) return;
-  try{
-    await api("/api/editor-permissions/"+permId,{method:"DELETE"});
-    await refreshEditorPermList();
-  }catch(e){
-    alert("Gagal: "+e.message);
-  }
+  adminConfirm(`Cabut akses editor "${name}" dari kuesioner ini?`,async()=>{
+    try{
+      await api("/api/editor-permissions/"+permId,{method:"DELETE"});
+      await refreshEditorPermList();
+    }catch(e){
+      adminToast("Gagal: "+e.message,true);
+    }
+  });
 }
 
 /* ======================================================
@@ -821,7 +851,7 @@ async function refreshViewerList(){
   const el=document.getElementById("viewerList");
   el.textContent="Memuat…";
   try{
-    const {viewers}=await api("/api/viewers?formId="+encodeURIComponent(_vpFormId||""));
+    const {viewers}=await api("/api/viewers");
     const sel=document.getElementById("vpViewerSel");
     if(sel){
       const cur=sel.value;
@@ -854,19 +884,20 @@ async function refreshViewerList(){
 async function createViewer(){
   const email=(document.getElementById("vEmail")?.value||"").trim();
   const note=(document.getElementById("vNote")?.value||"").trim();
-  if(!email){alert("Email Google wajib diisi");return;}
+  if(!email){adminToast("Email Google wajib diisi",true);return;}
   try{
     await api("/api/viewers",{method:"POST",body:JSON.stringify({email,note})});
     if(document.getElementById("vEmail"))document.getElementById("vEmail").value="";
     if(document.getElementById("vNote"))document.getElementById("vNote").value="";
     await refreshViewerList();
-  }catch(e){alert("Gagal: "+e.message);}
+  }catch(e){adminToast("Gagal: "+e.message,true);}
 }
 
 async function deleteViewer(id,name){
-  if(!confirm(`Hapus viewer "${name}"? Semua akses kuesioner viewer ini akan ikut dihapus.`))return;
-  try{await api("/api/viewers/"+id+"?formId="+encodeURIComponent(_vpFormId||""),{method:"DELETE"});await refreshViewerList();}
-  catch(e){alert("Gagal: "+e.message);}
+  adminConfirm(`Hapus viewer "${name}"? Semua akses kuesioner viewer ini akan ikut dihapus.`,async()=>{
+    try{await api("/api/viewers/"+id,{method:"DELETE"});await refreshViewerList();}
+    catch(e){adminToast("Gagal: "+e.message,true);}
+  });
 }
 
 // --- Field filter helpers (shared for viewer + editor) ---
@@ -911,7 +942,7 @@ function buildFieldOptions(schema,selectId){
 function addVpAddFilter(){
   const field=document.getElementById("vpAddFilterField").value;
   const value=(document.getElementById("vpAddFilterValue").value||"").trim();
-  if(!field||!value){alert("Pilih variabel dan masukkan nilai");return;}
+  if(!field||!value){adminToast("Pilih variabel dan masukkan nilai",true);return;}
   _vpAddFilters[field]=value;
   document.getElementById("vpAddFilterValue").value="";
   renderFilterChips("vpAddFilterList",_vpAddFilters,"removeVpAddFilter");
@@ -925,7 +956,7 @@ function removeVpAddFilter(field){
 function addVpdFilter(){
   const field=document.getElementById("vpdFilterField").value;
   const value=(document.getElementById("vpdFilterValue").value||"").trim();
-  if(!field||!value){alert("Pilih variabel dan masukkan nilai");return;}
+  if(!field||!value){adminToast("Pilih variabel dan masukkan nilai",true);return;}
   _vpdFilters[field]=value;
   document.getElementById("vpdFilterValue").value="";
   renderFilterChips("vpdFilterList",_vpdFilters,"removeVpdFilter");
@@ -939,7 +970,7 @@ function removeVpdFilter(field){
 function addEpdFilter(){
   const field=document.getElementById("epdFilterField").value;
   const value=(document.getElementById("epdFilterValue").value||"").trim();
-  if(!field||!value){alert("Pilih variabel dan masukkan nilai");return;}
+  if(!field||!value){adminToast("Pilih variabel dan masukkan nilai",true);return;}
   _epdFilters[field]=value;
   document.getElementById("epdFilterValue").value="";
   renderFilterChips("epdFilterList",_epdFilters,"removeEpdFilter");
@@ -959,7 +990,7 @@ async function openEpDetail(permId,editorName){
     buildFieldOptions(_epFormSchema,"epdFilterField");
     renderFilterChips("epdFilterList",_epdFilters,"removeEpdFilter");
     epDetailDlg.showModal();
-  }catch(e){alert("Gagal memuat: "+e.message);}
+  }catch(e){adminToast("Gagal memuat: "+e.message,true);}
 }
 
 async function saveEpDetail(){
@@ -969,7 +1000,7 @@ async function saveEpDetail(){
     });
     epDetailDlg.close();
     await refreshEditorPermList();
-  }catch(e){alert("Gagal menyimpan: "+e.message);}
+  }catch(e){adminToast("Gagal menyimpan: "+e.message,true);}
 }
 
 // --- Dialog akses viewer per kuesioner ---
@@ -1022,7 +1053,7 @@ async function refreshVpPermList(){
 async function addViewerPermission(){
   const viewerId=document.getElementById("vpViewerSel").value;
   const respondentAccess=document.querySelector("input[name='vpRA']:checked")?.value||"all";
-  if(!viewerId){alert("Pilih viewer terlebih dahulu");return;}
+  if(!viewerId){adminToast("Pilih viewer terlebih dahulu",true);return;}
   // Baca field yang dicentang — jika semua tercentang kirim [] (semua terlihat)
   const cbAll=[...document.querySelectorAll("#vpAddFieldList input[type=checkbox]")];
   const cbChecked=cbAll.filter(c=>c.checked).map(c=>c.value);
@@ -1038,13 +1069,14 @@ async function addViewerPermission(){
     _vpAddFilters={};
     renderFilterChips("vpAddFilterList",{},"removeVpAddFilter");
     await refreshVpPermList();
-  }catch(e){alert("Gagal: "+e.message);}
+  }catch(e){adminToast("Gagal: "+e.message,true);}
 }
 
 async function removeViewerPerm(permId,viewerName){
-  if(!confirm(`Cabut akses "${viewerName}" dari kuesioner ini?`))return;
-  try{await api("/api/viewer-permissions/"+permId,{method:"DELETE"});await refreshVpPermList();}
-  catch(e){alert("Gagal: "+e.message);}
+  adminConfirm(`Cabut akses "${viewerName}" dari kuesioner ini?`,async()=>{
+    try{await api("/api/viewer-permissions/"+permId,{method:"DELETE"});await refreshVpPermList();}
+    catch(e){adminToast("Gagal: "+e.message,true);}
+  });
 }
 
 // --- Dialog konfigurasi detail (field visibility + respondents) ---
@@ -1086,7 +1118,7 @@ async function openVpDetail(permId,viewerName,formId){
         `<option value="${esc(r.id)}">${esc(r.name||r.email||r.id)}</option>`).join("");
 
     vpDetailDlg.showModal();
-  }catch(e){alert("Gagal memuat: "+e.message);}
+  }catch(e){adminToast("Gagal memuat: "+e.message,true);}
 }
 
 document.querySelectorAll("input[name='vpdRA']").forEach(rb=>{
@@ -1125,7 +1157,7 @@ async function addAllowedRespondent(){
     picker.innerHTML=`<option value="">— pilih responden —</option>`+
       (formRespondents.respondents||[]).filter(r=>!allowed.has(r.id)).map(r=>
         `<option value="${esc(r.id)}">${esc(r.name||r.email||r.id)}</option>`).join("");
-  }catch(e){alert("Gagal: "+e.message);}
+  }catch(e){adminToast("Gagal: "+e.message,true);}
 }
 
 async function removeAllowedRespondent(id){
@@ -1141,7 +1173,7 @@ async function removeAllowedRespondent(id){
     picker.innerHTML=`<option value="">— pilih responden —</option>`+
       (formRespondents.respondents||[]).filter(r=>!allowed.has(r.id)).map(r=>
         `<option value="${esc(r.id)}">${esc(r.name||r.email||r.id)}</option>`).join("");
-  }catch(e){alert("Gagal: "+e.message);}
+  }catch(e){adminToast("Gagal: "+e.message,true);}
 }
 
 // buildFieldCheckboxes: render daftar checkbox variabel ke dalam elemen containerId.
@@ -1191,5 +1223,5 @@ async function savePermDetail(){
     });
     vpDetailDlg.close();
     await refreshVpPermList();
-  }catch(e){alert("Gagal menyimpan: "+e.message);}
+  }catch(e){adminToast("Gagal menyimpan: "+e.message,true);}
 }

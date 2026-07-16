@@ -26,4 +26,5 @@
     finally{ btn.disabled=false; btn.textContent="Masuk"; }
   }
   $("#btn").addEventListener("click",login);
+  $("#u").addEventListener("keydown",e=>{if(e.key==="Enter")login();});
   $("#p").addEventListener("keydown",e=>{if(e.key==="Enter")login();});

@@ -80,7 +80,7 @@ table.resp-tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:500p
     <select id="fStatus" style="font-size:12.5px;padding:5px 8px;border:1px solid var(--line);border-radius:var(--radius-s);background:var(--panel);color:var(--ink)" onchange="onStatusChange()">
       <option value="">Semua</option>
       <option value="submitted">Terkirim</option>
-      <option value="draft">Draft</option>
+      <option value="draft">Draf</option>
     </select>
     <div class="filter-sep"></div>
     <input class="filter-search" id="fSearch" placeholder="Cari nama / email…" oninput="onSearchDebounce()">
@@ -457,7 +457,7 @@ function renderTable(){
     }).join("");
 
     const statusBadge=resp.status==="draft"
-      ?`<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;background:#fef3c7;color:#92400e">Draft</span>`
+      ?`<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;background:#fef3c7;color:#92400e">Draf</span>`
       :`<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;background:var(--ok-soft);color:var(--ok)">Terkirim</span>`;
     html+=`<tr>
       <td class="td-num">${num}</td>
@@ -473,13 +473,13 @@ function renderTable(){
 
   // Footer paginasi
   const totalPages=Math.ceil(TOTAL/PAGE_SIZE);
-  const footer=`<div class="tbl-foot">
+  const footer=totalPages>1?`<div class="tbl-foot">
     <div>${(PAGE*PAGE_SIZE+1)}–${Math.min((PAGE+1)*PAGE_SIZE,TOTAL)} dari ${TOTAL}</div>
     <div style="display:flex;gap:6px">
       <button class="btn-sm" onclick="loadPage(${PAGE-1})" ${PAGE===0?"disabled":""}>← Sebelumnya</button>
       <button class="btn-sm" onclick="loadPage(${PAGE+1})" ${PAGE>=totalPages-1?"disabled":""}>Berikutnya →</button>
     </div>
-  </div>`;
+  </div>`:"";
 
   document.getElementById("tblWrap").innerHTML=html+footer;
 }

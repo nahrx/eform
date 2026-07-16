@@ -153,7 +153,7 @@ function uniqueCopyName(base){const used=allUsedNames();let n=1,name=`${base}_co
 function newPage(){return {uid:uid(),kind:"page",name:autoName("page"),title:"",visibleWhen:"",components:[]};}
 function newBlock(){return {uid:uid(),kind:"block",name:autoName("block"),title:"",visibleWhen:"",components:[]};}
 function newSection(){return {uid:uid(),kind:"section",name:autoName("section"),title:"",visibleWhen:"",components:[]};}
-function newRoster(rt){return {uid:uid(),kind:"roster",name:autoName("roster"),title:"",rowTitle:"",rosterType:rt||"inline",min:"",max:"",countFrom:"",itemLabel:"",rowDefaults:"",rowDisplay:[],visibleWhen:"",components:[]};}
+function newRoster(rt){return {uid:uid(),kind:"roster",name:autoName("roster"),title:"",rowTitle:"",rosterType:rt||"inline",min:"",max:"",countFrom:"",requiredRows:false,itemLabel:"",rowDefaults:"",rowDisplay:[],visibleWhen:"",components:[]};}
 function newField(type){const f={uid:uid(),kind:"field",type,name:autoName(type),label:"",hint:"",required:false,readOnly:false,promptOnAdd:false,visibleWhen:"",enableWhen:"",requiredWhen:"",allowRemark:false,defaultValue:""};
   if(CHOICE.has(type)){f.options=[{value:"1",label:"Opsi 1"}];f.optionSource="manual";f.optionsRef="";f.optionsFilterBy="";f.optionsApi={};}
   if(NUMERIC.has(type)){f.min="";f.max="";f.step="";f.unit="";}
@@ -525,6 +525,7 @@ function rosterForm(n){
   <div class="field"><label>Judul baris roster <span class="help">mis. "Usaha" — dipakai di tombol &amp; popup tambah baris</span></label><input class="ctrl" data-k="rowTitle" placeholder="Usaha" value="${esc(n.rowTitle||"")}"></div>
   <div class="row2"><div class="field"><label>Min baris</label><input class="ctrl" type="number" step="1" min="0" inputmode="numeric" data-k="min" value="${esc(n.min??"")}"></div><div class="field"><label>Maks baris</label><input class="ctrl" type="number" step="1" min="0" inputmode="numeric" data-k="max" value="${esc(n.max??"")}"></div></div>
   <div class="field"><label>Jumlah baris dari field (countFrom) <span class="help">otomatis generate baris; kosongkan untuk pakai tombol "+ Tambah ${n.rowTitle?esc(n.rowTitle):"baris"}" dengan popup</span></label><input class="ctrl mono" data-k="countFrom" value="${esc(n.countFrom||"")}"></div>
+  <div class="field"><label class="chk"><input type="checkbox" data-k="requiredRows" ${n.requiredRows?"checked":""}> Wajib ada penambahan baris (minimal 1 baris)</label></div>
   <div class="field"><label>Label tiap baris (itemLabel)</label><input class="ctrl" data-k="itemLabel" placeholder="Usaha {{index}}: \${nama}" value="${esc(n.itemLabel||"")}"></div>
   ${rowDefaultEditor}
   ${dispBlock}
@@ -628,7 +629,7 @@ function serNode(n){
   if(n.kind==="page"){const o={kind:"page",name:n.name};if(clean(n.title))o.title=loc(n.title);if(clean(n.visibleWhen))o.visibleWhen=n.visibleWhen;o.components=n.components.map(serNode);return o;}
   if(n.kind==="block"){const o={kind:"block",name:n.name,layout:"card"};if(clean(n.title))o.title=loc(n.title);if(clean(n.visibleWhen))o.visibleWhen=n.visibleWhen;o.components=n.components.map(serNode);return o;}
   if(n.kind==="section"){const o={kind:"section",name:n.name,layout:"bordered"};if(clean(n.title))o.title=loc(n.title);if(clean(n.visibleWhen))o.visibleWhen=n.visibleWhen;o.components=n.components.map(serNode);return o;}
-  if(n.kind==="roster"){const o={kind:"roster",name:n.name,rosterType:n.rosterType};if(clean(n.title))o.title=loc(n.title);if(clean(n.rowTitle))o.rowTitle=n.rowTitle;["min","max"].forEach(k=>{if(clean(n[k]))o[k]=num(n[k]);});if(clean(n.countFrom))o.countFrom=n.countFrom;if(clean(n.itemLabel))o.itemLabel=loc(n.itemLabel);if(clean(n.rowDefaults))o.rowDefaults=loc(n.rowDefaults);if(n.rowDisplay&&n.rowDisplay.length)o.rowDisplay=n.rowDisplay;if(clean(n.visibleWhen))o.visibleWhen=n.visibleWhen;o.components=n.components.map(serNode);return o;}
+  if(n.kind==="roster"){const o={kind:"roster",name:n.name,rosterType:n.rosterType};if(clean(n.title))o.title=loc(n.title);if(clean(n.rowTitle))o.rowTitle=n.rowTitle;["min","max"].forEach(k=>{if(clean(n[k]))o[k]=num(n[k]);});if(clean(n.countFrom))o.countFrom=n.countFrom;if(n.requiredRows)o.requiredRows=true;if(clean(n.itemLabel))o.itemLabel=loc(n.itemLabel);if(clean(n.rowDefaults))o.rowDefaults=loc(n.rowDefaults);if(n.rowDisplay&&n.rowDisplay.length)o.rowDisplay=n.rowDisplay;if(clean(n.visibleWhen))o.visibleWhen=n.visibleWhen;o.components=n.components.map(serNode);return o;}
   const c=n,o={kind:"field",name:c.name,type:c.type};
   if(c.type!=="note"&&clean(c.label))o.label=loc(c.label);
   if(clean(c.hint))o.hint=loc(c.hint);
@@ -694,7 +695,7 @@ function importJSON(obj){try{
 function impNode(n,forceKind){
   const kind=forceKind||n.kind||"field";
   if(kind==="page"||kind==="block"||kind==="section"){return {uid:uid(),kind,name:n.name||autoName(kind),title:textOf(n.title),visibleWhen:n.visibleWhen||"",components:(n.components||[]).map(c=>impNode(c))};}
-  if(kind==="roster"){return {uid:uid(),kind:"roster",name:n.name||autoName("roster"),title:textOf(n.title),rowTitle:n.rowTitle||"",rosterType:n.rosterType||"inline",min:n.min??"",max:n.max??"",countFrom:n.countFrom||"",itemLabel:textOf(n.itemLabel),rowDefaults:textOf(n.rowDefaults),rowDisplay:n.rowDisplay||[],visibleWhen:n.visibleWhen||"",components:(n.components||[]).map(c=>impNode(c))};}
+  if(kind==="roster"){return {uid:uid(),kind:"roster",name:n.name||autoName("roster"),title:textOf(n.title),rowTitle:n.rowTitle||"",rosterType:n.rosterType||"inline",min:n.min??"",max:n.max??"",countFrom:n.countFrom||"",requiredRows:!!n.requiredRows,itemLabel:textOf(n.itemLabel),rowDefaults:textOf(n.rowDefaults),rowDisplay:n.rowDisplay||[],visibleWhen:n.visibleWhen||"",components:(n.components||[]).map(c=>impNode(c))};}
   const f=newField(n.type||"text");f.uid=uid();f.name=n.name||f.name;f.label=textOf(n.label);f.hint=textOf(n.hint);f.html=textOf(n.html);f.markdown=textOf(n.markdown);f.calculate=n.calculate||"";f.autofill=!!n.autofill;
   ["required","readOnly","allowRemark","promptOnAdd","visibleWhen","enableWhen","requiredWhen","unit","pattern","optionsRef","optionsFilterBy","min","max","step","maxLength","defaultValue"].forEach(k=>{if(n[k]!=null)f[k]=n[k];});
   f.placeholder=textOf(n.placeholder);
@@ -1187,7 +1188,7 @@ function renderRosterRowPage(){
   let h=`<div class="pv-page"><div class="pv-rrow-hdr"><div class="pv-rrow-bread"><button id="pvBack" class="pv-rrow-back">← ${pageTitle}</button><span class="pv-rrow-sep">›</span><span class="pv-rrow-rname">${rosterTitle}</span><span class="pv-rrow-num">Baris ${i+1} dari ${total}</span></div><div class="pv-rrow-title">${rowLabel(r,i)}</div></div>${fieldsHtml}</div>`;
   body.innerHTML=h;
   const navArea=document.getElementById("pvNavArea");
-  if(navArea)navArea.innerHTML=`<div class="pv-nav"><span></span><button class="btn primary" id="pvBackDone">Simpan baris &amp; kembali</button></div>`;
+  if(navArea)navArea.innerHTML=`<div class="pv-nav"><span></span><button class="btn primary" id="pvBackDone">Simpan &amp; kembali</button></div>`;
   bindPreview(body);body.scrollTop=keep;
   document.getElementById("pvBack")?.addEventListener("click",backFromRow);
   document.getElementById("pvBackDone")?.addEventListener("click",backFromRow);

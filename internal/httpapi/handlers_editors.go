@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -65,7 +66,7 @@ func (s *Server) listEditors(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) deleteEditor(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if err := s.st.DeleteUser(r.Context(), id); err != nil {
+	if err := s.st.DeleteUserByRole(r.Context(), id, "editor"); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeErr(w, http.StatusNotFound, "editor tidak ditemukan")
 			return
@@ -315,13 +316,13 @@ func (s *Server) editorUpdateResponse(w http.ResponseWriter, r *http.Request) {
 	formID := r.PathValue("id")
 	responseID := r.PathValue("responseId")
 
-	ok, err := s.st.HasEditorFormPermission(r.Context(), editorID, formID)
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+	perm, err := s.st.GetEditorPermissionByEditorAndForm(r.Context(), editorID, formID)
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusForbidden, "tidak memiliki akses ke kuesioner ini")
 		return
 	}
-	if !ok {
-		writeErr(w, http.StatusForbidden, "tidak memiliki akses ke kuesioner ini")
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
 		return
 	}
 
@@ -341,7 +342,20 @@ func (s *Server) editorUpdateResponse(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "status tidak valid")
 		return
 	}
-	if err := s.st.UpdateResponseAnswers(r.Context(), formID, responseID, in.Status, in.Answers); err != nil {
+	if len(perm.FieldFilters) > 0 {
+		var m map[string]any
+		if err := json.Unmarshal(in.Answers, &m); err != nil {
+			writeErr(w, http.StatusBadRequest, "format jawaban tidak valid")
+			return
+		}
+		for field, required := range perm.FieldFilters {
+			if v, ok := m[field]; !ok || fmt.Sprint(v) != required {
+				writeErr(w, http.StatusForbidden, "jawaban tidak sesuai dengan izin edit yang diberikan")
+				return
+			}
+		}
+	}
+	if err := s.st.UpdateResponseAnswers(r.Context(), formID, responseID, in.Answers); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeErr(w, http.StatusNotFound, "respons tidak ditemukan")
 			return

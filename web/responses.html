@@ -517,7 +517,7 @@ function buildColPicker(){
   if(!ALL_FIELDS.length){list.innerHTML='<div class="col-hint">Tidak ada field tersedia.</div>';return;}
   list.innerHTML=ALL_FIELDS.map(f=>`<label class="col-item">
     <input type="checkbox" value="${esc(f.name)}" ${SEL_COLS.includes(f.name)?"checked":""}>
-    <label>${esc(f.label)}</label>
+    <span>${esc(f.label)}</span>
   </label>`).join("");
   list.querySelectorAll("input[type=checkbox]").forEach(cb=>{
     cb.addEventListener("change",()=>{

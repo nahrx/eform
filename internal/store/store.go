@@ -1,4 +1,4 @@
-package store
+﻿package store
 
 import (
 	"context"
@@ -19,8 +19,8 @@ type ResponseFilter struct {
 	Search            string            // pencarian parsial pada meta.name / meta.email
 	SortBy            string            // 'waktu'|'status'|'share'|'who'|nama_field_schema
 	SortDir           string            // 'asc'|'desc'
-	FieldFilters      map[string]string // fieldName → nilai teks (ILIKE, untuk field bebas)
-	FieldExactFilters map[string]string // fieldName → nilai pasti (=, untuk dropdown/radio)
+	FieldFilters      map[string]string // fieldName â†’ nilai teks (ILIKE, untuk field bebas)
+	FieldExactFilters map[string]string // fieldName â†’ nilai pasti (=, untuk dropdown/radio)
 }
 
 // isSafeIdentifier memvalidasi nama field schema agar aman diinterpolasi ke SQL.
@@ -133,9 +133,28 @@ func (s *Store) GetUserByUsername(ctx context.Context, username string) (*models
 	return u, nil
 }
 
+func (s *Store) GetUser(ctx context.Context, id string) (*models.User, error) {
+	u := &models.User{}
+	var em *string
+	err := s.pool.QueryRow(ctx,
+		`SELECT id,username,email,role,is_active,created_at,updated_at FROM users WHERE id=$1`, id,
+	).Scan(&u.ID, &u.Username, &em, &u.Role, &u.IsActive, &u.CreatedAt, &u.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if em != nil {
+		u.Email = *em
+	}
+	return u, nil
+}
+
 func (s *Store) ListUsers(ctx context.Context) ([]models.User, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id,username,email,role,is_active,created_at,updated_at FROM users ORDER BY created_at`)
+		`SELECT id,username,email,role,is_active,created_at,updated_at FROM users
+		 WHERE role IN ('admin','superadmin') ORDER BY created_at`)
 	if err != nil {
 		return nil, err
 	}
@@ -155,14 +174,15 @@ func (s *Store) ListUsers(ctx context.Context) ([]models.User, error) {
 	return out, rows.Err()
 }
 
-// UpdateAdminUser mengupdate username, email, dan role user admin/superadmin.
+// UpdateAdminUser mengupdate username, email, dan role user — hanya untuk admin/superadmin.
 func (s *Store) UpdateAdminUser(ctx context.Context, id, username, email, role string) error {
 	var emailArg any
 	if email != "" {
 		emailArg = email
 	}
 	ct, err := s.pool.Exec(ctx,
-		`UPDATE users SET username=$1, email=$2, role=$3, updated_at=now() WHERE id=$4`,
+		`UPDATE users SET username=$1, email=$2, role=$3, updated_at=now()
+		 WHERE id=$4 AND role IN ('admin','superadmin')`,
 		username, emailArg, role, id)
 	if err != nil {
 		return err
@@ -423,8 +443,8 @@ func (s *Store) RevokeShare(ctx context.Context, id string) error {
 }
 
 // UpdateShare memperbarui konfigurasi share yang masih aktif.
-// updatePassword=true  → password_hash diubah ke passwordHash (nil berarti hapus password).
-// updateExpiry=true    → expires_at diubah ke expiresAt (nil berarti hapus expiry).
+// updatePassword=true  â†’ password_hash diubah ke passwordHash (nil berarti hapus password).
+// updateExpiry=true    â†’ expires_at diubah ke expiresAt (nil berarti hapus expiry).
 func (s *Store) UpdateShare(ctx context.Context, id, label string, allowResponses, multiResponse bool, accessMode string, updatePassword bool, passwordHash *string, updateExpiry bool, expiresAt *time.Time) (*models.Share, error) {
 	if accessMode != "public" && accessMode != "restricted" {
 		accessMode = "public"
@@ -601,6 +621,59 @@ func (s *Store) GetResponseByID(ctx context.Context, id string) (*models.Respons
 	return r, nil
 }
 
+// GetFormAnswerColumns mengembalikan semua nama kunci JSONB dari kolom answers untuk satu form.
+// Digunakan untuk membangun header CSV sebelum streaming baris.
+func (s *Store) GetFormAnswerColumns(ctx context.Context, formID string) ([]string, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT DISTINCT jsonb_object_keys(answers)
+		FROM (
+			SELECT answers FROM form_responses WHERE form_id=$1
+			UNION ALL
+			SELECT answers FROM response_drafts WHERE form_id=$1
+		) sub
+		WHERE answers IS NOT NULL AND answers != '{}'::jsonb
+		ORDER BY 1`, formID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var cols []string
+	for rows.Next() {
+		var col string
+		if err := rows.Scan(&col); err != nil {
+			return nil, err
+		}
+		cols = append(cols, col)
+	}
+	return cols, rows.Err()
+}
+
+// ForEachResponseByForm memanggil fn untuk setiap respons tanpa batasan jumlah (streaming).
+func (s *Store) ForEachResponseByForm(ctx context.Context, formID string, fn func(models.Response) error) error {
+	q := `SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at FROM (
+		  SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at
+		    FROM form_responses WHERE form_id=$1
+		  UNION ALL
+		  SELECT id,form_id,share_id,respondent_id,'draft'::text,answers,'{}'::jsonb,saved_at
+		    FROM response_drafts WHERE form_id=$1
+		) combined ORDER BY submitted_at DESC`
+	rows, err := s.pool.Query(ctx, q, formID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		r := models.Response{}
+		if err := rows.Scan(&r.ID, &r.FormID, &r.ShareID, &r.RespondentID, &r.Status, &r.Answers, &r.Meta, &r.SubmittedAt); err != nil {
+			return err
+		}
+		if err := fn(r); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
+}
+
 // ListAllResponsesByForm mengembalikan semua respons (form_responses + response_drafts) untuk tampilan admin.
 // Mendukung filter status/shareId/search/per-field dan sort dinamis termasuk field schema.
 func (s *Store) ListAllResponsesByForm(ctx context.Context, formID string, f ResponseFilter, limit, offset int) ([]models.Response, error) {
@@ -626,7 +699,7 @@ func (s *Store) ListAllResponsesByForm(ctx context.Context, formID string, f Res
 	}
 
 	where, wArgs := buildResponseWhere(f)
-	// args: $1=formID, lalu wArgs sebagai $2…$N, lalu limit=$N+1, offset=$N+2
+	// args: $1=formID, lalu wArgs sebagai $2â€¦$N, lalu limit=$N+1, offset=$N+2
 	args := append([]any{formID}, wArgs...)
 	args = append(args, limit, offset)
 	limitN, offsetN := len(args)-1, len(args)
@@ -687,8 +760,8 @@ func (s *Store) HasDraftResponse(ctx context.Context, formID, respondentID strin
 }
 
 // UpdateMultiResponseDraft memperbarui jawaban draf yang ada.
-// newStatus='draft'     → update jawaban saja.
-// newStatus='submitted' → update jawaban + submitted_at=now().
+// newStatus='draft'     â†’ update jawaban saja.
+// newStatus='submitted' â†’ update jawaban + submitted_at=now().
 // Hanya berhasil jika baris masih berstatus 'draft' dan milik respondentID pada formID yang sama.
 func (s *Store) UpdateMultiResponseDraft(ctx context.Context, id, respondentID, formID, newStatus string, answers, meta json.RawMessage) (*models.Response, error) {
 	if len(answers) == 0 {
@@ -721,7 +794,7 @@ func (s *Store) UnsubmitResponse(ctx context.Context, id, respondentID, formID s
 		formID, respondentID, id,
 	).Scan(&draftExists)
 	if draftExists {
-		return nil, errors.New("sudah ada draf lain — selesaikan atau batalkan draf tersebut terlebih dahulu")
+		return nil, errors.New("sudah ada draf lain â€” selesaikan atau batalkan draf tersebut terlebih dahulu")
 	}
 	r := &models.Response{}
 	err := s.pool.QueryRow(ctx,
@@ -799,12 +872,16 @@ func (s *Store) UpsertResponse(ctx context.Context, formID string, shareID *stri
 	return r, err
 }
 
-// GetResponseByFormAndRespondent mengembalikan jawaban yang pernah dikirim responden untuk form ini.
+// GetResponseByFormAndRespondent mengembalikan jawaban responden untuk form ini (single-response).
+// Menyertakan status 'draft' agar respons yang baru dibatalkan pengirimannya (unsubmit)
+// tetap bisa dimuat kembali untuk diedit.
 func (s *Store) GetResponseByFormAndRespondent(ctx context.Context, formID, respondentID string) (*models.Response, error) {
 	r := &models.Response{}
 	err := s.pool.QueryRow(ctx,
 		`SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at
-		 FROM form_responses WHERE form_id=$1 AND respondent_id=$2 AND status='submitted'`,
+		 FROM form_responses
+		 WHERE form_id=$1 AND respondent_id=$2 AND status IN ('submitted','draft')
+		 ORDER BY submitted_at DESC LIMIT 1`,
 		formID, respondentID,
 	).Scan(&r.ID, &r.FormID, &r.ShareID, &r.RespondentID, &r.Status, &r.Answers, &r.Meta, &r.SubmittedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -990,9 +1067,47 @@ func (s *Store) UpdateUserNote(ctx context.Context, id, note string) error {
 	return nil
 }
 
+// DeleteAdminUser menghapus user admin/superadmin — tidak bisa hapus viewer/editor.
+func (s *Store) DeleteAdminUser(ctx context.Context, id string) error {
+	ct, err := s.pool.Exec(ctx, `DELETE FROM users WHERE id=$1 AND role IN ('admin','superadmin')`, id)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // DeleteUser menghapus user secara permanen (dimaksudkan untuk viewer).
 func (s *Store) DeleteUser(ctx context.Context, id string) error {
 	ct, err := s.pool.Exec(ctx, `DELETE FROM users WHERE id=$1`, id)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// DeleteUserByRole menghapus user hanya jika role-nya sesuai (mencegah penghapusan silang antar jenis user).
+func (s *Store) DeleteUserByRole(ctx context.Context, id, role string) error {
+	ct, err := s.pool.Exec(ctx, `DELETE FROM users WHERE id=$1 AND role=$2`, id, role)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// UpdateUserNoteByRole memperbarui catatan user hanya jika role-nya sesuai.
+func (s *Store) UpdateUserNoteByRole(ctx context.Context, id, note, role string) error {
+	ct, err := s.pool.Exec(ctx,
+		`UPDATE users SET note=$1, updated_at=now() WHERE id=$2 AND role=$3`,
+		note, id, role)
 	if err != nil {
 		return err
 	}
@@ -1427,25 +1542,48 @@ func (s *Store) IsRespondentAllowedForViewer(ctx context.Context, permID, respon
 }
 
 // UpdateResponseAnswers memperbarui jawaban respons (submitted atau draft) oleh editor.
-func (s *Store) UpdateResponseAnswers(ctx context.Context, formID, responseID, status string, answers json.RawMessage) error {
-	var ct interface{ RowsAffected() int64 }
-	var err error
-	if status == "draft" {
-		res, e := s.pool.Exec(ctx,
-			`UPDATE response_drafts SET answers=$1, saved_at=now() WHERE id=$2 AND form_id=$3`,
-			answers, responseID, formID)
-		ct, err = res, e
-	} else {
-		res, e := s.pool.Exec(ctx,
-			`UPDATE form_responses SET answers=$1 WHERE id=$2 AND form_id=$3`,
-			answers, responseID, formID)
-		ct, err = res, e
-	}
+// Tabel target ditentukan dari DB (bukan dari klien) untuk mencegah manipulasi status.
+func (s *Store) UpdateResponseAnswers(ctx context.Context, formID, responseID string, answers json.RawMessage) error {
+	res, err := s.pool.Exec(ctx,
+		`UPDATE form_responses SET answers=$1 WHERE id=$2 AND form_id=$3`,
+		answers, responseID, formID)
 	if err != nil {
 		return err
 	}
-	if ct.RowsAffected() == 0 {
+	if res.RowsAffected() > 0 {
+		return nil
+	}
+	res2, err2 := s.pool.Exec(ctx,
+		`UPDATE response_drafts SET answers=$1, saved_at=now() WHERE id=$2 AND form_id=$3`,
+		answers, responseID, formID)
+	if err2 != nil {
+		return err2
+	}
+	if res2.RowsAffected() == 0 {
 		return ErrNotFound
+	}
+	return nil
+}
+
+// DeleteResponseByID menghapus satu jawaban (submitted maupun draft) berdasarkan ID dan formID.
+func (s *Store) DeleteResponseByID(ctx context.Context, formID, responseID string) error {
+	res, err := s.pool.Exec(ctx,
+		`DELETE FROM form_responses WHERE id=$1 AND form_id=$2`,
+		responseID, formID)
+	if err != nil {
+		return err
+	}
+	if res.RowsAffected() == 0 {
+		// Coba di response_drafts
+		res2, err2 := s.pool.Exec(ctx,
+			`DELETE FROM response_drafts WHERE id=$1 AND form_id=$2`,
+			responseID, formID)
+		if err2 != nil {
+			return err2
+		}
+		if res2.RowsAffected() == 0 {
+			return ErrNotFound
+		}
 	}
 	return nil
 }
@@ -1485,6 +1623,7 @@ func (s *Store) GetEditorPermissionByID(ctx context.Context, permID string) (*mo
 	}
 	return p, err
 }
+
 
 // ListFormEditorPermissions mengembalikan semua editor yang punya akses ke satu kuesioner.
 func (s *Store) ListFormEditorPermissions(ctx context.Context, formID string) ([]models.EditorFormPermission, error) {

@@ -11,9 +11,10 @@ body{font-family:ui-sans-serif,system-ui,sans-serif;display:flex;align-items:cen
 <span>Login berhasil, mengalihkan…</span>
 <script>
 (function(){
-  const p=new URLSearchParams(location.search);
+  const p=new URLSearchParams(location.hash.slice(1));
   const token=p.get("token");
-  const next=p.get("next")||"/";
+  const rawNext=p.get("next")||"/";
+  const next=(rawNext.startsWith("/")&&!rawNext.startsWith("//"))?rawNext:"/";
   const type=p.get("type")||"";
   if(token){
     if(type==="viewer"||type==="editor"){

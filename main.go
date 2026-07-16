@@ -33,7 +33,7 @@ func main() {
 	}
 
 	st := store.New(pool)
-	am := auth.NewManager(cfg.JWTSecret, cfg.JWTTTL)
+	am := auth.NewManager(cfg.JWTSecret, cfg.JWTRespondentSecret, cfg.JWTTTL)
 
 	if err := seedSuperadmin(ctx, st, cfg.Seed); err != nil {
 		log.Fatalf("seed superadmin: %v", err)

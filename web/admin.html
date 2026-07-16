@@ -121,7 +121,7 @@
       </div>
       <div id="newEmailList" style="margin-top:8px"></div>
     </div>
-    <div class="row"><input id="sharePw" type="text" placeholder="Password (opsional)" style="flex:1"></div>
+    <div class="row"><input id="sharePw" type="password" placeholder="Password (opsional)" style="flex:1"></div>
     <button class="btn primary" id="makeShare">Buat tautan share</button>
     <div id="shareList" style="margin-top:14px"></div>
   </div>
@@ -322,6 +322,14 @@
       <button class="btn" onclick="epDetailDlg.close()">Batal</button>
       <button class="btn primary" onclick="saveEpDetail()">Simpan</button>
     </div>
+  </div>
+</dialog>
+
+<dialog id="confirmDlg" style="border:none;border-radius:12px;padding:28px 24px;max-width:380px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.2)">
+  <p id="confirmMsg" style="margin:0 0 20px;font-size:15px;line-height:1.5"></p>
+  <div style="display:flex;gap:10px;justify-content:flex-end">
+    <button id="confirmNo" class="btn" type="button">Batal</button>
+    <button id="confirmYes" class="btn danger" type="button">Ya, Lanjutkan</button>
   </div>
 </dialog>
 

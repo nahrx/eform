@@ -60,29 +60,31 @@ func (s *Server) listViewers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"viewers": viewers})
 }
 
-func (s *Server) patchUserNote(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	var in struct {
-		Note string `json:"note"`
-	}
-	if err := decodeJSON(r, &in); err != nil {
-		writeErr(w, http.StatusBadRequest, "format permintaan salah")
-		return
-	}
-	if err := s.st.UpdateUserNote(r.Context(), id, strings.TrimSpace(in.Note)); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeErr(w, http.StatusNotFound, "user tidak ditemukan")
+func (s *Server) patchNoteWithRole(role string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		var in struct {
+			Note string `json:"note"`
+		}
+		if err := decodeJSON(r, &in); err != nil {
+			writeErr(w, http.StatusBadRequest, "format permintaan salah")
 			return
 		}
-		writeErr(w, http.StatusInternalServerError, "gagal memperbarui")
-		return
+		if err := s.st.UpdateUserNoteByRole(r.Context(), id, strings.TrimSpace(in.Note), role); err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				writeErr(w, http.StatusNotFound, role+" tidak ditemukan")
+				return
+			}
+			writeErr(w, http.StatusInternalServerError, "gagal memperbarui")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 }
 
 func (s *Server) deleteViewer(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if err := s.st.DeleteUser(r.Context(), id); err != nil {
+	if err := s.st.DeleteUserByRole(r.Context(), id, "viewer"); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeErr(w, http.StatusNotFound, "viewer tidak ditemukan")
 			return
@@ -327,28 +329,6 @@ func (s *Server) listFormRespondents(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"respondents": respondents})
 }
 
-func (s *Server) ensureAdminFormScope(w http.ResponseWriter, r *http.Request, formID string) bool {
-	u := userFrom(r.Context())
-	if u == nil {
-		writeErr(w, http.StatusUnauthorized, "perlu login")
-		return false
-	}
-	if u.Role == "superadmin" {
-		return true
-	}
-	if u.Role != "admin" {
-		writeErr(w, http.StatusForbidden, "akses ditolak")
-		return false
-	}
-	if strings.TrimSpace(formID) == "" {
-		writeErr(w, http.StatusBadRequest, "formId wajib diisi untuk admin")
-		return false
-	}
-	if _, ok := s.ensureFormAccess(w, r, formID); !ok {
-		return false
-	}
-	return true
-}
 
 /* ================================================================
    VIEWER — endpoint yang dipanggil viewer setelah login
@@ -410,8 +390,12 @@ func (s *Server) viewerListResponses(w http.ResponseWriter, r *http.Request) {
 	formID := r.PathValue("id")
 
 	// Pastikan viewer punya akses
-	if _, err := s.st.GetViewerPermission(r.Context(), viewerID, formID); errors.Is(err, store.ErrNotFound) {
-		writeErr(w, http.StatusForbidden, "tidak memiliki akses ke kuesioner ini")
+	if _, err := s.st.GetViewerPermission(r.Context(), viewerID, formID); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusForbidden, "tidak memiliki akses ke kuesioner ini")
+		} else {
+			writeErr(w, http.StatusInternalServerError, "gagal memeriksa akses")
+		}
 		return
 	}
 

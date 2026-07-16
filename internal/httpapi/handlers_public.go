@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"time"
 
@@ -33,9 +34,6 @@ func (s *Server) resolveShare(w http.ResponseWriter, r *http.Request) (*models.S
 	}
 	if sh.PasswordHash != nil {
 		pw := r.Header.Get("X-Share-Password")
-		if pw == "" {
-			pw = r.URL.Query().Get("password")
-		}
 		if !auth.CheckPassword(*sh.PasswordHash, pw) {
 			writeErr(w, http.StatusUnauthorized, "password tautan salah")
 			return nil, false
@@ -217,6 +215,14 @@ func (s *Server) publicSubmit(w http.ResponseWriter, r *http.Request) {
 			}
 			resp, err = s.st.CreateMultiResponseRow(r.Context(), sh.FormID, &sid, rc.RespondentID, status, in.Answers, metaJSON)
 		}
+	} else if in.ResponseID != "" {
+		// Single-response: menyelesaikan kembali respons yang sebelumnya dibatalkan
+		// pengirimannya (unsubmit -> status 'draft') menjadi 'submitted'.
+		resp, err = s.st.UpdateMultiResponseDraft(r.Context(), in.ResponseID, rc.RespondentID, sh.FormID, "submitted", in.Answers, metaJSON)
+		if errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "respons tidak ditemukan atau bukan milik Anda")
+			return
+		}
 	} else {
 		// Single-response: upsert (satu respons per respondent)
 		resp, err = s.st.UpsertResponse(r.Context(), sh.FormID, &sid, rc.RespondentID, in.Answers, metaJSON)
@@ -348,8 +354,10 @@ func (s *Server) wilayahList(w http.ResponseWriter, r *http.Request) {
 }
 
 func clientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		return xff
+	// Gunakan RemoteAddr langsung — X-Forwarded-For bisa dipalsukan client
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
 	}
-	return r.RemoteAddr
+	return host
 }

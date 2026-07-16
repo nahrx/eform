@@ -21,24 +21,25 @@ func (s *Server) Routes() http.Handler {
 	mux.Handle("GET /api/forms", s.authMW(s.listForms))
 	mux.Handle("POST /api/forms", s.authMW(s.createForm))
 	mux.Handle("GET /api/forms/{id}", s.authMW(s.getForm))
-	mux.Handle("PUT /api/forms/{id}", s.authMW(s.updateForm))
-	mux.Handle("DELETE /api/forms/{id}", s.authMW(s.deleteForm))
-	mux.Handle("POST /api/forms/{id}/publish", s.authMW(s.publishForm))
+	mux.Handle("PUT /api/forms/{id}", s.authMW(s.requireRole(s.updateForm, "superadmin", "admin")))
+	mux.Handle("DELETE /api/forms/{id}", s.authMW(s.requireRole(s.deleteForm, "superadmin", "admin")))
+	mux.Handle("POST /api/forms/{id}/publish", s.authMW(s.requireRole(s.publishForm, "superadmin", "admin")))
 	mux.Handle("PUT /api/forms/{id}/column-config", s.authMW(s.requireRole(s.saveFormColumnConfig, "superadmin", "admin")))
 
 	// --- shares ---
-	mux.Handle("POST /api/forms/{id}/shares", s.authMW(s.createShare))
+	mux.Handle("POST /api/forms/{id}/shares", s.authMW(s.requireRole(s.createShare, "superadmin", "admin")))
 	mux.Handle("GET /api/forms/{id}/shares", s.authMW(s.listShares))
-	mux.Handle("PATCH /api/shares/{id}", s.authMW(s.updateShare))
-	mux.Handle("DELETE /api/shares/{id}", s.authMW(s.revokeShare))
-	mux.Handle("DELETE /api/shares/{id}/permanent", s.authMW(s.deleteSharePermanent))
+	mux.Handle("PATCH /api/shares/{id}", s.authMW(s.requireRole(s.updateShare, "superadmin", "admin")))
+	mux.Handle("DELETE /api/shares/{id}", s.authMW(s.requireRole(s.revokeShare, "superadmin", "admin")))
+	mux.Handle("DELETE /api/shares/{id}/permanent", s.authMW(s.requireRole(s.deleteSharePermanent, "superadmin", "admin")))
 	mux.Handle("GET /api/shares/{id}/allowed-emails", s.authMW(s.listAllowedEmails))
-	mux.Handle("POST /api/shares/{id}/allowed-emails", s.authMW(s.addAllowedEmail))
-	mux.Handle("DELETE /api/share-emails/{id}", s.authMW(s.removeAllowedEmail))
+	mux.Handle("POST /api/shares/{id}/allowed-emails", s.authMW(s.requireRole(s.addAllowedEmail, "superadmin", "admin")))
+	mux.Handle("DELETE /api/share-emails/{id}", s.authMW(s.requireRole(s.removeAllowedEmail, "superadmin", "admin")))
 
 	// --- responses ---
 	mux.Handle("GET /api/forms/{id}/responses", s.authMW(s.listResponses))
 	mux.Handle("GET /api/forms/{id}/responses/{responseId}", s.authMW(s.getResponseDetail))
+	mux.Handle("DELETE /api/forms/{id}/responses/{responseId}", s.authMW(s.requireRole(s.deleteResponse, "superadmin", "admin")))
 	mux.Handle("GET /api/forms/{id}/responses.csv", s.authMW(s.exportResponses))
 
 	// --- users (khusus superadmin) ---
@@ -50,13 +51,13 @@ func (s *Server) Routes() http.Handler {
 	// --- viewers (superadmin kelola akun viewer) ---
 	mux.Handle("POST /api/viewers", s.authMW(s.requireRole(s.createViewer, "superadmin", "admin")))
 	mux.Handle("GET /api/viewers", s.authMW(s.requireRole(s.listViewers, "superadmin", "admin")))
-	mux.Handle("PATCH /api/viewers/{id}", s.authMW(s.requireRole(s.patchUserNote, "superadmin", "admin")))
+	mux.Handle("PATCH /api/viewers/{id}", s.authMW(s.requireRole(s.patchNoteWithRole("viewer"), "superadmin", "admin")))
 	mux.Handle("DELETE /api/viewers/{id}", s.authMW(s.requireRole(s.deleteViewer, "superadmin", "admin")))
 
 	// --- editors (superadmin kelola akun editor) ---
 	mux.Handle("POST /api/editors", s.authMW(s.requireRole(s.createEditor, "superadmin", "admin")))
 	mux.Handle("GET /api/editors", s.authMW(s.requireRole(s.listEditors, "superadmin", "admin")))
-	mux.Handle("PATCH /api/editors/{id}", s.authMW(s.requireRole(s.patchUserNote, "superadmin", "admin")))
+	mux.Handle("PATCH /api/editors/{id}", s.authMW(s.requireRole(s.patchNoteWithRole("editor"), "superadmin", "admin")))
 	mux.Handle("DELETE /api/editors/{id}", s.authMW(s.requireRole(s.deleteEditor, "superadmin", "admin")))
 
 	// --- viewer permissions per form (superadmin) ---

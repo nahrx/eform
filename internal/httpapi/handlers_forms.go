@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -456,7 +455,10 @@ func (s *Server) listResponses(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
 		return
 	}
-	count, _ := s.st.CountAllResponsesByForm(r.Context(), formID, f)
+	count, err := s.st.CountAllResponsesByForm(r.Context(), formID, f)
+	if err != nil {
+		count = int64(len(resp))
+	}
 	if resp == nil {
 		resp = []models.Response{}
 	}
@@ -483,6 +485,23 @@ func (s *Server) getResponseDetail(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+func (s *Server) deleteResponse(w http.ResponseWriter, r *http.Request) {
+	formID := r.PathValue("id")
+	if _, ok := s.ensureFormAccess(w, r, formID); !ok {
+		return
+	}
+	responseID := r.PathValue("responseId")
+	if err := s.st.DeleteResponseByID(r.Context(), formID, responseID); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "jawaban tidak ditemukan")
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, "gagal menghapus jawaban")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
 func (s *Server) exportResponses(w http.ResponseWriter, r *http.Request) {
 	if !s.ensureResultAccess(w, r) {
 		return
@@ -491,41 +510,45 @@ func (s *Server) exportResponses(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.ensureFormAccess(w, r, formID); !ok {
 		return
 	}
-	resp, err := s.st.ListResponsesByForm(r.Context(), formID, 1000, 0)
+	// 1. Ambil nama kolom via query ringan (tanpa memuat semua baris)
+	cols, err := s.st.GetFormAnswerColumns(r.Context(), formID)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
 		return
 	}
-	// kumpulkan union kolom dari semua jawaban
-	colSet := map[string]bool{}
-	parsed := make([]map[string]any, len(resp))
-	for i, rr := range resp {
-		m := map[string]any{}
-		_ = json.Unmarshal(rr.Answers, &m)
-		parsed[i] = m
-		for k := range m {
-			colSet[k] = true
-		}
-	}
-	cols := make([]string, 0, len(colSet))
-	for k := range colSet {
-		cols = append(cols, k)
-	}
-	sort.Strings(cols)
-
+	// 2. Set header sebelum streaming dimulai
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", "attachment; filename=\"responses-"+formID+".csv\"")
 	cw := csv.NewWriter(w)
-	header := append([]string{"id", "submitted_at"}, cols...)
+	header := append([]string{"id", "respondent_id", "nama", "email", "status", "waktu_kirim"}, cols...)
 	_ = cw.Write(header)
-	for i, rr := range resp {
-		row := []string{rr.ID, rr.SubmittedAt.Format(time.RFC3339)}
+	// 3. Stream setiap baris langsung ke CSV tanpa buffering di memori
+	_ = s.st.ForEachResponseByForm(r.Context(), formID, func(rr models.Response) error {
+		a := map[string]any{}
+		_ = json.Unmarshal(rr.Answers, &a)
+		m := map[string]any{}
+		_ = json.Unmarshal(rr.Meta, &m)
+		respondentID := ""
+		if rr.RespondentID != nil {
+			respondentID = *rr.RespondentID
+		}
+		waktu := ""
+		if !rr.SubmittedAt.IsZero() {
+			waktu = rr.SubmittedAt.Format(time.RFC3339)
+		}
+		row := []string{rr.ID, respondentID, toStr(m["name"]), toStr(m["email"]), rr.Status, waktu}
 		for _, c := range cols {
-			row = append(row, toStr(parsed[i][c]))
+			v := a[c]
+			if sv, ok := v.(string); ok && len(sv) > 200 && (strings.HasPrefix(sv, "data:image") || strings.HasPrefix(sv, "data:application")) {
+				row = append(row, "")
+			} else {
+				row = append(row, toStr(v))
+			}
 		}
 		_ = cw.Write(row)
-	}
-	cw.Flush()
+		cw.Flush()
+		return nil
+	})
 }
 
 // ensureResultAccess membatasi akses hasil/jawaban: editor tidak boleh mengakses.

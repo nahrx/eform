@@ -3,8 +3,10 @@ package httpapi
 import (
 	"context"
 	"log"
+	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bpskaltim/eform-backend/internal/auth"
@@ -25,9 +27,20 @@ func respondentFrom(ctx context.Context) *auth.RespondentClaims {
 	return c
 }
 
-// chain middleware terluar: recover -> log -> cors -> mux
+// chain middleware terluar: recover -> log -> cors -> securityHeaders -> mux
 func (s *Server) wrap(h http.Handler) http.Handler {
-	return s.recoverMW(s.logMW(s.corsMW(h)))
+	return s.recoverMW(s.logMW(s.corsMW(s.securityHeadersMW(h))))
+}
+
+func (s *Server) securityHeadersMW(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		w.Header().Set("Content-Security-Policy",
+			"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'")
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) corsMW(next http.Handler) http.Handler {
@@ -146,4 +159,57 @@ func (s *Server) requireRole(next http.HandlerFunc, roles ...string) http.Handle
 		}
 		writeErr(w, http.StatusForbidden, "akses ditolak")
 	}
+}
+
+// loginLimiter membatasi percobaan login per IP (max 10 per menit).
+type loginLimiter struct {
+	mu       sync.Mutex
+	attempts map[string][]time.Time
+}
+
+var loginRL = &loginLimiter{attempts: make(map[string][]time.Time)}
+
+func init() {
+	go func() {
+		for range time.Tick(5 * time.Minute) {
+			loginRL.mu.Lock()
+			cutoff := time.Now().Add(-time.Minute)
+			for ip, ts := range loginRL.attempts {
+				var valid []time.Time
+				for _, t := range ts {
+					if t.After(cutoff) {
+						valid = append(valid, t)
+					}
+				}
+				if len(valid) == 0 {
+					delete(loginRL.attempts, ip)
+				} else {
+					loginRL.attempts[ip] = valid
+				}
+			}
+			loginRL.mu.Unlock()
+		}
+	}()
+}
+
+func (l *loginLimiter) allow(r *http.Request) bool {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	cutoff := time.Now().Add(-time.Minute)
+	var valid []time.Time
+	for _, t := range l.attempts[host] {
+		if t.After(cutoff) {
+			valid = append(valid, t)
+		}
+	}
+	if len(valid) >= 10 {
+		l.attempts[host] = valid
+		return false
+	}
+	l.attempts[host] = append(valid, time.Now())
+	return true
 }

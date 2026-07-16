@@ -60,7 +60,7 @@ button,input,select,textarea{font-family:inherit}
 .page-title{font-size:18px;font-weight:700;margin:0 0 18px;color:var(--ink)}
 
 /* fixed page nav footer */
-.pg-foot{position:fixed;bottom:0;left:0;right:0;z-index:20;background:var(--panel);border-top:1px solid var(--line);padding:0 20px;box-shadow:0 -2px 16px rgba(19,23,30,.06)}
+.pg-foot{position:fixed;bottom:0;left:200px;right:0;z-index:20;background:var(--panel);border-top:1px solid var(--line);padding:0 20px;box-shadow:0 -2px 16px rgba(19,23,30,.06)}
 .pg-foot-in{max-width:760px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 0 14px}
 .pg-prog{font-size:12.5px;color:var(--muted);font-weight:500}
 
@@ -71,6 +71,8 @@ button,input,select,textarea{font-family:inherit}
 .rv-section-title{font-weight:600;font-size:13px;color:var(--ink-soft);margin-bottom:10px}
 .rv-field{padding:8px 0;border-bottom:1px solid var(--line-2);display:flex;flex-direction:column;gap:3px}
 .rv-field:last-child{border-bottom:none;padding-bottom:0}
+.rv-photo{max-width:280px;max-height:220px;border-radius:var(--radius-s);border:1.5px solid var(--line);object-fit:cover;display:block;cursor:zoom-in}
+.rv-photo-wrap{display:flex;flex-direction:column;gap:6px}
 .rv-label{font-size:12px;color:var(--muted);font-weight:500}
 .rv-desc{font-size:11.5px;color:var(--muted);margin-bottom:2px}
 .rv-answer{font-size:13.5px;font-weight:500;color:var(--ink);word-break:break-word}
@@ -120,10 +122,16 @@ button,input,select,textarea{font-family:inherit}
 .toast.err{background:var(--danger)}
 @keyframes slideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 
-@media(max-width:680px){.sidebar{display:none}.content{padding:16px 14px 80px}}
+@media(max-width:680px){.sidebar{display:none}.content{padding:16px 14px 80px}.pg-foot{left:0}}
+.photo-modal{display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);align-items:center;justify-content:center;cursor:zoom-out}
+.photo-modal.open{display:flex}
+.photo-modal img{max-width:92vw;max-height:92vh;object-fit:contain;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,.5)}
 </style>
 </head>
 <body>
+<div class="photo-modal" id="photoModal" onclick="closePhotoModal()">
+  <img id="photoModalImg" src="" alt="">
+</div>
 <header class="topbar">
   <span id="modeBadge" class="ro-badge">Hanya Baca</span>
   <span class="topbar-title" id="topTitle">Memuat…</span>
@@ -160,6 +168,7 @@ const txt=v=>v==null?"":(typeof v==="object"?(v.id||Object.values(v)[0]||""):Str
 let MY_ROLE="", SCHEMA=null, RESP=null, CUR_PG=0;
 let EDIT_MODE=false;
 let editedAnswers={};  // berjalan saat edit mode, berisi salinan answers yang sedang diedit
+let VISIBLE_FIELDS=null;  // null = semua, Set = hanya field yang diizinkan (viewer terbatas)
 
 async function api(path,opts){
   opts=opts||{};
@@ -186,9 +195,14 @@ async function init(){
       location.replace("/admin"); return;
     }
 
-    const [form,resp]=await Promise.all([api(formUrl),api(respUrl)]);
+    const fetches=[api(formUrl),api(respUrl)];
+    if(MY_ROLE==="viewer")fetches.push(api(`/api/viewer/forms/${FORM_ID}/permission`).catch(()=>null));
+    const [form,resp,perm]=await Promise.all(fetches);
     SCHEMA=form.schema;
     RESP=resp;
+    if(perm&&perm.visibleFields&&perm.visibleFields.length>0){
+      VISIBLE_FIELDS=new Set(perm.visibleFields);
+    }
 
     const title=txt(form.title)||"Kuesioner";
     document.title="Detail Jawaban · "+title;
@@ -351,6 +365,38 @@ function renderPage(){
   }
 
   window.scrollTo({top:0,behavior:"instant"});
+  if(EDIT_MODE)resolveEditOptions();
+}
+
+async function resolveEditOptions(){
+  function fetchOpts(cfg){
+    const url=(cfg.url||"").replace(/\{([^}]+)\}/g,(_,k)=>encodeURIComponent(editedAnswers[k]??''));
+    return fetch(url,{headers:H}).then(r=>r.json()).then(d=>{
+      let arr=cfg.path?(cfg.path.split(".").reduce((x,k)=>x==null?x:x[k],d)):(Array.isArray(d)?d:(d.data||d.items||d.results||[]));
+      const vf=cfg.valueField||"code",lf=cfg.labelField||"label";
+      return(arr||[]).map(it=>({value:String(it[vf]),label:txt(it[lf])||String(it[vf])}));
+    });
+  }
+  for(const el of document.querySelectorAll("select.ed-async[data-oa]")){
+    const cfg=JSON.parse(el.dataset.oa),curVal=el.dataset.cv||"";
+    try{
+      const opts=await fetchOpts(cfg);
+      el.innerHTML=`<option value="">— Pilih —</option>`+opts.map(o=>
+        `<option value="${esc(o.value)}"${String(curVal)===String(o.value)?" selected":""}>${esc(o.label)}</option>`
+      ).join("");
+    }catch{el.innerHTML=`<option value="${esc(curVal)}">${esc(curVal)||"—"}</option>`;}
+    delete el.dataset.oa;delete el.dataset.cv;
+  }
+  for(const el of document.querySelectorAll(".ed-check-group.ed-async[data-oa]")){
+    const cfg=JSON.parse(el.dataset.oa),selected=JSON.parse(el.dataset.cv||"[]"),name=el.id;
+    try{
+      const opts=await fetchOpts(cfg);
+      el.innerHTML=opts.map(o=>`<label class="ed-check-item">
+        <input type="checkbox" name="${name}" value="${esc(o.value)}" ${selected.includes(String(o.value))?"checked":""}>
+        ${esc(o.label)}</label>`).join("");
+    }catch{el.innerHTML=`<span style="color:var(--muted);font-size:12px">Gagal memuat opsi.</span>`;}
+    delete el.dataset.oa;delete el.dataset.cv;delete el.dataset.multi;
+  }
 }
 
 function goPage(idx){
@@ -364,6 +410,8 @@ function renderNodes(comps,answers,rp){
   return(comps||[]).map(c=>renderNode(c,answers,rp)).join("");
 }
 function renderNode(c,answers,rp){
+  if(!evalVisible(c.visibleWhen,rp,answers))return"";
+  if(c.kind==="field"&&VISIBLE_FIELDS&&!VISIBLE_FIELDS.has(c.name))return"";
   if(c.kind==="block")
     return`<div class="rv-block">${c.title?`<div class="rv-block-title">${esc(txt(c.title))}</div>`:""}${renderNodes(c.components||[],answers,rp)}</div>`;
   if(c.kind==="section")
@@ -371,6 +419,11 @@ function renderNode(c,answers,rp){
   if(c.kind==="roster")return renderRoster(c,answers,rp);
   return EDIT_MODE?renderEditField(c,answers,rp):renderReadField(c,answers,rp);
 }
+
+/* ---- expression engine (untuk evalVisible visibleWhen) ---- */
+const Expr=(function(){const FUNCS=new Set(["isempty","notempty","len","count","sum","avg","min","max","in","today","age","regex","if","number","round","abs","floor","ceil","contains","upper","lower","trim"]);function tokenize(src){const t=[];let i=0;const n=src.length;const id=c=>/[A-Za-z0-9_]/.test(c);while(i<n){let c=src[i];if(c===" "||c==="\t"||c==="\n"||c==="\r"){i++;continue;}if(c==="$"&&src[i+1]==="{"){let j=i+2,s="";while(j<n&&src[j]!=="}")s+=src[j++];i=j+1;t.push({t:"ref",v:s.trim()});continue;}if(c==="'"||c==='"'){const q=c;let j=i+1,s="";while(j<n&&src[j]!==q){if(src[j]==="\\"){s+=src[j+1];j+=2;}else s+=src[j++];}i=j+1;t.push({t:"str",v:s});continue;}if((c>="0"&&c<="9")||(c==="."&&src[i+1]>="0"&&src[i+1]<="9")){let j=i,s="";while(j<n&&((src[j]>="0"&&src[j]<="9")||src[j]===".")){s+=src[j++];}i=j;t.push({t:"num",v:parseFloat(s)});continue;}if(/[A-Za-z_]/.test(c)){let j=i,s="";while(j<n&&id(src[j]))s+=src[j++];i=j;if(s==="true")t.push({t:"bool",v:true});else if(s==="false")t.push({t:"bool",v:false});else if(s==="null")t.push({t:"null"});else t.push({t:"id",v:s});continue;}const two=src.substr(i,2);if(["==","!=","<=",">=","&&","||"].includes(two)){t.push({t:"op",v:two});i+=2;continue;}if("+-*/%<>!".includes(c)){t.push({t:"op",v:c});i++;continue;}if(c==="("){t.push({t:"lp"});i++;continue;}if(c===")"){t.push({t:"rp"});i++;continue;}if(c==="["){t.push({t:"lb"});i++;continue;}if(c==="]"){t.push({t:"rb"});i++;continue;}if(c===","){t.push({t:"comma"});i++;continue;}throw new Error("karakter tak dikenal: "+c);}return t;}function parse(src){const toks=tokenize(src);let p=0;const peek=()=>toks[p],next=()=>toks[p++];const expect=k=>{if(!toks[p]||toks[p].t!==k)throw new Error("diharapkan '"+k+"'");return toks[p++];};function or(){let l=and();while(peek()&&peek().t==="op"&&peek().v==="||"){next();l={type:"bin",op:"||",l,r:and()};}return l;}function and(){let l=eq();while(peek()&&peek().t==="op"&&peek().v==="&&"){next();l={type:"bin",op:"&&",l,r:eq()};}return l;}function eq(){let l=cmp();while(peek()&&peek().t==="op"&&(peek().v==="=="||peek().v==="!=")){const o=next().v;l={type:"bin",op:o,l,r:cmp()};}return l;}function cmp(){let l=add();while(peek()&&peek().t==="op"&&["<","<=",">",">="].includes(peek().v)){const o=next().v;l={type:"bin",op:o,l,r:add()};}return l;}function add(){let l=mul();while(peek()&&peek().t==="op"&&(peek().v==="+"||peek().v==="-")){const o=next().v;l={type:"bin",op:o,l,r:mul()};}return l;}function mul(){let l=un();while(peek()&&peek().t==="op"&&["*","/","%"].includes(peek().v)){const o=next().v;l={type:"bin",op:o,l,r:un()};}return l;}function un(){if(peek()&&peek().t==="op"&&(peek().v==="!"||peek().v==="-")){const o=next().v;return {type:"un",op:o,e:un()};}return prim();}function prim(){const k=peek();if(!k)throw new Error("ekspresi terpotong");if(k.t==="num"||k.t==="str"||k.t==="bool"){next();return {type:"lit",v:k.v};}if(k.t==="null"){next();return {type:"lit",v:null};}if(k.t==="ref"){next();return {type:"ref",name:k.v};}if(k.t==="lp"){next();const e=or();expect("rp");return e;}if(k.t==="lb"){next();const items=[];if(peek()&&peek().t!=="rb"){items.push(or());while(peek()&&peek().t==="comma"){next();items.push(or());}}expect("rb");return {type:"arr",items};}if(k.t==="id"){next();if(peek()&&peek().t==="lp"){const fn=k.v.toLowerCase();if(!FUNCS.has(fn))throw new Error("fungsi tak dikenal: "+k.v);next();const args=[];if(peek()&&peek().t!=="rp"){args.push(or());while(peek()&&peek().t==="comma"){next();args.push(or());}}expect("rp");return {type:"call",fn,args};}throw new Error("pakai ${...} untuk merujuk field");}throw new Error("token tak terduga");}const ast=or();return ast;}const toNum=v=>v===true?1:v===false?0:(v==null||v==="")?NaN:Number(v);const isEmp=x=>x==null||x===""||(Array.isArray(x)&&x.length===0);const flat=a=>{const o=[];a.forEach(x=>Array.isArray(x)?x.forEach(y=>o.push(y)):o.push(x));return o;};const nums=a=>flat(a).map(Number).filter(x=>!isNaN(x));const LIB={isempty:a=>isEmp(a[0]),notempty:a=>!isEmp(a[0]),len:a=>{const x=a[0];return Array.isArray(x)?x.length:(x==null?0:String(x).length);},count:a=>{const arr=Array.isArray(a[0])?a[0]:a;return arr.filter(x=>!isEmp(x)).length;},sum:a=>flat(a).reduce((s,x)=>s+(isEmp(x)?0:(Number(x)||0)),0),avg:a=>{const f=nums(a);return f.length?f.reduce((s,x)=>s+x,0)/f.length:0;},min:a=>{const f=nums(a);return f.length?Math.min(...f):0;},max:a=>{const f=nums(a);return f.length?Math.max(...f):0;},in:a=>{const x=a[0];const rest=a.length===2&&Array.isArray(a[1])?a[1]:a.slice(1);return rest.map(String).includes(String(x));},today:()=>new Date().toISOString().slice(0,10),age:a=>{const d=new Date(a[0]);if(isNaN(d))return NaN;const t=new Date();let g=t.getFullYear()-d.getFullYear();const m=t.getMonth()-d.getMonth();if(m<0||(m===0&&t.getDate()<d.getDate()))g--;return g;},regex:a=>{try{return new RegExp(a[1]).test(String(a[0]??""));}catch(_){return false;}},if:a=>a[0]?a[1]:a[2],number:a=>{const x=Number(a[0]);return isNaN(x)?0:x;},round:a=>{const f=Math.pow(10,a[1]||0);return Math.round((Number(a[0])||0)*f)/f;},abs:a=>Math.abs(Number(a[0])||0),floor:a=>Math.floor(Number(a[0])||0),ceil:a=>Math.ceil(Number(a[0])||0),contains:a=>{const h=a[0];return Array.isArray(h)?h.map(String).includes(String(a[1])):String(h??"").includes(String(a[1]));},upper:a=>String(a[0]??"").toUpperCase(),lower:a=>String(a[0]??"").toLowerCase(),trim:a=>String(a[0]??"").trim()};function eqv(a,b){if(typeof a==="number"||typeof b==="number"){const x=toNum(a),y=toNum(b);if(!isNaN(x)&&!isNaN(y))return x===y;}if(typeof a==="boolean"||typeof b==="boolean")return Boolean(a)===Boolean(b);if(a==null||b==null)return a==null&&b==null;return String(a)===String(b);}function ev(n,res){switch(n.type){case "lit":return n.v;case "ref":return res(n.name);case "arr":return n.items.map(x=>ev(x,res));case "un":{const v=ev(n.e,res);return n.op==="!"?!v:-toNum(v);}case "call":return LIB[n.fn](n.args.map(a=>ev(a,res)));case "bin":{const op=n.op;if(op==="&&")return !!ev(n.l,res)&&!!ev(n.r,res);if(op==="||")return !!ev(n.l,res)||!!ev(n.r,res);const a=ev(n.l,res),b=ev(n.r,res);switch(op){case "+":return toNum(a)+toNum(b);case "-":return toNum(a)-toNum(b);case "*":return toNum(a)*toNum(b);case "/":return toNum(a)/toNum(b);case "%":return toNum(a)%toNum(b);case "<":return toNum(a)<toNum(b);case "<=":return toNum(a)<=toNum(b);case ">":return toNum(a)>toNum(b);case ">=":return toNum(a)>=toNum(b);case "==":return eqv(a,b);case "!=":return !eqv(a,b);}}}}const cache=new Map();function parseCached(src){if(cache.has(src))return cache.get(src);const a=parse(src);cache.set(src,a);return a;}return{evalSrc(src,res){if(!src)return undefined;let a;try{a=parseCached(src);}catch(_){return undefined;}try{return ev(a,res);}catch(_){return undefined;}}};})();
+function coerceVal(v){if(v==="true")return true;if(v==="false")return false;if(typeof v==="string"&&v.trim()!==""&&!isNaN(Number(v)))return Number(v);return v;}
+function evalVisible(src,rp,answers){if(!src)return true;const res=n=>{const k=(rp||"")+n;const val=k in answers?answers[k]:(n in answers?answers[n]:undefined);return coerceVal(val);};const v=Expr.evalSrc(src,res);return v===undefined?true:!!v;}
 
 /* ---- READ-ONLY field ---- */
 function renderReadField(c,answers,rp){
@@ -390,6 +443,8 @@ function renderReadField(c,answers,rp){
       }).join("");
       return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-choice-list">${items}</div></div>`;
     }
+    // optionsApi: tampilkan nilai mentah
+    if(val!=null&&val!=="")return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer">${esc(String(val))}</div></div>`;
   }
   if(c.type==="checkbox"||c.type==="multiselect"){
     const selected=Array.isArray(val)?val.map(String):(val?[String(val)]:[]);
@@ -412,6 +467,17 @@ function renderReadField(c,answers,rp){
     }).join("");
     return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-choice-list">${items}</div></div>`;
   }
+  // Photo / File / Signature
+  if(c.type==="photo"||c.type==="file"||c.type==="signature"){
+    const src=val&&String(val);
+    if(!src)return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer empty">—</div></div>`;
+    if(src.startsWith("data:image")||src.startsWith("data:application/octet")){
+      return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-photo-wrap"><img class="rv-photo" src="${src}" onclick="openPhotoModal(this.src)" title="Klik untuk perbesar"></div></div>`;
+    }
+    const mime=(src.match(/^data:([^;]+)/)||[])[1]||"file";
+    return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer"><a href="${src}" download="file" style="color:var(--accent)">Unduh file (${esc(mime)})</a></div></div>`;
+  }
+
   const display=val==null||val===""?null:String(val);
   const isEmpty=display==null;
   if(c.type==="textarea"||c.type==="text_long")
@@ -444,6 +510,9 @@ function renderEditField(c,answers,rp){
       ).join("");
       return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<select id="ed_${safeKey}" class="ed-select">${optHtml}</select></div>`;
     }
+    if(c.optionsApi&&c.optionsApi.url){
+      return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<select id="ed_${safeKey}" class="ed-select ed-async" data-oa="${esc(JSON.stringify(c.optionsApi))}" data-cv="${esc(String(val??""))}"><option value="">Memuat opsi…</option></select></div>`;
+    }
     // Fallback ke text
     return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<input id="ed_${safeKey}" class="ed-input" value="${esc(val??"")}"></div>`;
   }
@@ -457,6 +526,9 @@ function renderEditField(c,answers,rp){
         <input type="checkbox" name="ed_${safeKey}" value="${esc(o.value)}" ${selected.includes(String(o.value))?"checked":""}>
         ${esc(o.label)}</label>`).join("");
       return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<div class="ed-check-group">${items}</div></div>`;
+    }
+    if(c.optionsApi&&c.optionsApi.url){
+      return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<div id="ed_${safeKey}" class="ed-check-group ed-async" data-oa="${esc(JSON.stringify(c.optionsApi))}" data-cv="${esc(JSON.stringify(selected))}" data-multi="1"><span style="color:var(--muted);font-size:12px">Memuat opsi…</span></div></div>`;
     }
   }
 
@@ -474,13 +546,58 @@ function renderEditField(c,answers,rp){
   if(c.type==="textarea"||c.type==="text_long")
     return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<textarea id="ed_${safeKey}" class="ed-textarea">${esc(val??"")}</textarea></div>`;
 
-  // Number
-  if(c.type==="number")
-    return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<input id="ed_${safeKey}" type="number" class="ed-input" value="${esc(val??"")}"></div>`;
+  // Calculated — read-only
+  if(c.type==="calculated"){
+    const d=val==null||val===""?"—":esc(String(val));
+    return`<div class="ed-field"><div class="ed-label">${label} <span style="font-size:10px;color:var(--muted)">(dihitung otomatis)</span></div>${desc}<div class="rv-answer">${d}</div></div>`;
+  }
+
+  // Photo / File / Signature — read-only preview saat edit
+  if(c.type==="photo"||c.type==="file"||c.type==="signature"){
+    const src=val&&String(val);
+    if(!src)return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<div class="rv-answer empty">—</div></div>`;
+    if(src.startsWith("data:image")||src.startsWith("data:application/octet"))
+      return`<div class="ed-field"><div class="ed-label">${label} <span style="font-size:10px;color:var(--muted)">(tidak dapat diubah di sini)</span></div>${desc}<div class="rv-photo-wrap"><img class="rv-photo" src="${src}" onclick="openPhotoModal(this.src)" title="Klik untuk perbesar"></div></div>`;
+    const mime=(src.match(/^data:([^;]+)/)||[])[1]||"file";
+    return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<div class="rv-answer"><a href="${src}" download="file" style="color:var(--accent)">Unduh file (${esc(mime)})</a></div></div>`;
+  }
+
+  // Number / Integer / Decimal / Currency / Float
+  if(c.type==="number"||c.type==="integer"||c.type==="decimal"||c.type==="currency"||c.type==="float"){
+    const step=c.type==="integer"?"1":(c.step||"any");
+    const unit=c.unit?` <span style="font-size:12px;color:var(--muted)">${esc(c.unit)}</span>`:"";
+    return`<div class="ed-field"><div class="ed-label">${label}${unit}</div>${desc}<input id="ed_${safeKey}" type="number" step="${step}" class="ed-input" value="${esc(val??"")}"></div>`;
+  }
+
+  // Range / Rating
+  if(c.type==="range"||c.type==="rating"){
+    const mn=c.min||0,mx=c.max||(c.type==="rating"?5:10);
+    return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<div style="display:flex;align-items:center;gap:10px"><input id="ed_${safeKey}" type="range" min="${mn}" max="${mx}" step="${c.step||1}" value="${esc(val??mn)}" oninput="this.nextElementSibling.textContent=this.value" style="flex:1"><span style="min-width:28px;font-weight:600">${esc(String(val??mn))}</span></div></div>`;
+  }
 
   // Date
   if(c.type==="date")
     return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<input id="ed_${safeKey}" type="date" class="ed-input" value="${esc(val??"")}"></div>`;
+
+  // Time
+  if(c.type==="time")
+    return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<input id="ed_${safeKey}" type="time" class="ed-input" value="${esc(val??"")}"></div>`;
+
+  // Datetime
+  if(c.type==="datetime")
+    return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<input id="ed_${safeKey}" type="datetime-local" class="ed-input" value="${esc(val??"")}"></div>`;
+
+  // Geopoint — read-only koordinat
+  if(c.type==="geopoint"){
+    const d=val==null||val===""?"—":esc(String(val));
+    return`<div class="ed-field"><div class="ed-label">${label} <span style="font-size:10px;color:var(--muted)">(koordinat, tidak dapat diubah di sini)</span></div>${desc}<div class="rv-answer">${d}</div></div>`;
+  }
+
+  // Barcode — read-only
+  if(c.type==="barcode"){
+    const d=val==null||val===""?"—":esc(String(val));
+    return`<div class="ed-field"><div class="ed-label">${label} <span style="font-size:10px;color:var(--muted)">(barcode)</span></div>${desc}<div class="rv-answer">${d}</div></div>`;
+  }
 
   // Default text
   return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<input id="ed_${safeKey}" class="ed-input" value="${esc(val??"")}"></div>`;
@@ -511,6 +628,11 @@ function renderFlatAnswers(answers){
     `<div class="rv-field"><div class="rv-label" style="font-family:var(--mono);font-size:11.5px">${esc(k)}</div><div class="rv-answer">${esc(valStr(v))}</div></div>`
   ).join("")+`</div>`;
 }
+
+/* ---- photo modal ---- */
+function openPhotoModal(src){const m=document.getElementById("photoModal");const i=document.getElementById("photoModalImg");if(!m||!i)return;i.src=src;m.classList.add("open");}
+function closePhotoModal(){const m=document.getElementById("photoModal");if(m)m.classList.remove("open");}
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closePhotoModal();});
 
 /* ---- helpers ---- */
 function parseAnswers(raw){
