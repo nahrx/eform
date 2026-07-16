@@ -547,56 +547,81 @@
       <div class="pg-foot-in" id="pgFootIn"></div>
     </div>
     <script>
-      const TOKEN=localStorage.getItem("eform_token");
-      if(!TOKEN){document.getElementById("content").innerHTML='<div style="padding:40px;text-align:center;color:#b91c1c">Sesi habis. Silakan login ulang.</div>';}
+      const TOKEN = localStorage.getItem("eform_token");
+      if (!TOKEN) {
+        document.getElementById("content").innerHTML =
+          '<div style="padding:40px;text-align:center;color:#b91c1c">Sesi habis. Silakan login ulang.</div>';
+      }
 
-      const params=new URLSearchParams(location.search);
-      const FORM_ID=params.get("form");
-      const RESP_ID=params.get("resp");
-      if(!FORM_ID||!RESP_ID){document.getElementById("content").innerHTML='<div style="padding:40px;text-align:center;color:#b91c1c">Parameter tidak lengkap.</div>';}
+      const params = new URLSearchParams(location.search);
+      const FORM_ID = params.get("form");
+      const RESP_ID = params.get("resp");
+      if (!FORM_ID || !RESP_ID) {
+        document.getElementById("content").innerHTML =
+          '<div style="padding:40px;text-align:center;color:#b91c1c">Parameter tidak lengkap.</div>';
+      }
 
-      const H={"Authorization":"Bearer "+TOKEN};
-      const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-      const txt=v=>v==null?"":(typeof v==="object"?(v.id||Object.values(v)[0]||""):String(v));
-      const INTERP_RE=/\{\{\s*([^}]+?)\s*\}\}|\$\{\s*([^}]+?)\s*\}/g;
+      const H = { Authorization: "Bearer " + TOKEN };
+      const esc = (s) =>
+        String(s ?? "").replace(
+          /[&<>"]/g,
+          (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c],
+        );
+      const txt = (v) =>
+        v == null
+          ? ""
+          : typeof v === "object"
+            ? v.id || Object.values(v)[0] || ""
+            : String(v);
+      const INTERP_RE = /\{\{\s*([^}]+?)\s*\}\}|\$\{\s*([^}]+?)\s*\}/g;
 
-      let SCHEMA=null, RESP=null, CUR_PG=0;
+      let SCHEMA = null,
+        RESP = null,
+        CUR_PG = 0;
 
-      async function api(path){
-        const r=await fetch(path,{headers:{...H,"Content-Type":"application/json"}});
-        if(r.status===401){localStorage.removeItem("eform_token");location.replace("/login");throw new Error("sesi habis");}
-        const data=await r.json().catch(()=>({}));
-        if(!r.ok)throw new Error(data.error||"HTTP "+r.status);
+      async function api(path) {
+        const r = await fetch(path, {
+          headers: { ...H, "Content-Type": "application/json" },
+        });
+        if (r.status === 401) {
+          localStorage.removeItem("eform_token");
+          location.replace("/login");
+          throw new Error("sesi habis");
+        }
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.error || "HTTP " + r.status);
         return data;
       }
 
-      async function init(){
-        try{
-          const [form,resp,me]=await Promise.all([
-            api("/api/forms/"+FORM_ID),
-            api("/api/forms/"+FORM_ID+"/responses/"+RESP_ID),
-            api("/api/auth/me")
+      async function init() {
+        try {
+          const [form, resp, me] = await Promise.all([
+            api("/api/forms/" + FORM_ID),
+            api("/api/forms/" + FORM_ID + "/responses/" + RESP_ID),
+            api("/api/auth/me"),
           ]);
-          SCHEMA=form.schema;
-          RESP=resp;
-          const title=txt(form.title)||"Kuesioner";
-          document.title="Jawaban · "+title;
-          document.getElementById("topTitle").textContent=title;
-          if(me&&(me.role==="superadmin"||me.role==="admin")){
-            document.getElementById("btnDelete").hidden=false;
+          SCHEMA = form.schema;
+          RESP = resp;
+          const title = txt(form.title) || "Kuesioner";
+          document.title = "Jawaban · " + title;
+          document.getElementById("topTitle").textContent = title;
+          if (me && (me.role === "superadmin" || me.role === "admin")) {
+            document.getElementById("btnDelete").hidden = false;
           }
           await prefetchApiOptions(parseAnswers(resp.answers));
-          CUR_PG=0;
+          CUR_PG = 0;
           renderPage();
-        }catch(e){
-          document.getElementById("content").innerHTML=`<div style="padding:40px;text-align:center;color:#b91c1c">${esc(e.message)}</div>`;
+        } catch (e) {
+          document.getElementById("content").innerHTML =
+            `<div style="padding:40px;text-align:center;color:#b91c1c">${esc(e.message)}</div>`;
         }
       }
 
-      function deleteResponse(){
-        const ovl=document.createElement("div");
-        ovl.style.cssText="position:fixed;inset:0;z-index:999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45)";
-        ovl.innerHTML=`<div style="background:var(--panel);border-radius:12px;padding:28px 24px;max-width:380px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+      function deleteResponse() {
+        const ovl = document.createElement("div");
+        ovl.style.cssText =
+          "position:fixed;inset:0;z-index:999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45)";
+        ovl.innerHTML = `<div style="background:var(--panel);border-radius:12px;padding:28px 24px;max-width:380px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,.18)">
           <div style="font-weight:700;font-size:15px;margin-bottom:10px;color:var(--ink)">Hapus Jawaban</div>
           <div style="font-size:13.5px;color:var(--ink-soft);margin-bottom:20px">Hapus jawaban ini secara permanen? Tindakan ini tidak dapat dibatalkan.</div>
           <div style="display:flex;gap:10px;justify-content:flex-end">
@@ -605,33 +630,51 @@
           </div>
         </div>`;
         document.body.appendChild(ovl);
-        ovl.querySelector("#delCfCancel").onclick=()=>ovl.remove();
-        ovl.querySelector("#delCfOk").onclick=()=>{ovl.remove();doDeleteResponse();};
+        ovl.querySelector("#delCfCancel").onclick = () => ovl.remove();
+        ovl.querySelector("#delCfOk").onclick = () => {
+          ovl.remove();
+          doDeleteResponse();
+        };
       }
 
-      async function doDeleteResponse(){
-        const btn=document.getElementById("btnDelete");
-        if(btn){btn.disabled=true;btn.textContent="Menghapus…";}
-        try{
-          const r=await fetch(`/api/forms/${FORM_ID}/responses/${RESP_ID}`,{method:"DELETE",headers:H});
-          if(r.status===401){localStorage.removeItem("eform_token");location.replace("/login");return;}
-          const data=await r.json().catch(()=>({}));
-          if(!r.ok)throw new Error(data.error||"HTTP "+r.status);
-          document.getElementById("topTitle").textContent="Jawaban Dihapus";
-          document.getElementById("content").innerHTML=`<div style="padding:80px 20px;text-align:center">
+      async function doDeleteResponse() {
+        const btn = document.getElementById("btnDelete");
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = "Menghapus…";
+        }
+        try {
+          const r = await fetch(`/api/forms/${FORM_ID}/responses/${RESP_ID}`, {
+            method: "DELETE",
+            headers: H,
+          });
+          if (r.status === 401) {
+            localStorage.removeItem("eform_token");
+            location.replace("/login");
+            return;
+          }
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(data.error || "HTTP " + r.status);
+          document.getElementById("topTitle").textContent = "Jawaban Dihapus";
+          document.getElementById("content").innerHTML =
+            `<div style="padding:80px 20px;text-align:center">
             <div style="font-size:48px;margin-bottom:16px;color:var(--ok)">✓</div>
             <div style="font-weight:700;font-size:16px;color:var(--ink)">Jawaban berhasil dihapus.</div>
             <div style="color:var(--muted);margin-top:8px;font-size:13px">Anda dapat menutup tab ini.</div>
           </div>`;
-          document.getElementById("pgFoot").hidden=true;
-          document.getElementById("sidebar").hidden=true;
-          if(btn)btn.hidden=true;
+          document.getElementById("pgFoot").hidden = true;
+          document.getElementById("sidebar").hidden = true;
+          if (btn) btn.hidden = true;
           window.close();
-        }catch(e){
-          if(btn){btn.disabled=false;btn.textContent="Hapus Jawaban";}
-          const ovl=document.createElement("div");
-          ovl.style.cssText="position:fixed;inset:0;z-index:999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45)";
-          ovl.innerHTML=`<div style="background:var(--panel);border-radius:12px;padding:28px 24px;max-width:380px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+        } catch (e) {
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = "Hapus Jawaban";
+          }
+          const ovl = document.createElement("div");
+          ovl.style.cssText =
+            "position:fixed;inset:0;z-index:999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45)";
+          ovl.innerHTML = `<div style="background:var(--panel);border-radius:12px;padding:28px 24px;max-width:380px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,.18)">
             <div style="font-weight:700;font-size:15px;margin-bottom:10px;color:#b91c1c">Gagal Menghapus</div>
             <div style="font-size:13.5px;color:var(--ink-soft);margin-bottom:20px">${esc(e.message)}</div>
             <div style="display:flex;justify-content:flex-end"><button onclick="this.closest('div[style]').remove()" style="padding:8px 16px;border:1px solid var(--line);border-radius:7px;background:var(--panel);color:var(--ink);font-family:inherit;font-size:13px;cursor:pointer">Tutup</button></div>
@@ -640,362 +683,1035 @@
         }
       }
 
-      function renderPage(){
-        const answers=parseAnswers(RESP.answers);
-        const meta=parseAnswers(RESP.meta);
-        const pages=(SCHEMA&&SCHEMA.pages)||[];
-        if(CUR_PG>=pages.length)CUR_PG=pages.length-1;
-        if(CUR_PG<0)CUR_PG=0;
+      function renderPage() {
+        const answers = parseAnswers(RESP.answers);
+        const meta = parseAnswers(RESP.meta);
+        const pages = (SCHEMA && SCHEMA.pages) || [];
+        if (CUR_PG >= pages.length) CUR_PG = pages.length - 1;
+        if (CUR_PG < 0) CUR_PG = 0;
 
         // Sidebar
-        if(pages.length>1){
-          const sidebar=document.getElementById("sidebar");
-          sidebar.hidden=false;
-          document.getElementById("pgList").innerHTML=pages.map((p,i)=>
-            `<div class="pg-item${i===CUR_PG?" active":""}" onclick="goPage(${i})">${esc(txt(p.title)||p.name||"Halaman "+(i+1))}</div>`
-          ).join("");
+        if (pages.length > 1) {
+          const sidebar = document.getElementById("sidebar");
+          sidebar.hidden = false;
+          document.getElementById("pgList").innerHTML = pages
+            .map(
+              (p, i) =>
+                `<div class="pg-item${i === CUR_PG ? " active" : ""}" onclick="goPage(${i})">${esc(txt(p.title) || p.name || "Halaman " + (i + 1))}</div>`,
+            )
+            .join("");
         }
 
         // Status badge
-        const isDraft=RESP.status==="draft";
-        const badge=isDraft
-          ?`<span class="st-badge st-draft">Draf</span>`
-          :`<span class="st-badge st-submitted">Terkirim</span>`;
+        const isDraft = RESP.status === "draft";
+        const badge = isDraft
+          ? `<span class="st-badge st-draft">Draf</span>`
+          : `<span class="st-badge st-submitted">Terkirim</span>`;
 
         // Meta card
-        const nameStr=meta.name?esc(meta.name):"";
-        const emailStr=meta.email?esc(meta.email):"";
-        const timeStr=formatDate(RESP.submittedAt);
-        const metaCard=`<div class="meta-card">
+        const nameStr = meta.name ? esc(meta.name) : "";
+        const emailStr = meta.email ? esc(meta.email) : "";
+        const timeStr = formatDate(RESP.submittedAt);
+        const metaCard = `<div class="meta-card">
           ${badge}
-          ${nameStr?`<span class="meta-who">${nameStr}</span>`:""}
-          ${emailStr?`<span class="meta-email">${emailStr}</span>`:""}
+          ${nameStr ? `<span class="meta-who">${nameStr}</span>` : ""}
+          ${emailStr ? `<span class="meta-email">${emailStr}</span>` : ""}
           <span class="meta-time">${timeStr}</span>
         </div>`;
 
-        let body="";
-        if(pages.length){
-          const p=pages[CUR_PG];
-          body+=`<div class="page-title">${esc(rowInterp(txt(p.title)||p.name||"Halaman "+(CUR_PG+1),answers,""))}</div>`;
-          body+=renderNodes(p.components||[],answers,"");
-        }else{
-          body=renderFlatAnswers(answers);
+        let body = "";
+        if (pages.length) {
+          const p = pages[CUR_PG];
+          body += `<div class="page-title">${esc(rowInterp(txt(p.title) || p.name || "Halaman " + (CUR_PG + 1), answers, ""))}</div>`;
+          body += renderNodes(p.components || [], answers, "");
+        } else {
+          body = renderFlatAnswers(answers);
         }
 
-        document.getElementById("content").innerHTML=metaCard+body;
+        document.getElementById("content").innerHTML = metaCard + body;
 
         // Fixed bottom nav footer
-        const foot=document.getElementById("pgFoot");
-        if(pages.length>1){
-          foot.hidden=false;
-          document.getElementById("pgFootIn").innerHTML=
-            `<button class="btn" ${CUR_PG===0?"disabled":""} onclick="goPage(${CUR_PG-1})">← Sebelumnya</button>`+
-            `<span class="pg-prog">Halaman ${CUR_PG+1} / ${pages.length}</span>`+
-            `<button class="btn" ${CUR_PG>=pages.length-1?"disabled":""} onclick="goPage(${CUR_PG+1})">Selanjutnya →</button>`;
-        }else{
-          foot.hidden=true;
+        const foot = document.getElementById("pgFoot");
+        if (pages.length > 1) {
+          foot.hidden = false;
+          document.getElementById("pgFootIn").innerHTML =
+            `<button class="btn" ${CUR_PG === 0 ? "disabled" : ""} onclick="goPage(${CUR_PG - 1})">← Sebelumnya</button>` +
+            `<span class="pg-prog">Halaman ${CUR_PG + 1} / ${pages.length}</span>` +
+            `<button class="btn" ${CUR_PG >= pages.length - 1 ? "disabled" : ""} onclick="goPage(${CUR_PG + 1})">Selanjutnya →</button>`;
+        } else {
+          foot.hidden = true;
         }
 
-        window.scrollTo({top:0,behavior:"instant"});
+        window.scrollTo({ top: 0, behavior: "instant" });
       }
 
-      function goPage(idx){CUR_PG=idx;renderPage();}
+      function goPage(idx) {
+        CUR_PG = idx;
+        renderPage();
+      }
 
       /* ---- expression engine (untuk evalVisible visibleWhen) ---- */
-      const Expr=(function(){const FUNCS=new Set(["isempty","notempty","len","count","sum","avg","min","max","in","today","age","regex","if","number","round","abs","floor","ceil","contains","upper","lower","trim"]);function tokenize(src){const t=[];let i=0;const n=src.length;const id=c=>/[A-Za-z0-9_]/.test(c);while(i<n){let c=src[i];if(c===" "||c==="\t"||c==="\n"||c==="\r"){i++;continue;}if(c==="$"&&src[i+1]==="{"){let j=i+2,s="";while(j<n&&src[j]!=="}")s+=src[j++];i=j+1;t.push({t:"ref",v:s.trim()});continue;}if(c==="'"||c==='"'){const q=c;let j=i+1,s="";while(j<n&&src[j]!==q){if(src[j]==="\\"){s+=src[j+1];j+=2;}else s+=src[j++];}i=j+1;t.push({t:"str",v:s});continue;}if((c>="0"&&c<="9")||(c==="."&&src[i+1]>="0"&&src[i+1]<="9")){let j=i,s="";while(j<n&&((src[j]>="0"&&src[j]<="9")||src[j]===".")){s+=src[j++];}i=j;t.push({t:"num",v:parseFloat(s)});continue;}if(/[A-Za-z_]/.test(c)){let j=i,s="";while(j<n&&id(src[j]))s+=src[j++];i=j;if(s==="true")t.push({t:"bool",v:true});else if(s==="false")t.push({t:"bool",v:false});else if(s==="null")t.push({t:"null"});else t.push({t:"id",v:s});continue;}const two=src.substr(i,2);if(["==","!=","<=",">=","&&","||"].includes(two)){t.push({t:"op",v:two});i+=2;continue;}if("+-*/%<>!".includes(c)){t.push({t:"op",v:c});i++;continue;}if(c==="("){t.push({t:"lp"});i++;continue;}if(c===")"){t.push({t:"rp"});i++;continue;}if(c==="["){t.push({t:"lb"});i++;continue;}if(c==="]"){t.push({t:"rb"});i++;continue;}if(c===","){t.push({t:"comma"});i++;continue;}throw new Error("karakter tak dikenal: "+c);}return t;}function parse(src){const toks=tokenize(src);let p=0;const peek=()=>toks[p],next=()=>toks[p++];const expect=k=>{if(!toks[p]||toks[p].t!==k)throw new Error("diharapkan '"+k+"'");return toks[p++];};function or(){let l=and();while(peek()&&peek().t==="op"&&peek().v==="||"){next();l={type:"bin",op:"||",l,r:and()};}return l;}function and(){let l=eq();while(peek()&&peek().t==="op"&&peek().v==="&&"){next();l={type:"bin",op:"&&",l,r:eq()};}return l;}function eq(){let l=cmp();while(peek()&&peek().t==="op"&&(peek().v==="=="||peek().v==="!=")){const o=next().v;l={type:"bin",op:o,l,r:cmp()};}return l;}function cmp(){let l=add();while(peek()&&peek().t==="op"&&["<","<=",">",">="].includes(peek().v)){const o=next().v;l={type:"bin",op:o,l,r:add()};}return l;}function add(){let l=mul();while(peek()&&peek().t==="op"&&(peek().v==="+"||peek().v==="-")){const o=next().v;l={type:"bin",op:o,l,r:mul()};}return l;}function mul(){let l=un();while(peek()&&peek().t==="op"&&["*","/","%"].includes(peek().v)){const o=next().v;l={type:"bin",op:o,l,r:un()};}return l;}function un(){if(peek()&&peek().t==="op"&&(peek().v==="!"||peek().v==="-")){const o=next().v;return {type:"un",op:o,e:un()};}return prim();}function prim(){const k=peek();if(!k)throw new Error("ekspresi terpotong");if(k.t==="num"||k.t==="str"||k.t==="bool"){next();return {type:"lit",v:k.v};}if(k.t==="null"){next();return {type:"lit",v:null};}if(k.t==="ref"){next();return {type:"ref",name:k.v};}if(k.t==="lp"){next();const e=or();expect("rp");return e;}if(k.t==="lb"){next();const items=[];if(peek()&&peek().t!=="rb"){items.push(or());while(peek()&&peek().t==="comma"){next();items.push(or());}}expect("rb");return {type:"arr",items};}if(k.t==="id"){next();if(peek()&&peek().t==="lp"){const fn=k.v.toLowerCase();if(!FUNCS.has(fn))throw new Error("fungsi tak dikenal: "+k.v);next();const args=[];if(peek()&&peek().t!=="rp"){args.push(or());while(peek()&&peek().t==="comma"){next();args.push(or());}}expect("rp");return {type:"call",fn,args};}throw new Error("pakai ${...} untuk merujuk field");}throw new Error("token tak terduga");}const ast=or();return ast;}const toNum=v=>v===true?1:v===false?0:(v==null||v==="")?NaN:Number(v);const isEmp=x=>x==null||x===""||(Array.isArray(x)&&x.length===0);const flat=a=>{const o=[];a.forEach(x=>Array.isArray(x)?x.forEach(y=>o.push(y)):o.push(x));return o;};const nums=a=>flat(a).map(Number).filter(x=>!isNaN(x));const LIB={isempty:a=>isEmp(a[0]),notempty:a=>!isEmp(a[0]),len:a=>{const x=a[0];return Array.isArray(x)?x.length:(x==null?0:String(x).length);},count:a=>{const arr=Array.isArray(a[0])?a[0]:a;return arr.filter(x=>!isEmp(x)).length;},sum:a=>flat(a).reduce((s,x)=>s+(isEmp(x)?0:(Number(x)||0)),0),avg:a=>{const f=nums(a);return f.length?f.reduce((s,x)=>s+x,0)/f.length:0;},min:a=>{const f=nums(a);return f.length?Math.min(...f):0;},max:a=>{const f=nums(a);return f.length?Math.max(...f):0;},in:a=>{const x=a[0];const rest=a.length===2&&Array.isArray(a[1])?a[1]:a.slice(1);return rest.map(String).includes(String(x));},today:()=>new Date().toISOString().slice(0,10),age:a=>{const d=new Date(a[0]);if(isNaN(d))return NaN;const t=new Date();let g=t.getFullYear()-d.getFullYear();const m=t.getMonth()-d.getMonth();if(m<0||(m===0&&t.getDate()<d.getDate()))g--;return g;},regex:a=>{try{return new RegExp(a[1]).test(String(a[0]??""));}catch(_){return false;}},if:a=>a[0]?a[1]:a[2],number:a=>{const x=Number(a[0]);return isNaN(x)?0:x;},round:a=>{const f=Math.pow(10,a[1]||0);return Math.round((Number(a[0])||0)*f)/f;},abs:a=>Math.abs(Number(a[0])||0),floor:a=>Math.floor(Number(a[0])||0),ceil:a=>Math.ceil(Number(a[0])||0),contains:a=>{const h=a[0];return Array.isArray(h)?h.map(String).includes(String(a[1])):String(h??"").includes(String(a[1]));},upper:a=>String(a[0]??"").toUpperCase(),lower:a=>String(a[0]??"").toLowerCase(),trim:a=>String(a[0]??"").trim()};function eqv(a,b){if(typeof a==="number"||typeof b==="number"){const x=toNum(a),y=toNum(b);if(!isNaN(x)&&!isNaN(y))return x===y;}if(typeof a==="boolean"||typeof b==="boolean")return Boolean(a)===Boolean(b);if(a==null||b==null)return a==null&&b==null;return String(a)===String(b);}function ev(n,res){switch(n.type){case "lit":return n.v;case "ref":return res(n.name);case "arr":return n.items.map(x=>ev(x,res));case "un":{const v=ev(n.e,res);return n.op==="!"?!v:-toNum(v);}case "call":return LIB[n.fn](n.args.map(a=>ev(a,res)));case "bin":{const op=n.op;if(op==="&&")return !!ev(n.l,res)&&!!ev(n.r,res);if(op==="||")return !!ev(n.l,res)||!!ev(n.r,res);const a=ev(n.l,res),b=ev(n.r,res);switch(op){case "+":return toNum(a)+toNum(b);case "-":return toNum(a)-toNum(b);case "*":return toNum(a)*toNum(b);case "/":return toNum(a)/toNum(b);case "%":return toNum(a)%toNum(b);case "<":return toNum(a)<toNum(b);case "<=":return toNum(a)<=toNum(b);case ">":return toNum(a)>toNum(b);case ">=":return toNum(a)>=toNum(b);case "==":return eqv(a,b);case "!=":return !eqv(a,b);}}}}const cache=new Map();function parseCached(src){if(cache.has(src))return cache.get(src);const a=parse(src);cache.set(src,a);return a;}return{evalSrc(src,res){if(!src)return undefined;let a;try{a=parseCached(src);}catch(_){return undefined;}try{return ev(a,res);}catch(_){return undefined;}}};})();
-      function coerceVal(v){if(v==="true")return true;if(v==="false")return false;if(typeof v==="string"&&v.trim()!==""&&!isNaN(Number(v)))return Number(v);return v;}
-      function evalVisible(src,rp,answers){if(!src)return true;const res=n=>{const k=(rp||"")+n;const val=k in answers?answers[k]:(n in answers?answers[n]:undefined);return coerceVal(val);};const v=Expr.evalSrc(src,res);return v===undefined?true:!!v;}
+      const Expr = (function () {
+        const FUNCS = new Set([
+          "isempty",
+          "notempty",
+          "len",
+          "count",
+          "sum",
+          "avg",
+          "min",
+          "max",
+          "in",
+          "today",
+          "age",
+          "regex",
+          "if",
+          "number",
+          "round",
+          "abs",
+          "floor",
+          "ceil",
+          "contains",
+          "upper",
+          "lower",
+          "trim",
+        ]);
+        function tokenize(src) {
+          const t = [];
+          let i = 0;
+          const n = src.length;
+          const id = (c) => /[A-Za-z0-9_]/.test(c);
+          while (i < n) {
+            let c = src[i];
+            if (c === " " || c === "\t" || c === "\n" || c === "\r") {
+              i++;
+              continue;
+            }
+            if (c === "$" && src[i + 1] === "{") {
+              let j = i + 2,
+                s = "";
+              while (j < n && src[j] !== "}") s += src[j++];
+              i = j + 1;
+              t.push({ t: "ref", v: s.trim() });
+              continue;
+            }
+            if (c === "'" || c === '"') {
+              const q = c;
+              let j = i + 1,
+                s = "";
+              while (j < n && src[j] !== q) {
+                if (src[j] === "\\") {
+                  s += src[j + 1];
+                  j += 2;
+                } else s += src[j++];
+              }
+              i = j + 1;
+              t.push({ t: "str", v: s });
+              continue;
+            }
+            if (
+              (c >= "0" && c <= "9") ||
+              (c === "." && src[i + 1] >= "0" && src[i + 1] <= "9")
+            ) {
+              let j = i,
+                s = "";
+              while (
+                j < n &&
+                ((src[j] >= "0" && src[j] <= "9") || src[j] === ".")
+              ) {
+                s += src[j++];
+              }
+              i = j;
+              t.push({ t: "num", v: parseFloat(s) });
+              continue;
+            }
+            if (/[A-Za-z_]/.test(c)) {
+              let j = i,
+                s = "";
+              while (j < n && id(src[j])) s += src[j++];
+              i = j;
+              if (s === "true") t.push({ t: "bool", v: true });
+              else if (s === "false") t.push({ t: "bool", v: false });
+              else if (s === "null") t.push({ t: "null" });
+              else t.push({ t: "id", v: s });
+              continue;
+            }
+            const two = src.substr(i, 2);
+            if (["==", "!=", "<=", ">=", "&&", "||"].includes(two)) {
+              t.push({ t: "op", v: two });
+              i += 2;
+              continue;
+            }
+            if ("+-*/%<>!".includes(c)) {
+              t.push({ t: "op", v: c });
+              i++;
+              continue;
+            }
+            if (c === "(") {
+              t.push({ t: "lp" });
+              i++;
+              continue;
+            }
+            if (c === ")") {
+              t.push({ t: "rp" });
+              i++;
+              continue;
+            }
+            if (c === "[") {
+              t.push({ t: "lb" });
+              i++;
+              continue;
+            }
+            if (c === "]") {
+              t.push({ t: "rb" });
+              i++;
+              continue;
+            }
+            if (c === ",") {
+              t.push({ t: "comma" });
+              i++;
+              continue;
+            }
+            throw new Error("karakter tak dikenal: " + c);
+          }
+          return t;
+        }
+        function parse(src) {
+          const toks = tokenize(src);
+          let p = 0;
+          const peek = () => toks[p],
+            next = () => toks[p++];
+          const expect = (k) => {
+            if (!toks[p] || toks[p].t !== k)
+              throw new Error("diharapkan '" + k + "'");
+            return toks[p++];
+          };
+          function or() {
+            let l = and();
+            while (peek() && peek().t === "op" && peek().v === "||") {
+              next();
+              l = { type: "bin", op: "||", l, r: and() };
+            }
+            return l;
+          }
+          function and() {
+            let l = eq();
+            while (peek() && peek().t === "op" && peek().v === "&&") {
+              next();
+              l = { type: "bin", op: "&&", l, r: eq() };
+            }
+            return l;
+          }
+          function eq() {
+            let l = cmp();
+            while (
+              peek() &&
+              peek().t === "op" &&
+              (peek().v === "==" || peek().v === "!=")
+            ) {
+              const o = next().v;
+              l = { type: "bin", op: o, l, r: cmp() };
+            }
+            return l;
+          }
+          function cmp() {
+            let l = add();
+            while (
+              peek() &&
+              peek().t === "op" &&
+              ["<", "<=", ">", ">="].includes(peek().v)
+            ) {
+              const o = next().v;
+              l = { type: "bin", op: o, l, r: add() };
+            }
+            return l;
+          }
+          function add() {
+            let l = mul();
+            while (
+              peek() &&
+              peek().t === "op" &&
+              (peek().v === "+" || peek().v === "-")
+            ) {
+              const o = next().v;
+              l = { type: "bin", op: o, l, r: mul() };
+            }
+            return l;
+          }
+          function mul() {
+            let l = un();
+            while (
+              peek() &&
+              peek().t === "op" &&
+              ["*", "/", "%"].includes(peek().v)
+            ) {
+              const o = next().v;
+              l = { type: "bin", op: o, l, r: un() };
+            }
+            return l;
+          }
+          function un() {
+            if (
+              peek() &&
+              peek().t === "op" &&
+              (peek().v === "!" || peek().v === "-")
+            ) {
+              const o = next().v;
+              return { type: "un", op: o, e: un() };
+            }
+            return prim();
+          }
+          function prim() {
+            const k = peek();
+            if (!k) throw new Error("ekspresi terpotong");
+            if (k.t === "num" || k.t === "str" || k.t === "bool") {
+              next();
+              return { type: "lit", v: k.v };
+            }
+            if (k.t === "null") {
+              next();
+              return { type: "lit", v: null };
+            }
+            if (k.t === "ref") {
+              next();
+              return { type: "ref", name: k.v };
+            }
+            if (k.t === "lp") {
+              next();
+              const e = or();
+              expect("rp");
+              return e;
+            }
+            if (k.t === "lb") {
+              next();
+              const items = [];
+              if (peek() && peek().t !== "rb") {
+                items.push(or());
+                while (peek() && peek().t === "comma") {
+                  next();
+                  items.push(or());
+                }
+              }
+              expect("rb");
+              return { type: "arr", items };
+            }
+            if (k.t === "id") {
+              next();
+              if (peek() && peek().t === "lp") {
+                const fn = k.v.toLowerCase();
+                if (!FUNCS.has(fn))
+                  throw new Error("fungsi tak dikenal: " + k.v);
+                next();
+                const args = [];
+                if (peek() && peek().t !== "rp") {
+                  args.push(or());
+                  while (peek() && peek().t === "comma") {
+                    next();
+                    args.push(or());
+                  }
+                }
+                expect("rp");
+                return { type: "call", fn, args };
+              }
+              throw new Error("pakai ${...} untuk merujuk field");
+            }
+            throw new Error("token tak terduga");
+          }
+          const ast = or();
+          return ast;
+        }
+        const toNum = (v) =>
+          v === true
+            ? 1
+            : v === false
+              ? 0
+              : v == null || v === ""
+                ? NaN
+                : Number(v);
+        const isEmp = (x) =>
+          x == null || x === "" || (Array.isArray(x) && x.length === 0);
+        const flat = (a) => {
+          const o = [];
+          a.forEach((x) =>
+            Array.isArray(x) ? x.forEach((y) => o.push(y)) : o.push(x),
+          );
+          return o;
+        };
+        const nums = (a) =>
+          flat(a)
+            .map(Number)
+            .filter((x) => !isNaN(x));
+        const LIB = {
+          isempty: (a) => isEmp(a[0]),
+          notempty: (a) => !isEmp(a[0]),
+          len: (a) => {
+            const x = a[0];
+            return Array.isArray(x)
+              ? x.length
+              : x == null
+                ? 0
+                : String(x).length;
+          },
+          count: (a) => {
+            const arr = Array.isArray(a[0]) ? a[0] : a;
+            return arr.filter((x) => !isEmp(x)).length;
+          },
+          sum: (a) =>
+            flat(a).reduce((s, x) => s + (isEmp(x) ? 0 : Number(x) || 0), 0),
+          avg: (a) => {
+            const f = nums(a);
+            return f.length ? f.reduce((s, x) => s + x, 0) / f.length : 0;
+          },
+          min: (a) => {
+            const f = nums(a);
+            return f.length ? Math.min(...f) : 0;
+          },
+          max: (a) => {
+            const f = nums(a);
+            return f.length ? Math.max(...f) : 0;
+          },
+          in: (a) => {
+            const x = a[0];
+            const rest =
+              a.length === 2 && Array.isArray(a[1]) ? a[1] : a.slice(1);
+            return rest.map(String).includes(String(x));
+          },
+          today: () => new Date().toISOString().slice(0, 10),
+          age: (a) => {
+            const d = new Date(a[0]);
+            if (isNaN(d)) return NaN;
+            const t = new Date();
+            let g = t.getFullYear() - d.getFullYear();
+            const m = t.getMonth() - d.getMonth();
+            if (m < 0 || (m === 0 && t.getDate() < d.getDate())) g--;
+            return g;
+          },
+          regex: (a) => {
+            try {
+              return new RegExp(a[1]).test(String(a[0] ?? ""));
+            } catch (_) {
+              return false;
+            }
+          },
+          if: (a) => (a[0] ? a[1] : a[2]),
+          number: (a) => {
+            const x = Number(a[0]);
+            return isNaN(x) ? 0 : x;
+          },
+          round: (a) => {
+            const f = Math.pow(10, a[1] || 0);
+            return Math.round((Number(a[0]) || 0) * f) / f;
+          },
+          abs: (a) => Math.abs(Number(a[0]) || 0),
+          floor: (a) => Math.floor(Number(a[0]) || 0),
+          ceil: (a) => Math.ceil(Number(a[0]) || 0),
+          contains: (a) => {
+            const h = a[0];
+            return Array.isArray(h)
+              ? h.map(String).includes(String(a[1]))
+              : String(h ?? "").includes(String(a[1]));
+          },
+          upper: (a) => String(a[0] ?? "").toUpperCase(),
+          lower: (a) => String(a[0] ?? "").toLowerCase(),
+          trim: (a) => String(a[0] ?? "").trim(),
+        };
+        function eqv(a, b) {
+          if (typeof a === "number" || typeof b === "number") {
+            const x = toNum(a),
+              y = toNum(b);
+            if (!isNaN(x) && !isNaN(y)) return x === y;
+          }
+          if (typeof a === "boolean" || typeof b === "boolean")
+            return Boolean(a) === Boolean(b);
+          if (a == null || b == null) return a == null && b == null;
+          return String(a) === String(b);
+        }
+        function ev(n, res) {
+          switch (n.type) {
+            case "lit":
+              return n.v;
+            case "ref":
+              return res(n.name);
+            case "arr":
+              return n.items.map((x) => ev(x, res));
+            case "un": {
+              const v = ev(n.e, res);
+              return n.op === "!" ? !v : -toNum(v);
+            }
+            case "call":
+              return LIB[n.fn](n.args.map((a) => ev(a, res)));
+            case "bin": {
+              const op = n.op;
+              if (op === "&&") return !!ev(n.l, res) && !!ev(n.r, res);
+              if (op === "||") return !!ev(n.l, res) || !!ev(n.r, res);
+              const a = ev(n.l, res),
+                b = ev(n.r, res);
+              switch (op) {
+                case "+":
+                  return toNum(a) + toNum(b);
+                case "-":
+                  return toNum(a) - toNum(b);
+                case "*":
+                  return toNum(a) * toNum(b);
+                case "/":
+                  return toNum(a) / toNum(b);
+                case "%":
+                  return toNum(a) % toNum(b);
+                case "<":
+                  return toNum(a) < toNum(b);
+                case "<=":
+                  return toNum(a) <= toNum(b);
+                case ">":
+                  return toNum(a) > toNum(b);
+                case ">=":
+                  return toNum(a) >= toNum(b);
+                case "==":
+                  return eqv(a, b);
+                case "!=":
+                  return !eqv(a, b);
+              }
+            }
+          }
+        }
+        const cache = new Map();
+        function parseCached(src) {
+          if (cache.has(src)) return cache.get(src);
+          const a = parse(src);
+          cache.set(src, a);
+          return a;
+        }
+        return {
+          evalSrc(src, res) {
+            if (!src) return undefined;
+            let a;
+            try {
+              a = parseCached(src);
+            } catch (_) {
+              return undefined;
+            }
+            try {
+              return ev(a, res);
+            } catch (_) {
+              return undefined;
+            }
+          },
+        };
+      })();
+      function coerceVal(v) {
+        if (v === "true") return true;
+        if (v === "false") return false;
+        if (typeof v === "string" && v.trim() !== "" && !isNaN(Number(v)))
+          return Number(v);
+        return v;
+      }
+      function evalVisible(src, rp, answers) {
+        if (!src) return true;
+        const res = (n) => {
+          const k = (rp || "") + n;
+          const val =
+            k in answers ? answers[k] : n in answers ? answers[n] : undefined;
+          return coerceVal(val);
+        };
+        const v = Expr.evalSrc(src, res);
+        return v === undefined ? true : !!v;
+      }
 
       /* ---- render nodes ---- */
-      function renderNodes(comps,answers,rp){
-        return(comps||[]).map(c=>renderNode(c,answers,rp)).join("");
+      function renderNodes(comps, answers, rp) {
+        return (comps || []).map((c) => renderNode(c, answers, rp)).join("");
       }
-      function renderNode(c,answers,rp){
-        if(!evalVisible(c.visibleWhen,rp,answers))return"";
-        if(c.kind==="block")
-          return`<div class="rv-block">${c.title?`<div class="rv-block-title">${esc(rowInterp(txt(c.title),answers,rp))}</div>`:""}${renderNodes(c.components||[],answers,rp)}</div>`;
-        if(c.kind==="section")
-          return`<div class="rv-section">${c.title?`<div class="rv-section-title">${esc(rowInterp(txt(c.title),answers,rp))}</div>`:""}${renderNodes(c.components||[],answers,rp)}</div>`;
-        if(c.kind==="roster")return renderRoster(c,answers,rp);
-        return renderField(c,answers,rp);
+      function renderNode(c, answers, rp) {
+        if (!evalVisible(c.visibleWhen, rp, answers)) return "";
+        if (c.kind === "block")
+          return `<div class="rv-block">${c.title ? `<div class="rv-block-title">${esc(rowInterp(txt(c.title), answers, rp))}</div>` : ""}${renderNodes(c.components || [], answers, rp)}</div>`;
+        if (c.kind === "section")
+          return `<div class="rv-section">${c.title ? `<div class="rv-section-title">${esc(rowInterp(txt(c.title), answers, rp))}</div>` : ""}${renderNodes(c.components || [], answers, rp)}</div>`;
+        if (c.kind === "roster") return renderRoster(c, answers, rp);
+        return renderField(c, answers, rp);
       }
 
-      function renderField(c,answers,rp){
-        if(c.type==="hidden")return"";
-        if(c.type==="note")return c.html?`<div class="rv-note">${sanitizeHtml(txt(c.html))}</div>`:"";
-        if(c.type==="markdown")return c.markdown?`<div class="rv-note rv-md">${mdToHtml(txt(c.markdown))}</div>`:"";
-        const key=rp+c.name;
-        const val=answers[key];
-        const label=esc(rowInterp(txt(c.label)||c.name,answers,rp));
-        const desc=c.description?`<div style="font-size:12px;color:var(--muted);margin-bottom:2px">${esc(rowInterp(txt(c.description),answers,rp))}</div>`:"";
+      function renderField(c, answers, rp) {
+        if (c.type === "hidden") return "";
+        if (c.type === "note")
+          return c.html
+            ? `<div class="rv-note">${sanitizeHtml(txt(c.html))}</div>`
+            : "";
+        if (c.type === "markdown")
+          return c.markdown
+            ? `<div class="rv-note rv-md">${mdToHtml(txt(c.markdown))}</div>`
+            : "";
+        const key = rp + c.name;
+        const val = answers[key];
+        const label = esc(rowInterp(txt(c.label) || c.name, answers, rp));
+        const desc = c.description
+          ? `<div style="font-size:12px;color:var(--muted);margin-bottom:2px">${esc(rowInterp(txt(c.description), answers, rp))}</div>`
+          : "";
 
         // Radio
-        if(c.type==="radio"){
-          const opts=getOptions(c,answers,rp);
-          if(opts.length){
-            const items=opts.map(o=>{
-              const sel=String(val)===String(o.value);
-              return`<div class="rv-choice-item ${sel?"selected":"unsel"}">
+        if (c.type === "radio") {
+          const opts = getOptions(c, answers, rp);
+          if (opts.length) {
+            const items = opts
+              .map((o) => {
+                const sel = String(val) === String(o.value);
+                return `<div class="rv-choice-item ${sel ? "selected" : "unsel"}">
                 <span class="rv-choice-icon"></span>${esc(o.label)}</div>`;
-            }).join("");
-            return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-choice-list">${items||"—"}</div></div>`;
+              })
+              .join("");
+            return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-choice-list">${items || "—"}</div></div>`;
           }
-          if(val!=null&&val!=="")return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer">${esc(String(val))}</div></div>`;
+          if (val != null && val !== "")
+            return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer">${esc(String(val))}</div></div>`;
         }
 
         // Select (dropdown) — tampilkan label pilihan, bukan value mentah
-        if(c.type==="select"){
-          const opts=getOptions(c,answers,rp);
-          const found=opts.find(o=>String(o.value)===String(val));
-          const display=found?found.label:(val!=null&&val!==""?String(val):null);
-          return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer${display==null?" empty":""}">${display!=null?esc(display):"—"}</div></div>`;
+        if (c.type === "select") {
+          const opts = getOptions(c, answers, rp);
+          const found = opts.find((o) => String(o.value) === String(val));
+          const display = found
+            ? found.label
+            : val != null && val !== ""
+              ? String(val)
+              : null;
+          return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer${display == null ? " empty" : ""}">${display != null ? esc(display) : "—"}</div></div>`;
         }
 
         // Checkbox / multi-select
-        if(c.type==="checkbox"||c.type==="multiselect"){
-          const selected=Array.isArray(val)?val.map(String):(val?[String(val)]:[]);
-          const opts=getOptions(c,answers,rp);
-          if(opts.length){
-            const items=opts.map(o=>{
-              const sel=selected.includes(String(o.value));
-              return`<div class="rv-choice-item ${sel?"selected":"unsel"}">
+        if (c.type === "checkbox" || c.type === "multiselect") {
+          const selected = Array.isArray(val)
+            ? val.map(String)
+            : val
+              ? [String(val)]
+              : [];
+          const opts = getOptions(c, answers, rp);
+          if (opts.length) {
+            const items = opts
+              .map((o) => {
+                const sel = selected.includes(String(o.value));
+                return `<div class="rv-choice-item ${sel ? "selected" : "unsel"}">
                 <span class="rv-checkbox-icon"></span>${esc(o.label)}</div>`;
-            }).join("");
-            return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-choice-list">${items}</div></div>`;
+              })
+              .join("");
+            return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-choice-list">${items}</div></div>`;
           }
           // Tanpa opsi — tampilkan nilai mentah
-          const display=selected.length?selected.join(", "):"—";
-          return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer-box">${esc(display)}</div></div>`;
+          const display = selected.length ? selected.join(", ") : "—";
+          return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer-box">${esc(display)}</div></div>`;
         }
 
         // Boolean
-        if(c.type==="boolean"){
-          const yes=(val==="true"||val===true);
-          const items=[{value:"true",label:"Ya"},{value:"false",label:"Tidak"}].map(o=>{
-            const sel=String(val)===o.value;
-            return`<div class="rv-choice-item ${sel?"selected":"unsel"}"><span class="rv-choice-icon"></span>${o.label}</div>`;
-          }).join("");
-          return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-choice-list">${items}</div></div>`;
+        if (c.type === "boolean") {
+          const yes = val === "true" || val === true;
+          const items = [
+            { value: "true", label: "Ya" },
+            { value: "false", label: "Tidak" },
+          ]
+            .map((o) => {
+              const sel = String(val) === o.value;
+              return `<div class="rv-choice-item ${sel ? "selected" : "unsel"}"><span class="rv-choice-icon"></span>${o.label}</div>`;
+            })
+            .join("");
+          return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-choice-list">${items}</div></div>`;
         }
 
-
-        if(c.type==="photo"||c.type==="image"||c.type==="signature"){
-          const src=getMediaSource(val);
-          if(!src){
-            return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer-box"><span style="color:var(--muted);font-style:italic">—</span></div></div>`;
+        if (
+          c.type === "photo" ||
+          c.type === "image" ||
+          c.type === "signature"
+        ) {
+          const src = getMediaSource(val);
+          if (!src) {
+            return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer-box"><span style="color:var(--muted);font-style:italic">—</span></div></div>`;
           }
-          const alt=esc(rowInterp(txt(c.label)||c.name,answers,rp));
-          return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-photo-wrap"><a class="rv-photo-link" href="${esc(src)}" target="_blank" rel="noreferrer">Buka gambar</a><img class="rv-photo-img" src="${esc(src)}" alt="${alt}"></div></div>`;
+          const alt = esc(rowInterp(txt(c.label) || c.name, answers, rp));
+          return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-photo-wrap"><a class="rv-photo-link" href="${esc(src)}" target="_blank" rel="noreferrer">Buka gambar</a><img class="rv-photo-img" src="${esc(src)}" alt="${alt}"></div></div>`;
         }
 
         // Textarea / text / number / date / dsb
-        const display=formatScalarValue(c,val);
-        const isEmpty=display==null||display==="";
-        if(c.type==="textarea"||c.type==="text_long"){
-          return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer-box">${isEmpty?`<span style="color:var(--muted);font-style:italic">—</span>`:esc(display)}</div></div>`;
+        const display = formatScalarValue(c, val);
+        const isEmpty = display == null || display === "";
+        if (c.type === "textarea" || c.type === "text_long") {
+          return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer-box">${isEmpty ? `<span style="color:var(--muted);font-style:italic">—</span>` : esc(display)}</div></div>`;
         }
-        return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer${isEmpty?" empty":""}">${isEmpty?"—":esc(display)}</div></div>`;
+        return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer${isEmpty ? " empty" : ""}">${isEmpty ? "—" : esc(display)}</div></div>`;
       }
 
-      function renderRoster(r,answers,rp){
-        rp=rp||"";
-        const count=getRosterCount(r,answers,rp);
-        const title=esc(rowInterp(txt(r.title)||r.name,answers,rp));
-        let html=`<div class="rv-roster"><div class="rv-roster-title">${title} <span style="font-weight:400;font-size:12px">(${count} baris)</span></div>`;
-        if(count<=0){html+=`<div class="rv-empty">Tidak ada data</div>`;}
-        else{
-          const rowLbl=(i,childRp)=>r.rowTitle?`${esc(rowInterp(txt(r.rowTitle),answers,childRp))} #${i+1}`:`Baris #${i+1}`;
-          for(let i=0;i<count;i++){
-            const childRp=rosterRowPrefix(r,i,rp);
-            html+=`<div class="rv-row"><div class="rv-row-num">${rowLbl(i,childRp)}</div>${renderNodes(r.components||[],answers,childRp)}</div>`;
+      function renderRoster(r, answers, rp) {
+        rp = rp || "";
+        const count = getRosterCount(r, answers, rp);
+        const title = esc(rowInterp(txt(r.title) || r.name, answers, rp));
+        let html = `<div class="rv-roster"><div class="rv-roster-title">${title} <span style="font-weight:400;font-size:12px">(${count} baris)</span></div>`;
+        if (count <= 0) {
+          html += `<div class="rv-empty">Tidak ada data</div>`;
+        } else {
+          const rowLbl = (i, childRp) =>
+            r.rowTitle
+              ? `${esc(rowInterp(txt(r.rowTitle), answers, childRp))} #${i + 1}`
+              : `Baris #${i + 1}`;
+          for (let i = 0; i < count; i++) {
+            const childRp = rosterRowPrefix(r, i, rp);
+            html += `<div class="rv-row"><div class="rv-row-num">${rowLbl(i, childRp)}</div>${renderNodes(r.components || [], answers, childRp)}</div>`;
           }
         }
-        return html+`</div>`;
+        return html + `</div>`;
       }
 
-      function renderFlatAnswers(answers){
-        const entries=Object.entries(answers).filter(([k])=>!k.includes("#"));
-        if(!entries.length)return`<div class="rv-block"><div class="rv-empty">Tidak ada data</div></div>`;
-        return`<div class="rv-block">`+entries.map(([k,v])=>
-          `<div class="rv-field"><div class="rv-label" style="font-family:var(--mono);font-size:11.5px">${esc(k)}</div><div class="rv-answer">${esc(valStr(v))}</div></div>`
-        ).join("")+`</div>`;
+      function renderFlatAnswers(answers) {
+        const entries = Object.entries(answers).filter(
+          ([k]) => !k.includes("#"),
+        );
+        if (!entries.length)
+          return `<div class="rv-block"><div class="rv-empty">Tidak ada data</div></div>`;
+        return (
+          `<div class="rv-block">` +
+          entries
+            .map(
+              ([k, v]) =>
+                `<div class="rv-field"><div class="rv-label" style="font-family:var(--mono);font-size:11.5px">${esc(k)}</div><div class="rv-answer">${esc(valStr(v))}</div></div>`,
+            )
+            .join("") +
+          `</div>`
+        );
       }
 
       /* ---- photo modal ---- */
-      function openPhotoModal(src){const m=document.getElementById("photoModal");const i=document.getElementById("photoModalImg");if(!m||!i)return;i.src=src;m.classList.add("open");}
-      function closePhotoModal(){const m=document.getElementById("photoModal");if(m)m.classList.remove("open");}
-      document.addEventListener("keydown",e=>{if(e.key==="Escape")closePhotoModal();});
+      function openPhotoModal(src) {
+        const m = document.getElementById("photoModal");
+        const i = document.getElementById("photoModalImg");
+        if (!m || !i) return;
+        i.src = src;
+        m.classList.add("open");
+      }
+      function closePhotoModal() {
+        const m = document.getElementById("photoModal");
+        if (m) m.classList.remove("open");
+      }
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") closePhotoModal();
+      });
 
       /* ---- helpers ---- */
-      function parseAnswers(raw){
-        if(typeof raw==="object"&&raw!==null)return raw;
-        try{return JSON.parse(raw)||{};}catch{return{};}
+      function parseAnswers(raw) {
+        if (typeof raw === "object" && raw !== null) return raw;
+        try {
+          return JSON.parse(raw) || {};
+        } catch {
+          return {};
+        }
       }
-      <<<<<<< HEAD
-      function sanitizeHtml(html){
-        const ALLOWED={A:['href','target','rel'],B:[],STRONG:[],I:[],EM:[],U:[],S:[],
-          P:[],BR:[],UL:[],OL:[],LI:[],BLOCKQUOTE:[],H1:[],H2:[],H3:[],H4:[],CODE:[],PRE:[],HR:[]};
-        const tmp=document.createElement('div');
-        tmp.innerHTML=html;
-        (function clean(node){for(const n of [...node.childNodes]){
-          if(n.nodeType===3)continue;if(n.nodeType!==1){n.remove();continue;}
-          if(!ALLOWED[n.tagName]){n.replaceWith(document.createTextNode(n.textContent));continue;}
-          for(const a of [...n.attributes])if(!ALLOWED[n.tagName].includes(a.name))n.removeAttribute(a.name);
-          if(n.tagName==='A'){const href=n.getAttribute('href')||'';if(!/^https?:\/\//.test(href)&&!href.startsWith('/'))n.setAttribute('href','#');n.setAttribute('rel','noopener noreferrer');}
-          clean(n);
-        }})(tmp);
+      function sanitizeHtml(html) {
+        const ALLOWED = {
+          A: ["href", "target", "rel"],
+          B: [],
+          STRONG: [],
+          I: [],
+          EM: [],
+          U: [],
+          S: [],
+          P: [],
+          BR: [],
+          UL: [],
+          OL: [],
+          LI: [],
+          BLOCKQUOTE: [],
+          H1: [],
+          H2: [],
+          H3: [],
+          H4: [],
+          CODE: [],
+          PRE: [],
+          HR: [],
+        };
+        const tmp = document.createElement("div");
+        tmp.innerHTML = html;
+        (function clean(node) {
+          for (const n of [...node.childNodes]) {
+            if (n.nodeType === 3) continue;
+            if (n.nodeType !== 1) {
+              n.remove();
+              continue;
+            }
+            if (!ALLOWED[n.tagName]) {
+              n.replaceWith(document.createTextNode(n.textContent));
+              continue;
+            }
+            for (const a of [...n.attributes])
+              if (!ALLOWED[n.tagName].includes(a.name))
+                n.removeAttribute(a.name);
+            if (n.tagName === "A") {
+              const href = n.getAttribute("href") || "";
+              if (!/^https?:\/\//.test(href) && !href.startsWith("/"))
+                n.setAttribute("href", "#");
+              n.setAttribute("rel", "noopener noreferrer");
+            }
+            clean(n);
+          }
+        })(tmp);
         return tmp.innerHTML;
       }
-      function mdToHtml(src){
-        if(!src)return"";
-        const e=s=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-        const inl=s=>e(s).replace(/`([^`]+)`/g,"<code>$1</code>").replace(/\*\*([^*]+)\*\*/g,"<strong>$1</strong>").replace(/(^|[^*])\*([^*]+)\*/g,"$1<em>$2</em>").replace(/\[([^\]]+)\]\(([^)]+)\)/g,(_,t,u)=>{const s=/^https?:\/\//.test(u)||u.startsWith('/')?u:'#';return`<a href="${s}" target="_blank" rel="noopener noreferrer">${t}</a>`;});
-        const L=String(src).replace(/\r\n/g,"\n").split("\n");let h="",i=0;
-        while(i<L.length){const l=L[i];
-          const hm=l.match(/^\s*(#{1,6})\s+(.*)/);if(hm){h+=`<h${hm[1].length}>${inl(hm[2])}</h${hm[1].length}>`;i++;continue;}
-          if(/^\s*[-*]\s+/.test(l)){const it=[];while(i<L.length&&/^\s*[-*]\s+/.test(L[i])){it.push(`<li>${inl(L[i].replace(/^\s*[-*]\s+/,""))}</li>`);i++;}h+=`<ul>${it.join("")}</ul>`;continue;}
-          if(/^\s*\d+\.\s+/.test(l)){const it=[];while(i<L.length&&/^\s*\d+\.\s+/.test(L[i])){it.push(`<li>${inl(L[i].replace(/^\s*\d+\.\s+/,""))}</li>`);i++;}h+=`<ol>${it.join("")}</ol>`;continue;}
-          if(/^\s*>\s?/.test(l)){const q=[];while(i<L.length&&/^\s*>\s?/.test(L[i])){q.push(inl(L[i].replace(/^\s*>\s?/,"")));i++;}h+=`<blockquote>${q.join("<br>")}</blockquote>`;continue;}
-          if(l.trim()===""){h+="<p></p>";i++;continue;}
-          h+=`<p>${inl(l)}</p>`;i++;
+      function mdToHtml(src) {
+        if (!src) return "";
+        const e = (s) =>
+          s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const inl = (s) =>
+          e(s)
+            .replace(/`([^`]+)`/g, "<code>$1</code>")
+            .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+            .replace(/(^|[^*])\*([^*]+)\*/g, "$1<em>$2</em>")
+            .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, t, u) => {
+              const s = /^https?:\/\//.test(u) || u.startsWith("/") ? u : "#";
+              return `<a href="${s}" target="_blank" rel="noopener noreferrer">${t}</a>`;
+            });
+        const L = String(src).replace(/\r\n/g, "\n").split("\n");
+        let h = "",
+          i = 0;
+        while (i < L.length) {
+          const l = L[i];
+          const hm = l.match(/^\s*(#{1,6})\s+(.*)/);
+          if (hm) {
+            h += `<h${hm[1].length}>${inl(hm[2])}</h${hm[1].length}>`;
+            i++;
+            continue;
+          }
+          if (/^\s*[-*]\s+/.test(l)) {
+            const it = [];
+            while (i < L.length && /^\s*[-*]\s+/.test(L[i])) {
+              it.push(`<li>${inl(L[i].replace(/^\s*[-*]\s+/, ""))}</li>`);
+              i++;
+            }
+            h += `<ul>${it.join("")}</ul>`;
+            continue;
+          }
+          if (/^\s*\d+\.\s+/.test(l)) {
+            const it = [];
+            while (i < L.length && /^\s*\d+\.\s+/.test(L[i])) {
+              it.push(`<li>${inl(L[i].replace(/^\s*\d+\.\s+/, ""))}</li>`);
+              i++;
+            }
+            h += `<ol>${it.join("")}</ol>`;
+            continue;
+          }
+          if (/^\s*>\s?/.test(l)) {
+            const q = [];
+            while (i < L.length && /^\s*>\s?/.test(L[i])) {
+              q.push(inl(L[i].replace(/^\s*>\s?/, "")));
+              i++;
+            }
+            h += `<blockquote>${q.join("<br>")}</blockquote>`;
+            continue;
+          }
+          if (l.trim() === "") {
+            h += "<p></p>";
+            i++;
+            continue;
+          }
+          h += `<p>${inl(l)}</p>`;
+          i++;
         }
         return h;
       }
-      let apiCache={};
-      function getPath(obj,path){try{return path.split('.').reduce((o,k)=>o&&o[k],obj);}catch{return null;}}
-      function buildApiUrl(urlTpl,answers,rp){
-        if(!urlTpl)return"";
-        return urlTpl.replace(/\{([^}]+)\}/g,(_,k)=>{
-          const v=answers&&((rp||"")+k in answers?answers[(rp||"")+k]:(k in answers?answers[k]:""));
-          return encodeURIComponent(String(v||""));
+      let apiCache = {};
+      function getPath(obj, path) {
+        try {
+          return path.split(".").reduce((o, k) => o && o[k], obj);
+        } catch {
+          return null;
+        }
+      }
+      function buildApiUrl(urlTpl, answers, rp) {
+        if (!urlTpl) return "";
+        return urlTpl.replace(/\{([^}]+)\}/g, (_, k) => {
+          const v =
+            answers &&
+            ((rp || "") + k in answers
+              ? answers[(rp || "") + k]
+              : k in answers
+                ? answers[k]
+                : "");
+          return encodeURIComponent(String(v || ""));
         });
       }
-      async function prefetchApiOptions(answers){
-        if(!SCHEMA||!answers)return;
-        const jobs=new Map();
-        function collectFields(comps,rp){
-          (comps||[]).forEach(c=>{
-            if(c.kind==="block"||c.kind==="section")collectFields(c.components||[],rp);
-            else if(c.kind==="roster"){
-              const count=getRosterCount(c,answers,rp);
-              for(let i=0;i<count;i++)collectFields(c.components||[],rosterRowPrefix(c,i,rp));
-            }else if(c.optionsApi&&c.optionsApi.url){
-              const url=buildApiUrl(c.optionsApi.url,answers,rp);
-              if(url&&!apiCache[url])jobs.set(url,c.optionsApi);
+      async function prefetchApiOptions(answers) {
+        if (!SCHEMA || !answers) return;
+        const jobs = new Map();
+        function collectFields(comps, rp) {
+          (comps || []).forEach((c) => {
+            if (c.kind === "block" || c.kind === "section")
+              collectFields(c.components || [], rp);
+            else if (c.kind === "roster") {
+              const count = getRosterCount(c, answers, rp);
+              for (let i = 0; i < count; i++)
+                collectFields(c.components || [], rosterRowPrefix(c, i, rp));
+            } else if (c.optionsApi && c.optionsApi.url) {
+              const url = buildApiUrl(c.optionsApi.url, answers, rp);
+              if (url && !apiCache[url]) jobs.set(url, c.optionsApi);
             }
           });
         }
-        (SCHEMA.pages||[]).forEach(pg=>collectFields(pg.components||[],""));
-        await Promise.all([...jobs.entries()].map(async([url,apiCfg])=>{
-          try{
-            const data=await fetch(url,{headers:H}).then(r=>r.ok?r.json():null);
-            if(!data)return;
-            let arr=apiCfg.path?getPath(data,apiCfg.path):(Array.isArray(data)?data:(data.data||data.items||data.results||[]));
-            const vf=apiCfg.valueField||"code",lf=apiCfg.labelField||"label";
-            apiCache[url]=(arr||[]).map(it=>({value:String(it[vf]),label:txt(it[lf])||String(it[vf])}));
-          }catch(_){}
-        }));
+        (SCHEMA.pages || []).forEach((pg) =>
+          collectFields(pg.components || [], ""),
+        );
+        await Promise.all(
+          [...jobs.entries()].map(async ([url, apiCfg]) => {
+            try {
+              const data = await fetch(url, { headers: H }).then((r) =>
+                r.ok ? r.json() : null,
+              );
+              if (!data) return;
+              let arr = apiCfg.path
+                ? getPath(data, apiCfg.path)
+                : Array.isArray(data)
+                  ? data
+                  : data.data || data.items || data.results || [];
+              const vf = apiCfg.valueField || "code",
+                lf = apiCfg.labelField || "label";
+              apiCache[url] = (arr || []).map((it) => ({
+                value: String(it[vf]),
+                label: txt(it[lf]) || String(it[vf]),
+              }));
+            } catch (_) {}
+          }),
+        );
       }
-      =======
-      function ancestorPrefixes(rowPrefix){
-        const prefixes=[];
-        let p=String(rowPrefix||"");
-        while(p){
+      function ancestorPrefixes(rowPrefix) {
+        const prefixes = [];
+        let p = String(rowPrefix || "");
+        while (p) {
           prefixes.push(p);
-          const m=p.match(/^(.*?)([^#]+#\d+#)$/);
-          if(!m)break;
-          p=m[1];
+          const m = p.match(/^(.*?)([^#]+#\d+#)$/);
+          if (!m) break;
+          p = m[1];
         }
         return prefixes;
       }
-      function indexFromScopePrefix(prefix){
-        const m=String(prefix||"").match(/#(\d+)#$/);
-        return m?Number(m[1])+1:null;
+      function indexFromScopePrefix(prefix) {
+        const m = String(prefix || "").match(/#(\d+)#$/);
+        return m ? Number(m[1]) + 1 : null;
       }
-      function rowInterp(text,answers,rowPrefix){
-        if(!text)return text;
-        return String(text).replace(INTERP_RE,(_,a,b)=>{
-          const name=(a||b).trim();
-          if(name==="index"){
-            for(const p of ancestorPrefixes(rowPrefix)){
-              const idx=indexFromScopePrefix(p);
-              if(idx!=null)return String(idx);
+      function rowInterp(text, answers, rowPrefix) {
+        if (!text) return text;
+        return String(text).replace(INTERP_RE, (_, a, b) => {
+          const name = (a || b).trim();
+          if (name === "index") {
+            for (const p of ancestorPrefixes(rowPrefix)) {
+              const idx = indexFromScopePrefix(p);
+              if (idx != null) return String(idx);
             }
             return "";
           }
-          for(const p of ancestorPrefixes(rowPrefix)){
-            const key=p+name;
-            if(key in answers)return String(answers[key]);
+          for (const p of ancestorPrefixes(rowPrefix)) {
+            const key = p + name;
+            if (key in answers) return String(answers[key]);
           }
-          if(name in answers)return String(answers[name]);
+          if (name in answers) return String(answers[name]);
           return "";
         });
       }
-      >>>>>>> dc7e3aae987fed03253e96278cca88bd617806a1
-      function formatDate(iso){
-        try{return new Date(iso).toLocaleString("id-ID",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});}catch{return iso||"";}
+      function formatDate(iso) {
+        try {
+          return new Date(iso).toLocaleString("id-ID", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+        } catch {
+          return iso || "";
+        }
       }
-      function valStr(v){
-        if(v==null||v==="")return"";
-        if(Array.isArray(v))return v.join(", ");
+      function valStr(v) {
+        if (v == null || v === "") return "";
+        if (Array.isArray(v)) return v.join(", ");
         return String(v);
       }
-      function getOptions(c,answers,rp){
-        const opts=[];
-        const refKey=c.optionsRef||c.optionsTable;
-        if(refKey&&SCHEMA){
-          const t=(SCHEMA.referenceData||{})[refKey];
-          if(t&&t.items)t.items.forEach(it=>opts.push({value:String(it.code),label:txt(it.label)}));
+      function getOptions(c, answers, rp) {
+        const opts = [];
+        const refKey = c.optionsRef || c.optionsTable;
+        if (refKey && SCHEMA) {
+          const t = (SCHEMA.referenceData || {})[refKey];
+          if (t && t.items)
+            t.items.forEach((it) =>
+              opts.push({ value: String(it.code), label: txt(it.label) }),
+            );
         }
-        if(!opts.length&&c.options)c.options.forEach(o=>opts.push({value:String(o.value),label:txt(o.label)||String(o.value)}));
-        if(!opts.length&&c.optionsApi&&c.optionsApi.url){
-          const url=buildApiUrl(c.optionsApi.url,answers,rp);
-          const cached=apiCache[url];
-          if(cached)cached.forEach(o=>opts.push(o));
+        if (!opts.length && c.options)
+          c.options.forEach((o) =>
+            opts.push({
+              value: String(o.value),
+              label: txt(o.label) || String(o.value),
+            }),
+          );
+        if (!opts.length && c.optionsApi && c.optionsApi.url) {
+          const url = buildApiUrl(c.optionsApi.url, answers, rp);
+          const cached = apiCache[url];
+          if (cached) cached.forEach((o) => opts.push(o));
         }
         return opts;
       }
-      function formatScalarValue(c,val){
-        if(val==null||val==="")return null;
+      function formatScalarValue(c, val) {
+        if (val == null || val === "") return null;
         return String(val);
       }
-      function getMediaSource(val){
-        if(!val)return"";
-        if(Array.isArray(val))return getMediaSource(val[0]);
-        if(typeof val==="object"){
-          return val.dataUrl||val.url||val.src||val.value||val.base64||"";
+      function getMediaSource(val) {
+        if (!val) return "";
+        if (Array.isArray(val)) return getMediaSource(val[0]);
+        if (typeof val === "object") {
+          return (
+            val.dataUrl || val.url || val.src || val.value || val.base64 || ""
+          );
         }
-        const s=String(val);
-        if(/^data:image\//i.test(s))return s;
-        if(/^https?:\/\//i.test(s)||s.startsWith("/")||s.startsWith("blob:"))return s;
-        return s.startsWith("base64,")?"data:image/*;base64,"+s.slice(7):"";
+        const s = String(val);
+        if (/^data:image\//i.test(s)) return s;
+        if (
+          /^https?:\/\//i.test(s) ||
+          s.startsWith("/") ||
+          s.startsWith("blob:")
+        )
+          return s;
+        return s.startsWith("base64,")
+          ? "data:image/*;base64," + s.slice(7)
+          : "";
       }
-      function getRosterCount(r,answers,rowPrefix){
-        const from=String(r.countFrom||"").trim();
-        if(from){
-          const raw=(rowPrefix&&((rowPrefix+from) in answers))?answers[rowPrefix+from]:answers[from];
-          const cf=Math.floor(Number(raw));
-          if(!Number.isFinite(cf)||cf<0)return 0;
-          if(r.max!=null&&r.max!==""&&cf>Number(r.max))return Number(r.max);
+      function getRosterCount(r, answers, rowPrefix) {
+        const from = String(r.countFrom || "").trim();
+        if (from) {
+          const raw =
+            rowPrefix && rowPrefix + from in answers
+              ? answers[rowPrefix + from]
+              : answers[from];
+          const cf = Math.floor(Number(raw));
+          if (!Number.isFinite(cf) || cf < 0) return 0;
+          if (r.max != null && r.max !== "" && cf > Number(r.max))
+            return Number(r.max);
           return cf;
         }
-        const stored=answers[rosterCountKey(r,rowPrefix)];
-        if(stored!=null){const n=Math.floor(Number(stored));return Number.isFinite(n)&&n>=0?n:0;}
-        let max=-1;
-        const prefix=rosterScopePrefix(r,rowPrefix);
-        for(const k of Object.keys(answers)){
-          if(k.startsWith(prefix)&&k!==rosterCountKey(r,rowPrefix)){
-            const m=k.slice(prefix.length).match(/^(\d+)#/);
-            if(m)max=Math.max(max,+m[1]);
+        const stored = answers[rosterCountKey(r, rowPrefix)];
+        if (stored != null) {
+          const n = Math.floor(Number(stored));
+          return Number.isFinite(n) && n >= 0 ? n : 0;
+        }
+        let max = -1;
+        const prefix = rosterScopePrefix(r, rowPrefix);
+        for (const k of Object.keys(answers)) {
+          if (k.startsWith(prefix) && k !== rosterCountKey(r, rowPrefix)) {
+            const m = k.slice(prefix.length).match(/^(\d+)#/);
+            if (m) max = Math.max(max, +m[1]);
           }
         }
-        return max+1;
+        return max + 1;
       }
-      function rosterScopePrefix(r,rowPrefix){return `${rowPrefix||""}${r.name}#`;}
-      function rosterCountKey(r,rowPrefix){return `${rosterScopePrefix(r,rowPrefix)}count`;}
-      function rosterRowPrefix(r,rowIdx,rowPrefix){return `${rosterScopePrefix(r,rowPrefix)}${rowIdx}#`;}
+      function rosterScopePrefix(r, rowPrefix) {
+        return `${rowPrefix || ""}${r.name}#`;
+      }
+      function rosterCountKey(r, rowPrefix) {
+        return `${rosterScopePrefix(r, rowPrefix)}count`;
+      }
+      function rosterRowPrefix(r, rowIdx, rowPrefix) {
+        return `${rosterScopePrefix(r, rowPrefix)}${rowIdx}#`;
+      }
 
-      if(FORM_ID&&RESP_ID)init();
+      if (FORM_ID && RESP_ID) init();
     </script>
   </body>
 </html>
