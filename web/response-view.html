@@ -63,6 +63,9 @@ button{font-family:inherit;cursor:pointer}
 .rv-answer{font-size:13.5px;font-weight:500;color:var(--ink);word-break:break-word}
 .rv-answer.empty{color:var(--muted);font-style:italic;font-weight:400}
 .rv-answer-box{background:var(--surface);border:1px solid var(--line);border-radius:7px;padding:8px 11px;font-size:13px;color:var(--ink);min-height:36px;word-break:break-word}
+.rv-photo-wrap{display:flex;flex-direction:column;gap:8px}
+.rv-photo-img{display:block;max-width:100%;max-height:420px;border-radius:8px;border:1px solid var(--line);background:#fff;object-fit:contain;box-shadow:0 1px 2px rgba(19,23,30,.06)}
+.rv-photo-link{font-size:12px;color:var(--accent-ink);text-decoration:none;font-weight:600;word-break:break-all}
 .rv-choice-list{display:flex;flex-direction:column;gap:5px;margin-top:2px}
 .rv-choice-item{display:flex;align-items:center;gap:8px;font-size:13px;padding:5px 10px;border-radius:6px}
 .rv-choice-item.selected{background:var(--accent-soft);color:var(--accent-ink);font-weight:600}
@@ -125,6 +128,7 @@ if(!FORM_ID||!RESP_ID){document.getElementById("content").innerHTML='<div style=
 const H={"Authorization":"Bearer "+TOKEN};
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const txt=v=>v==null?"":(typeof v==="object"?(v.id||Object.values(v)[0]||""):String(v));
+const INTERP_RE=/\{\{\s*([^}]+?)\s*\}\}|\$\{\s*([^}]+?)\s*\}/g;
 
 let SCHEMA=null, RESP=null, CUR_PG=0;
 
@@ -190,7 +194,7 @@ function renderPage(){
   let body="";
   if(pages.length){
     const p=pages[CUR_PG];
-    body+=`<div class="page-title">${esc(txt(p.title)||p.name||"Halaman "+(CUR_PG+1))}</div>`;
+    body+=`<div class="page-title">${esc(rowInterp(txt(p.title)||p.name||"Halaman "+(CUR_PG+1),answers,""))}</div>`;
     body+=renderNodes(p.components||[],answers,"");
   }else{
     body=renderFlatAnswers(answers);
@@ -221,9 +225,9 @@ function renderNodes(comps,answers,rp){
 }
 function renderNode(c,answers,rp){
   if(c.kind==="block")
-    return`<div class="rv-block">${c.title?`<div class="rv-block-title">${esc(txt(c.title))}</div>`:""}${renderNodes(c.components||[],answers,rp)}</div>`;
+    return`<div class="rv-block">${c.title?`<div class="rv-block-title">${esc(rowInterp(txt(c.title),answers,rp))}</div>`:""}${renderNodes(c.components||[],answers,rp)}</div>`;
   if(c.kind==="section")
-    return`<div class="rv-section">${c.title?`<div class="rv-section-title">${esc(txt(c.title))}</div>`:""}${renderNodes(c.components||[],answers,rp)}</div>`;
+    return`<div class="rv-section">${c.title?`<div class="rv-section-title">${esc(rowInterp(txt(c.title),answers,rp))}</div>`:""}${renderNodes(c.components||[],answers,rp)}</div>`;
   if(c.kind==="roster")return renderRoster(c,answers,rp);
   return renderField(c,answers,rp);
 }
@@ -232,8 +236,8 @@ function renderField(c,answers,rp){
   if(c.type==="note"||c.type==="markdown"||c.type==="hidden")return"";
   const key=rp+c.name;
   const val=answers[key];
-  const label=esc(txt(c.label)||c.name);
-  const desc=c.description?`<div style="font-size:12px;color:var(--muted);margin-bottom:2px">${esc(txt(c.description))}</div>`:"";
+  const label=esc(rowInterp(txt(c.label)||c.name,answers,rp));
+  const desc=c.description?`<div style="font-size:12px;color:var(--muted);margin-bottom:2px">${esc(rowInterp(txt(c.description),answers,rp))}</div>`:"";
 
   // Radio / select
   if(c.type==="radio"||c.type==="select"){
@@ -275,6 +279,15 @@ function renderField(c,answers,rp){
     return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-choice-list">${items}</div></div>`;
   }
 
+  if(c.type==="photo"||c.type==="image"||c.type==="signature"){
+    const src=getMediaSource(val);
+    if(!src){
+      return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer-box"><span style="color:var(--muted);font-style:italic">—</span></div></div>`;
+    }
+    const alt=esc(rowInterp(txt(c.label)||c.name,answers,rp));
+    return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-photo-wrap"><a class="rv-photo-link" href="${esc(src)}" target="_blank" rel="noreferrer">Buka gambar</a><img class="rv-photo-img" src="${esc(src)}" alt="${alt}"></div></div>`;
+  }
+
   // Textarea / text / number / date / dsb
   const display=formatScalarValue(c,val);
   const isEmpty=display==null||display==="";
@@ -287,14 +300,14 @@ function renderField(c,answers,rp){
 function renderRoster(r,answers,rp){
   rp=rp||"";
   const count=getRosterCount(r,answers,rp);
-  const title=esc(txt(r.title)||r.name);
+  const title=esc(rowInterp(txt(r.title)||r.name,answers,rp));
   let html=`<div class="rv-roster"><div class="rv-roster-title">${title} <span style="font-weight:400;font-size:12px">(${count} baris)</span></div>`;
   if(count<=0){html+=`<div class="rv-empty">Tidak ada data</div>`;}
   else{
-    const rowLbl=i=>r.rowTitle?`${esc(txt(r.rowTitle))} #${i+1}`:`Baris #${i+1}`;
+    const rowLbl=(i,childRp)=>r.rowTitle?`${esc(rowInterp(txt(r.rowTitle),answers,childRp))} #${i+1}`:`Baris #${i+1}`;
     for(let i=0;i<count;i++){
       const childRp=rosterRowPrefix(r,i,rp);
-      html+=`<div class="rv-row"><div class="rv-row-num">${rowLbl(i)}</div>${renderNodes(r.components||[],answers,childRp)}</div>`;
+      html+=`<div class="rv-row"><div class="rv-row-num">${rowLbl(i,childRp)}</div>${renderNodes(r.components||[],answers,childRp)}</div>`;
     }
   }
   return html+`</div>`;
@@ -312,6 +325,40 @@ function renderFlatAnswers(answers){
 function parseAnswers(raw){
   if(typeof raw==="object"&&raw!==null)return raw;
   try{return JSON.parse(raw)||{};}catch{return{};}
+}
+function ancestorPrefixes(rowPrefix){
+  const prefixes=[];
+  let p=String(rowPrefix||"");
+  while(p){
+    prefixes.push(p);
+    const m=p.match(/^(.*?)([^#]+#\d+#)$/);
+    if(!m)break;
+    p=m[1];
+  }
+  return prefixes;
+}
+function indexFromScopePrefix(prefix){
+  const m=String(prefix||"").match(/#(\d+)#$/);
+  return m?Number(m[1])+1:null;
+}
+function rowInterp(text,answers,rowPrefix){
+  if(!text)return text;
+  return String(text).replace(INTERP_RE,(_,a,b)=>{
+    const name=(a||b).trim();
+    if(name==="index"){
+      for(const p of ancestorPrefixes(rowPrefix)){
+        const idx=indexFromScopePrefix(p);
+        if(idx!=null)return String(idx);
+      }
+      return "";
+    }
+    for(const p of ancestorPrefixes(rowPrefix)){
+      const key=p+name;
+      if(key in answers)return String(answers[key]);
+    }
+    if(name in answers)return String(answers[name]);
+    return "";
+  });
 }
 function formatDate(iso){
   try{return new Date(iso).toLocaleString("id-ID",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});}catch{return iso||"";}
@@ -333,6 +380,17 @@ function getOptions(c){
 function formatScalarValue(c,val){
   if(val==null||val==="")return null;
   return String(val);
+}
+function getMediaSource(val){
+  if(!val)return"";
+  if(Array.isArray(val))return getMediaSource(val[0]);
+  if(typeof val==="object"){
+    return val.dataUrl||val.url||val.src||val.value||val.base64||"";
+  }
+  const s=String(val);
+  if(/^data:image\//i.test(s))return s;
+  if(/^https?:\/\//i.test(s)||s.startsWith("/")||s.startsWith("blob:"))return s;
+  return s.startsWith("base64,")?"data:image/*;base64,"+s.slice(7):"";
 }
 function getRosterCount(r,answers,rowPrefix){
   const from=String(r.countFrom||"").trim();
