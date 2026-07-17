@@ -115,6 +115,12 @@ button,input,select,textarea{font-family:inherit}
 .rv-row-num{font-family:var(--mono);font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:8px}
 .rv-empty{font-size:12.5px;color:var(--muted);font-style:italic}
 .roster-edit-note{font-size:11.5px;color:var(--muted);font-style:italic;margin-top:6px;padding:6px 10px;background:var(--panel-2);border-radius:6px}
+.rv-note{font-size:13px;line-height:1.6;color:var(--ink-soft);padding:8px 0;border-bottom:1px solid var(--line-2)}
+.rv-note:last-child{border-bottom:none}
+.rv-note p,.rv-note ul,.rv-note ol{margin:2px 0 6px}
+.rv-note ul,.rv-note ol{padding-left:20px}
+.rv-note code{background:var(--panel-2);padding:1px 4px;border-radius:3px;font-size:12px;font-family:var(--mono)}
+.rv-note blockquote{border-left:3px solid var(--line);margin:4px 0;padding-left:10px;color:var(--muted)}
 
 /* toast */
 .toast{position:fixed;bottom:78px;right:24px;background:var(--ink);color:#fff;padding:10px 18px;border-radius:var(--radius-s);font-size:13px;font-weight:500;z-index:999;animation:slideIn .2s ease;max-width:300px}
@@ -170,6 +176,29 @@ let EDIT_MODE=false;
 let editedAnswers={};  // berjalan saat edit mode, berisi salinan answers yang sedang diedit
 let VISIBLE_FIELDS=null;  // null = semua, Set = hanya field yang diizinkan (viewer terbatas)
 
+/* ---- interpolasi {{nama}} / ${nama} pada rowTitle ---- */
+function ancestorPrefixes(rowPrefix){
+  const prefixes=[];let p=String(rowPrefix||"");
+  while(p){prefixes.push(p);const m=p.match(/^(.*?)([^#]+#\d+#)$/);if(!m)break;p=m[1];}
+  return prefixes;
+}
+function indexFromScopePrefix(prefix){
+  const m=String(prefix||"").match(/#(\d+)#$/);return m?Number(m[1])+1:null;
+}
+function rowInterp(text,answers,rowPrefix){
+  if(!text)return text;
+  return String(text).replace(/\{\{\s*([^}]+?)\s*\}\}|\$\{\s*([^}]+?)\s*\}/g,(_,a,b)=>{
+    const name=(a||b).trim();
+    if(name==="index"){
+      for(const p of ancestorPrefixes(rowPrefix)){const idx=indexFromScopePrefix(p);if(idx!=null)return String(idx);}
+      return"";
+    }
+    for(const p of ancestorPrefixes(rowPrefix)){const key=p+name;if(key in answers)return String(answers[key]);}
+    if(name in answers)return String(answers[name]);
+    return"";
+  });
+}
+
 async function api(path,opts){
   opts=opts||{};
   const r=await fetch(path,{...opts,headers:{...H,...(opts.headers||{})}});
@@ -220,6 +249,7 @@ async function init(){
       document.getElementById("btnCancel").addEventListener("click",cancelEdit);
     }
 
+    await prefetchApiOptions(parseAnswers(resp.answers));
     CUR_PG=0;
     renderPage();
   }catch(e){
@@ -413,9 +443,9 @@ function renderNode(c,answers,rp){
   if(!evalVisible(c.visibleWhen,rp,answers))return"";
   if(c.kind==="field"&&VISIBLE_FIELDS&&!VISIBLE_FIELDS.has(c.name))return"";
   if(c.kind==="block")
-    return`<div class="rv-block">${c.title?`<div class="rv-block-title">${esc(txt(c.title))}</div>`:""}${renderNodes(c.components||[],answers,rp)}</div>`;
+    return`<div class="rv-block">${c.title?`<div class="rv-block-title">${esc(rowInterp(txt(c.title),answers,rp))}</div>`:""}${renderNodes(c.components||[],answers,rp)}</div>`;
   if(c.kind==="section")
-    return`<div class="rv-section">${c.title?`<div class="rv-section-title">${esc(txt(c.title))}</div>`:""}${renderNodes(c.components||[],answers,rp)}</div>`;
+    return`<div class="rv-section">${c.title?`<div class="rv-section-title">${esc(rowInterp(txt(c.title),answers,rp))}</div>`:""}${renderNodes(c.components||[],answers,rp)}</div>`;
   if(c.kind==="roster")return renderRoster(c,answers,rp);
   return EDIT_MODE?renderEditField(c,answers,rp):renderReadField(c,answers,rp);
 }
@@ -427,14 +457,16 @@ function evalVisible(src,rp,answers){if(!src)return true;const res=n=>{const k=(
 
 /* ---- READ-ONLY field ---- */
 function renderReadField(c,answers,rp){
-  if(c.type==="note"||c.type==="markdown"||c.type==="hidden")return"";
+  if(c.type==="hidden")return"";
+  if(c.type==="note")return c.html?`<div class="rv-note">${sanitizeHtml(txt(c.html))}</div>`:"";
+  if(c.type==="markdown")return c.markdown?`<div class="rv-note rv-md">${mdToHtml(txt(c.markdown))}</div>`:"";
   const key=rp+c.name;
   const val=answers[key];
-  const label=esc(txt(c.label)||c.name);
-  const desc=c.description?`<div class="rv-desc">${esc(txt(c.description))}</div>`:"";
+  const label=esc(rowInterp(txt(c.label)||c.name,answers,rp));
+  const desc=c.description?`<div class="rv-desc">${esc(rowInterp(txt(c.description),answers,rp))}</div>`:"";
 
-  if(c.type==="radio"||c.type==="select"){
-    const opts=getOptions(c);
+  if(c.type==="radio"){
+    const opts=getOptions(c,answers,rp);
     if(opts.length){
       const items=opts.map(o=>{
         const sel=String(val)===String(o.value);
@@ -443,12 +475,21 @@ function renderReadField(c,answers,rp){
       }).join("");
       return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-choice-list">${items}</div></div>`;
     }
-    // optionsApi: tampilkan nilai mentah
+    if(val!=null&&val!=="")return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer">${esc(String(val))}</div></div>`;
+  }
+  if(c.type==="select"){
+    const opts=getOptions(c,answers,rp);
+    if(opts.length){
+      const found=opts.find(o=>String(o.value)===String(val));
+      const display=found?esc(found.label):(val!=null&&val!==""?esc(String(val)):"—");
+      const isEmpty=!found&&(val==null||val==="");
+      return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer${isEmpty?" empty":""}">${display}</div></div>`;
+    }
     if(val!=null&&val!=="")return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer">${esc(String(val))}</div></div>`;
   }
   if(c.type==="checkbox"||c.type==="multiselect"){
     const selected=Array.isArray(val)?val.map(String):(val?[String(val)]:[]);
-    const opts=getOptions(c);
+    const opts=getOptions(c,answers,rp);
     if(opts.length){
       const items=opts.map(o=>{
         const sel=selected.includes(String(o.value));
@@ -487,16 +528,18 @@ function renderReadField(c,answers,rp){
 
 /* ---- EDIT field ---- */
 function renderEditField(c,answers,rp){
-  if(c.type==="note"||c.type==="markdown"||c.type==="hidden")return"";
+  if(c.type==="hidden")return"";
+  if(c.type==="note")return c.html?`<div class="rv-note">${sanitizeHtml(txt(c.html))}</div>`:"";
+  if(c.type==="markdown")return c.markdown?`<div class="rv-note rv-md">${mdToHtml(txt(c.markdown))}</div>`:"";
   const key=rp+c.name;
   const val=answers[key];
-  const label=esc(txt(c.label)||c.name);
+  const label=esc(rowInterp(txt(c.label)||c.name,answers,rp));
   const safeKey=CSS.escape(key);
-  const desc=c.description?`<div class="ed-desc">${esc(txt(c.description))}</div>`:"";
+  const desc=c.description?`<div class="ed-desc">${esc(rowInterp(txt(c.description),answers,rp))}</div>`:"";
 
   // Radio / select
   if(c.type==="radio"||c.type==="select"){
-    const opts=getOptions(c);
+    const opts=getOptions(c,answers,rp);
     if(opts.length){
       // Untuk sedikit opsi: radio buttons. Untuk banyak: <select>
       if(opts.length<=6){
@@ -520,7 +563,7 @@ function renderEditField(c,answers,rp){
   // Checkbox / multiselect
   if(c.type==="checkbox"||c.type==="multiselect"){
     const selected=Array.isArray(val)?val.map(String):(val?[String(val)]:[]);
-    const opts=getOptions(c);
+    const opts=getOptions(c,answers,rp);
     if(opts.length){
       const items=opts.map(o=>`<label class="ed-check-item">
         <input type="checkbox" name="ed_${safeKey}" value="${esc(o.value)}" ${selected.includes(String(o.value))?"checked":""}>
@@ -607,14 +650,14 @@ function renderEditField(c,answers,rp){
 function renderRoster(r,answers,rp){
   rp=rp||"";
   const count=getRosterCount(r,answers,rp);
-  const title=esc(txt(r.title)||r.name);
+  const title=esc(rowInterp(txt(r.title)||r.name,answers,rp));
   let html=`<div class="rv-roster"><div class="rv-roster-title">${title} <span style="font-weight:400;font-size:12px">(${count} baris)</span></div>`;
   if(count<=0){html+=`<div class="rv-empty">Tidak ada data</div>`;}
   else{
-    const rowLbl=i=>r.rowTitle?`${esc(txt(r.rowTitle))} #${i+1}`:`Baris #${i+1}`;
+    const rowLbl=(i,childRp)=>r.rowTitle?`${esc(rowInterp(txt(r.rowTitle),answers,childRp))} #${i+1}`:`Baris #${i+1}`;
     for(let i=0;i<count;i++){
       const childRp=rosterRowPrefix(r,i,rp);
-      html+=`<div class="rv-row"><div class="rv-row-num">${rowLbl(i)}</div>${renderNodes(r.components||[],answers,childRp)}</div>`;
+      html+=`<div class="rv-row"><div class="rv-row-num">${rowLbl(i,childRp)}</div>${renderNodes(r.components||[],answers,childRp)}</div>`;
     }
   }
   if(EDIT_MODE)html+=`<div class="roster-edit-note">Data roster tidak dapat diubah melalui tampilan ini.</div>`;
@@ -644,16 +687,73 @@ function formatDate(iso){
   try{return new Date(iso).toLocaleString("id-ID",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});}catch{return iso;}
 }
 function valStr(v){if(v==null||v==="")return"";if(Array.isArray(v))return v.join(", ");return String(v);}
-function getOptions(c){
+function getOptions(c,answers,rp){
   const opts=[];
-  if(c.optionsRef&&SCHEMA){
-    const t=(SCHEMA.referenceData||{})[c.optionsRef];
+  const refKey=c.optionsRef||c.optionsTable;
+  if(refKey&&SCHEMA){
+    const t=(SCHEMA.referenceData||{})[refKey];
     if(t&&t.items)t.items.forEach(it=>opts.push({value:String(it.code),label:txt(it.label)}));
   }
   if(!opts.length&&c.options)c.options.forEach(o=>opts.push({value:String(o.value),label:txt(o.label)||String(o.value)}));
+  if(!opts.length&&c.optionsApi&&c.optionsApi.url){
+    const url=buildApiUrl(c.optionsApi.url,answers,rp);
+    const cached=apiCache[url];
+    if(cached)cached.forEach(o=>opts.push(o));
+  }
   return opts;
 }
 
+function sanitizeHtml(html){
+  const ALLOWED={A:["href","target","rel"],B:[],STRONG:[],I:[],EM:[],U:[],S:[],P:[],BR:[],UL:[],OL:[],LI:[],BLOCKQUOTE:[],H1:[],H2:[],H3:[],H4:[],CODE:[],PRE:[],HR:[]};
+  const tmp=document.createElement("div");
+  tmp.innerHTML=html;
+  (function clean(node){
+    for(const n of [...node.childNodes]){
+      if(n.nodeType===3)continue;
+      if(n.nodeType!==1){n.remove();continue;}
+      if(!ALLOWED[n.tagName]){n.replaceWith(document.createTextNode(n.textContent));continue;}
+      for(const a of [...n.attributes])if(!ALLOWED[n.tagName].includes(a.name))n.removeAttribute(a.name);
+      if(n.tagName==="A"){const href=n.getAttribute("href")||"";if(!/^https?:\/\//.test(href)&&!href.startsWith("/"))n.setAttribute("href","#");n.setAttribute("rel","noopener noreferrer");}
+      clean(n);
+    }
+  })(tmp);
+  return tmp.innerHTML;
+}
+function mdToHtml(src){
+  if(!src)return"";
+  const e=s=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  const inl=s=>e(s).replace(/`([^`]+)`/g,"<code>$1</code>").replace(/\*\*([^*]+)\*\*/g,"<strong>$1</strong>").replace(/(^|[^*])\*([^*]+)\*/g,"$1<em>$2</em>").replace(/\[([^\]]+)\]\(([^)]+)\)/g,(_,t,u)=>{const s=/^https?:\/\//.test(u)||u.startsWith("/")?u:"#";return`<a href="${s}" target="_blank" rel="noopener noreferrer">${t}</a>`;});
+  const L=String(src).replace(/\r\n/g,"\n").split("\n");let h="",i=0;
+  while(i<L.length){const l=L[i];const hm=l.match(/^\s*(#{1,6})\s+(.*)/);if(hm){h+=`<h${hm[1].length}>${inl(hm[2])}</h${hm[1].length}>`;i++;continue;}if(/^\s*[-*]\s+/.test(l)){const it=[];while(i<L.length&&/^\s*[-*]\s+/.test(L[i])){it.push(`<li>${inl(L[i].replace(/^\s*[-*]\s+/,""))}</li>`);i++;}h+=`<ul>${it.join("")}</ul>`;continue;}if(/^\s*\d+\.\s+/.test(l)){const it=[];while(i<L.length&&/^\s*\d+\.\s+/.test(L[i])){it.push(`<li>${inl(L[i].replace(/^\s*\d+\.\s+/,""))}</li>`);i++;}h+=`<ol>${it.join("")}</ol>`;continue;}if(/^\s*>\s?/.test(l)){const q=[];while(i<L.length&&/^\s*>\s?/.test(L[i])){q.push(inl(L[i].replace(/^\s*>\s?/,"")));i++;}h+=`<blockquote>${q.join("<br>")}</blockquote>`;continue;}if(l.trim()===""){h+="<p></p>";i++;continue;}h+=`<p>${inl(l)}</p>`;i++;}
+  return h;
+}
+let apiCache={};
+function getPath(obj,path){try{return path.split(".").reduce((o,k)=>o&&o[k],obj);}catch{return null;}}
+function buildApiUrl(urlTpl,answers,rp){
+  if(!urlTpl)return"";
+  return urlTpl.replace(/\{([^}]+)\}/g,(_,k)=>{const v=answers&&((rp||"")+k in answers?answers[(rp||"")+k]:(k in answers?answers[k]:""));return encodeURIComponent(String(v||""));});
+}
+async function prefetchApiOptions(answers){
+  if(!SCHEMA||!answers)return;
+  const jobs=new Map();
+  function collectFields(comps,rp){
+    (comps||[]).forEach(c=>{
+      if(c.kind==="block"||c.kind==="section")collectFields(c.components||[],rp);
+      else if(c.kind==="roster"){const count=getRosterCount(c,answers,rp);for(let i=0;i<count;i++)collectFields(c.components||[],rosterRowPrefix(c,i,rp));}
+      else if(c.optionsApi&&c.optionsApi.url){const url=buildApiUrl(c.optionsApi.url,answers,rp);if(url&&!apiCache[url])jobs.set(url,c.optionsApi);}
+    });
+  }
+  (SCHEMA.pages||[]).forEach(pg=>collectFields(pg.components||[],""));
+  await Promise.all([...jobs.entries()].map(async([url,apiCfg])=>{
+    try{
+      const data=await fetch(url,{headers:H}).then(r=>r.ok?r.json():null);
+      if(!data)return;
+      let arr=apiCfg.path?getPath(data,apiCfg.path):Array.isArray(data)?data:data.data||data.items||data.results||[];
+      const vf=apiCfg.valueField||"code",lf=apiCfg.labelField||"label";
+      apiCache[url]=(arr||[]).map(it=>({value:String(it[vf]),label:txt(it[lf])||String(it[vf])}));
+    }catch(_){}
+  }));
+}
 function getRosterCount(r,answers,rowPrefix){
   const from=String(r.countFrom||"").trim();
   if(from){
