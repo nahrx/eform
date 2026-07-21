@@ -2,7 +2,10 @@ package httpapi
 
 import (
 	"net/http"
+	"os"
+	"path"
 	"path/filepath"
+	"strings"
 )
 
 func (s *Server) Routes() http.Handler {
@@ -138,6 +141,10 @@ func (s *Server) Routes() http.Handler {
 		mux.HandleFunc("GET /"+f, s.page(f))
 	}
 
+	// uploads: hanya file yang boleh diakses langsung, listing folder ditolak.
+	mux.HandleFunc("GET /uploads/", s.uploadFileOnly)
+	mux.HandleFunc("HEAD /uploads/", s.uploadFileOnly)
+
 	// halaman depan publik: sajikan folder PublicDir (index.html di "/").
 	// Pola "GET /" bersifat catch-all; rute lebih spesifik di atas tetap menang.
 	fileServer := http.FileServer(http.Dir(s.cfg.PublicDir))
@@ -150,4 +157,42 @@ func (s *Server) page(name string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, filepath.Join(s.cfg.WebDir, name))
 	}
+}
+
+func (s *Server) uploadFileOnly(w http.ResponseWriter, r *http.Request) {
+	p := path.Clean("/" + strings.TrimPrefix(r.URL.Path, "/"))
+	if p == "/uploads" || strings.HasSuffix(r.URL.Path, "/") {
+		http.NotFound(w, r)
+		return
+	}
+
+	rel := strings.TrimPrefix(p, "/")
+	if !strings.HasPrefix(rel, "uploads/") {
+		http.NotFound(w, r)
+		return
+	}
+
+	abs := filepath.Join(s.cfg.PublicDir, filepath.FromSlash(rel))
+	publicAbs, err := filepath.Abs(s.cfg.PublicDir)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	absPath, err := filepath.Abs(abs)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if absPath != publicAbs && !strings.HasPrefix(absPath, publicAbs+string(filepath.Separator)) {
+		http.NotFound(w, r)
+		return
+	}
+
+	st, err := os.Stat(absPath)
+	if err != nil || st.IsDir() {
+		http.NotFound(w, r)
+		return
+	}
+
+	http.ServeFile(w, r, absPath)
 }
