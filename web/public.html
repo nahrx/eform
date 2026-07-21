@@ -242,6 +242,8 @@ textarea.pv-in{width:100%;resize:vertical;min-height:72px}
 .pv-err-fix:hover{background:var(--bad);color:#fff}
 
 @media(max-width:700px){
+  /* iOS Safari auto-zoom saat fokus input jika font < 16px */
+  input,select,textarea,.pv-in,.pv-modal input,.pv-modal-in,.pw-card input{font-size:16px!important}
   .pv-side{position:fixed;inset:0 auto 0 0;z-index:60;width:260px;padding:14px 12px;overflow:auto;transform:translateX(-100%);transition:transform .22s ease;box-shadow:none;border-right:1px solid var(--line)}
   .pv-side.open{transform:translateX(0);box-shadow:4px 0 24px rgba(19,23,30,.18)}
   .pv-side.collapsed{width:260px!important;padding:14px 12px!important;overflow:auto!important;transform:translateX(-100%)}
