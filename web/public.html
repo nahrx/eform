@@ -87,7 +87,11 @@ input,select,textarea{font-family:inherit;font-size:13.5px;color:var(--ink)}
 .pv-sigwrap{display:flex;flex-direction:column;gap:8px}
 .pv-sigpad{width:100%;max-width:400px;height:140px;border:1.5px solid var(--line);border-radius:var(--radius-s);background:#fafcff;touch-action:none;cursor:crosshair}
 .pv-sigpad[data-disabled="1"]{cursor:not-allowed;opacity:.6}
-.pv-sigactions{display:flex}
+.pv-sigactions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pv-sigmsg{font-size:11.5px;color:var(--muted)}
+.pv-sigmsg.pending{color:var(--warn)}
+.pv-sigmsg.ok{color:var(--ok)}
+.pv-sigmsg.error{color:var(--bad)}
 .pv-photowrap{display:flex;flex-direction:column;gap:8px}
 .pv-photorow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .pv-photolabel{display:inline-flex;align-items:center;gap:6px;cursor:pointer;background:var(--panel);border:1.5px dashed var(--line);border-radius:var(--radius-s);padding:10px 16px;font-size:13px;font-weight:500;color:var(--ink-soft);transition:.12s;user-select:none}
@@ -898,7 +902,7 @@ function fieldHtml(c,rp,scopes){
   else if(c.type==="barcode")
     ctrl=`<div class="pv-inbtn"><input type="text" data-k="${ke}" class="pv-in" placeholder="scan / ketik kode"${dis}${rdOnly}><button type="button" class="pv-smbtn pv-scanbtn"${disAll}>📷 Pindai</button></div>`;
   else if(c.type==="signature")
-    ctrl=`<div class="pv-sigwrap"><input type="hidden" data-k="${ke}"><canvas class="pv-sigpad" width="400" height="140"${(enabled&&!c.readOnly)?"":' data-disabled="1"'}></canvas><div class="pv-sigactions"><button type="button" class="pv-smbtn pv-sigclear"${disAll}>Hapus tanda tangan</button></div></div>`;
+    ctrl=`<div class="pv-sigwrap"><input type="hidden" data-k="${ke}" value="${esc(val)}"><canvas class="pv-sigpad" width="400" height="140"${(enabled&&!c.readOnly)?"":' data-disabled="1"'}></canvas><div class="pv-sigactions"><button type="button" class="pv-smbtn pv-sigsave"${disAll} disabled>Simpan tanda tangan</button><button type="button" class="pv-smbtn pv-sigclear"${disAll}>Hapus tanda tangan</button><span class="pv-sigmsg"></span></div></div>`;
   else if(c.type==="photo"||c.type==="file"){
     const isPhoto=c.type==="photo";
     const disClass=(!enabled||c.readOnly)?' pv-photolabel-dis':'';
@@ -1642,35 +1646,100 @@ function wireSignaturePad(canvas){
   if(canvas._wired)return;canvas._wired=true;
   const hidden=canvas.previousElementSibling; // <input type="hidden" data-k="...">
   if(!hidden)return;
+  const wrap=canvas.parentElement;
+  const saveBtn=wrap.querySelector(".pv-sigsave");
+  const clearBtn=wrap.querySelector(".pv-sigclear");
+  const msg=wrap.querySelector(".pv-sigmsg");
   const ctx=canvas.getContext("2d");
   ctx.lineWidth=2.2;ctx.lineCap="round";ctx.lineJoin="round";ctx.strokeStyle="#13171e";
   if(hidden.value)loadSignatureImage(canvas,hidden.value);
+  const locked=canvas.dataset.disabled==="1";
+  let dirty=false;
+  let uploading=false;
+
+  const setMsg=(text,cls)=>{
+    if(!msg)return;
+    msg.className="pv-sigmsg"+(cls?` ${cls}`:"");
+    msg.textContent=text||"";
+  };
+  const updateButtons=()=>{
+    if(saveBtn)saveBtn.disabled=locked||uploading||!dirty;
+    if(clearBtn)clearBtn.disabled=locked||uploading;
+  };
+
+  if(hidden.value)setMsg("Tanda tangan tersimpan.","ok");
+  updateButtons();
+
   let drawing=false,last=null;
   const pos=e=>{const r=canvas.getBoundingClientRect();return {x:(e.clientX-r.left)*(canvas.width/r.width),y:(e.clientY-r.top)*(canvas.height/r.height)};};
-  const start=e=>{if(canvas.dataset.disabled==="1")return;e.preventDefault();drawing=true;last=pos(e);};
+  const start=e=>{
+    if(locked||uploading)return;
+    e.preventDefault();
+    drawing=true;
+    last=pos(e);
+  };
   const move=e=>{if(!drawing)return;e.preventDefault();const p=pos(e);ctx.beginPath();ctx.moveTo(last.x,last.y);ctx.lineTo(p.x,p.y);ctx.stroke();last=p;};
   const end=()=>{
     if(!drawing)return;drawing=false;
-    hidden.value=canvas.toDataURL("image/png");
-    hidden.dispatchEvent(new Event("change",{bubbles:true}));
+    dirty=true;
+    hidden.value="";
+    setMsg("Perubahan belum disimpan. Klik Simpan tanda tangan.","pending");
+    updateButtons();
   };
   canvas.addEventListener("pointerdown",start);
   canvas.addEventListener("pointermove",move);
   canvas.addEventListener("pointerup",end);
   canvas.addEventListener("pointercancel",end);
   canvas.addEventListener("pointerleave",end);
-  const clearBtn=canvas.parentElement.querySelector(".pv-sigclear");
+
+  saveBtn?.addEventListener("click",async()=>{
+    if(locked||uploading||!dirty)return;
+    const blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/png"));
+    if(!blob){
+      setMsg("Gagal membaca tanda tangan.","error");
+      return;
+    }
+    uploading=true;
+    updateButtons();
+    setMsg("Menyimpan tanda tangan ke server...","pending");
+    try{
+      const fd=new FormData();
+      fd.append("file",blob,`signature-${Date.now()}.png`);
+      fd.append("fieldType","signature");
+      const r=await fetch("/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/uploads",{
+        method:"POST",
+        headers:pubHeaders({}),
+        body:fd
+      });
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok)throw new Error(d.error||"Gagal menyimpan tanda tangan");
+      hidden.value=String(d.url||"");
+      dirty=false;
+      hidden.dispatchEvent(new Event("change",{bubbles:true}));
+      setMsg("Tanda tangan tersimpan.","ok");
+    }catch(e){
+      setMsg(e.message||"Gagal menyimpan tanda tangan","error");
+    }finally{
+      uploading=false;
+      updateButtons();
+    }
+  });
+
   clearBtn?.addEventListener("click",()=>{
+    if(uploading)return;
     ctx.clearRect(0,0,canvas.width,canvas.height);
+    dirty=false;
     hidden.value="";
     hidden.dispatchEvent(new Event("change",{bubbles:true}));
+    setMsg("","");
+    updateButtons();
   });
 }
-function loadSignatureImage(canvas,dataUrl){
+function loadSignatureImage(canvas,src){
   const ctx=canvas.getContext("2d");
   const img=new Image();
   img.onload=()=>{ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0,canvas.width,canvas.height);};
-  img.src=dataUrl;
+  img.src=src;
 }
 
 function wireGeoButton(btn){
