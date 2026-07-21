@@ -1523,7 +1523,8 @@ function renderRosterRow(){
   let html=`${userBar}<div class="pv-page"><div class="pv-rrow-hdr"><div class="pv-rrow-bread"><button id="pvBack" class="pv-rrow-back">← ${pageTitle}</button><span class="pv-rrow-sep">›</span><span class="pv-rrow-rname">${rosterTitle}</span><span class="pv-rrow-num">Baris ${rowIdx+1} dari ${total}</span></div><div class="pv-rrow-title">${rowLabel(roster,rowIdx)}</div></div>${fieldsHtml}</div>`;
   pvBody.innerHTML=html;pvBody.scrollTop=keepScroll;
   const navArea=document.getElementById("pvNavArea");
-  if(navArea)navArea.innerHTML=`<div class="pv-nav-err" id="pvNavErr"></div><div class="pv-nav"><span></span><span></span><button class="btn primary" id="pvBackDone">Simpan &amp; kembali</button></div>`;
+  const saveDraftBtn=ALLOW?`<button class="pv-savedraft" id="pvSaveDraft">Simpan Draf</button>`:"";
+  if(navArea)navArea.innerHTML=`<div class="pv-nav-err" id="pvNavErr"></div><div class="pv-nav"><span></span><span></span><div style="display:flex;gap:8px;align-items:center">${saveDraftBtn}<button class="btn primary" id="pvBackDone">Simpan &amp; kembali</button></div></div>`;
   restoreAnswers();resolveOptions();wireFieldWidgets();
   document.querySelectorAll("[data-k]").forEach(el=>el.addEventListener("change",e=>{const f=e.target.closest(".pv-field"),fkey=f?.dataset?.fieldkey,top0=fkey?f.getBoundingClientRect().top:null;saveAnswers();renderRosterRow();if(fkey&&top0!=null)requestAnimationFrame(()=>snapScroll(fkey,top0));}));
   document.querySelectorAll("[data-kr]").forEach(el=>el.addEventListener("change",e=>{const f=e.target.closest(".pv-field"),fkey=f?.dataset?.fieldkey,top0=fkey?f.getBoundingClientRect().top:null;saveAnswers();renderRosterRow();if(fkey&&top0!=null)requestAnimationFrame(()=>snapScroll(fkey,top0));}));
@@ -1565,6 +1566,7 @@ function renderRosterRow(){
   };
   document.getElementById("pvBack")?.addEventListener("click",backFn);
   document.getElementById("pvBackDone")?.addEventListener("click",backDoneFn);
+  document.getElementById("pvSaveDraft")?.addEventListener("click",()=>saveDraftToServer());
 }
 
 /* ---- restore & bind ---- */
