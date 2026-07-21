@@ -974,6 +974,15 @@ function rowSummary(r,i,rowPrefix){
 }
 function hasRowData(r,i,rowPrefix){const rp=rosterRowPrefix(r,i,rowPrefix);return flatRosterFields(r).some(c=>{const v=answers[`${rp}${c.name}`];return v!=null&&v!==""&&!(Array.isArray(v)&&!v.length);});}
 function addRowLabel(r){return r.rowTitle?`+ Tambah ${esc(txt(r.rowTitle))}`:"+ Tambah baris";}
+function rosterMax(r){
+  if(r.max==null||r.max==="")return null;
+  const mx=Math.floor(Number(r.max));
+  return Number.isFinite(mx)&&mx>=0?mx:null;
+}
+function rosterAtMax(r,rowPrefix){
+  const mx=rosterMax(r);
+  return mx!=null&&rosterCount(r,rowPrefix)>=mx;
+}
 // Interpolasi nilai field lain dalam baris roster ke teks label/hint/itemLabel.
 // Mendukung dua sintaks: {{nama}} dan ${nama} (dipakai campur di berbagai tempat).
 const INTERP_RE=/\{\{\s*([^}]+?)\s*\}\}|\$\{\s*([^}]+?)\s*\}/g;
@@ -1025,6 +1034,7 @@ function rosterHtml(r,rp,scopes){
   const hostScopes=[rp,...normScopes(scopes)];
   const from=String(r.countFrom||"").trim();
   const count=rosterCount(r,rp),manual=!from,rn=esc(r.name);
+  const canAdd=manual&&!rosterAtMax(r,rp);
   ensureRosterDefaultValues(r,count,rp);
   const title=esc(rowInterp(txt(r.title)||r.name,hostScopes));
   if(r.rosterType==="separate"){
@@ -1032,13 +1042,13 @@ function rosterHtml(r,rp,scopes){
     if(from&&count<=0)h+=`<div class="pv-rowempty">Isi dulu kolom "${esc(from)}" untuk menentukan jumlah baris.</div>`;
     else if(count<=0)h+=`<div class="pv-rowempty">Belum ada baris.</div>`;
     else{h+=`<div class="pv-rowlist">`;for(let i=0;i<count;i++){const sum=rowSummary(r,i,rp),filled=hasRowData(r,i,rp);h+=`<div class="pv-rowitem"><div class="pv-rowinfo"><b>${rowLabel(r,i,hostScopes)}</b><span>${sum?esc(sum):"<i>belum diisi</i>"}</span></div>${manual?`<button class="pv-rowdel" data-delrow="${rn}" data-i="${i}">hapus</button>`:""}<button class="pv-rowopen" data-openrow="${rn}" data-i="${i}">${filled?"Edit":"Isi"} →</button></div>`;}h+=`</div>`;}
-    if(manual)h+=`<button class="pv-add" data-addrow="${rn}">${addRowLabel(r)}</button>`;
+    if(canAdd)h+=`<button class="pv-add" data-addrow="${rn}">${addRowLabel(r)}</button>`;
     return h+`</div>`;
   }
   let h=`<div class="pv-roster" id="pvroster_${rn}"><div class="pv-rh">${title}</div>`;
   if(from&&count<=0)h+=`<div class="pv-rowempty">Isi dulu kolom "${esc(from)}" untuk menentukan jumlah baris.</div>`;
   for(let i=0;i<count;i++){const childRp=rosterRowPrefix(r,i,rp);const rowKey=childRp.slice(0,-1);const rowSkip=computeRosterRowSkipState(r,i);ROW_SKIP_HIDDEN.set(rowKey,rowSkip);rowSkip.forEach(n=>{delete answers[`${childRp}${n}`];});h+=`<div class="pv-row"><div class="pv-rownum"><span>${rowLabel(r,i,hostScopes)}</span>${manual?`<button class="pv-del" data-delrow="${rn}" data-i="${i}">hapus</button>`:""}</div>`;(r.components||[]).forEach(f=>h+=nodeHtml(f,childRp,hostScopes));h+=`</div>`;}
-  if(manual)h+=`<button class="pv-add" data-addrow="${rn}">${addRowLabel(r)}</button>`;
+  if(canAdd)h+=`<button class="pv-add" data-addrow="${rn}">${addRowLabel(r)}</button>`;
   return h+`</div>`;
 }
 function primaryRowField(r){if(r.rowDisplay&&r.rowDisplay.length)return r.rowDisplay[0];const f=flatRosterFields(r)[0];return f?f.name:null;}
@@ -1057,7 +1067,14 @@ function openAddRowModal(roster){
   bg.querySelector("#addRowCancel").addEventListener("click",close);
   bg.addEventListener("click",e=>{if(e.target===bg)close();});
   const confirmAdd=()=>{
+    const mx=rosterMax(roster);
     const idx=rosterCount(roster);
+    if(mx!=null&&idx>=mx){
+      alert(`Maksimal ${mx} baris.`);
+      close();
+      renderCurrentPage();
+      return;
+    }
     answers[`${roster.name}#count`]=idx+1;
     if(promptFields.length){
       bg.querySelectorAll("[data-pf]").forEach(el=>{const v=el.value.trim();if(v)answers[`${roster.name}#${idx}#${el.dataset.pf}`]=v;});
