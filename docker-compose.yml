@@ -78,6 +78,8 @@ services:
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GOOGLE_REDIRECT_URL: ${GOOGLE_REDIRECT_URL:-}
+    volumes:
+      - uploads_data:/app/public/uploads
     ports:
       - "${APP_PORT:-8789}:8080"
     healthcheck:
@@ -117,6 +119,8 @@ services:
 # ----------------------------------------------------------
 volumes:
   db_data:
+    driver: local
+  uploads_data:
     driver: local
 
 networks:
