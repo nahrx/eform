@@ -1058,7 +1058,17 @@ function rosterCount(r,rowPrefix){
     if(r.max!==""&&r.max!=null&&cf>Number(r.max))cf=Number(r.max);
     return cf;
   }
-  const k=rosterCountKey(r,rowPrefix);if(pv.values[k]==null)pv.values[k]=Number(r.min)||0;return pv.values[k];
+  const k=rosterCountKey(r,rowPrefix);
+  if(pv.values[k]==null)pv.values[k]=Number(r.min)||0;
+  let c=Number(pv.values[k])||0;
+  if(r.max!==""&&r.max!=null){
+    const mx=Number(r.max);
+    if(Number.isFinite(mx)&&mx>=0&&c>mx){
+      c=mx;
+      pv.values[k]=mx;
+    }
+  }
+  return c;
 }
 function labelOfField(name){const n=allNodes().find(x=>x.kind==="field"&&x.name===name);return n?(n.label||n.name):name;}
 function flatFields(comps){const out=[];function go(a){(a||[]).forEach(c=>{c.kind==="field"?out.push(c):c.components&&go(c.components);});}go(comps);return out;}
@@ -1100,7 +1110,16 @@ function openAddRowModal(r){
   bg.querySelector("#addRowCancel").addEventListener("click",close);
   bg.addEventListener("click",e=>{if(e.target===bg)close();});
   const confirmAdd=()=>{
-    const idx=pv.values[`${r.name}#count`]||0;
+    const key=`${r.name}#count`;
+    const cur=Number(pv.values[key])||0;
+    if(r.max!==""&&r.max!=null){
+      const mx=Number(r.max);
+      if(Number.isFinite(mx)&&mx>=0&&cur>=mx){
+        alert(`Maksimal ${mx} baris.`);
+        return;
+      }
+    }
+    const idx=cur;
     pv.values[`${r.name}#count`]=idx+1;
     if(promptFields.length){
       bg.querySelectorAll("[data-pf]").forEach(el=>{const v=el.value.trim();if(v)pv.values[`${r.name}#${idx}#${el.dataset.pf}`]=v;});
@@ -1173,6 +1192,7 @@ function pvRoster(r,row){
   const from=String(r.countFrom||"").trim();
   const titleTxt=rowInterp(r.title||r.name,row);
   const count=rosterCount(r,rp);const manual=!r.countFrom;
+  const canAdd=manual&&!(r.max!==""&&r.max!=null&&count>=Number(r.max));
   ensureRosterDefaultValues(r,count);
   if(r.rosterType==="separate"){
     let h=`<div class="pv-roster" id="pvroster_${esc(r.name)}"><div class="pv-rh">${esc(titleTxt)}<span class="pv-tag">subhalaman</span></div>`;
@@ -1182,14 +1202,14 @@ function pvRoster(r,row){
       for(let i=0;i<count;i++){const sum=rowSummary(r,i);
         h+=`<div class="pv-rowitem"><div class="pv-rowinfo"><b>${rowLabel(r,i,row)}</b><span>${sum||"<i>belum diisi</i>"}</span></div>${manual?`<button class="pv-rowdel" data-delrow="${esc(r.name)}" data-i="${i}">hapus</button>`:""}<button class="pv-rowopen" data-openrow="${r.uid}" data-i="${i}">${isRowFilled(r,i)?"Edit":"Isi"} →</button></div>`;}
       h+=`</div>`;}
-    if(manual)h+=`<button class="pv-add" data-addrow="${esc(r.uid)}">${addRowLabel(r)}</button>`;
+    if(canAdd)h+=`<button class="pv-add" data-addrow="${esc(r.uid)}">${addRowLabel(r)}</button>`;
     return h+`</div>`;
   }
   // inline
   let h=`<div class="pv-roster" id="pvroster_${esc(r.name)}"><div class="pv-rh">${esc(titleTxt)}</div>`;
   if(from&&count<=0)h+=`<div class="pv-rowempty">Isi dulu “${esc(labelOfField(from))}” untuk menentukan jumlah baris.</div>`;
   for(let i=0;i<count;i++){const childRp=rosterRowPrefix(r,i,rp);const rowKey=childRp.slice(0,-1);const rs=computeRosterRowSkipState(r,i);ROW_SKIP_HIDDEN.set(rowKey,rs);rs.forEach(n=>{delete pv.values[`${childRp}${n}`];});h+=`<div class="pv-row"><div class="pv-rownum"><span>${rowLabel(r,i,row)}</span>${manual?`<button class="pv-del" data-delrow="${esc(r.name)}" data-i="${i}">hapus</button>`:""}</div>`;r.components.forEach(f=>h+=pvNode(f,{r:r.name,i,parents:parentPrefixes}));h+=`</div>`;}
-  if(manual)h+=`<button class="pv-add" data-addrow="${esc(r.uid)}">${addRowLabel(r)}</button>`;
+  if(canAdd)h+=`<button class="pv-add" data-addrow="${esc(r.uid)}">${addRowLabel(r)}</button>`;
   return h+`</div>`;
 }
 function renderRosterRowPage(){
