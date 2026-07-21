@@ -870,13 +870,14 @@ function fieldHtml(c,rp,scopes){
   if(c.type==="calculated"){
     if(c.autofill){
       if(pvEmpty(answers[key])){const r=evalExprSrc(c.calculate,rp);if(r!==undefined&&r!=="")answers[key]=String(r);}
-      const val=answers[key]??"";
-      return`<div class="pv-field" data-fieldkey="${ke}">${lab}${hint}<div><input type="text" data-k="${ke}" class="pv-in" value="${esc(val)}"${dis}></div></div>`;
+      const autoVal=answers[key]??"";
+      return`<div class="pv-field" data-fieldkey="${ke}">${lab}${hint}<div><input type="text" data-k="${ke}" class="pv-in" value="${esc(autoVal)}"${dis}></div></div>`;
     }
     const r=evalExprSrc(c.calculate,rp);
     answers[key]=(r===undefined?"":r);
     return`<div class="pv-field" data-fieldkey="${ke}">${lab}${hint}<div><input class="pv-in" value="${esc(r===undefined||r===""?"—":String(r))}" disabled></div></div>`;
   }
+  const val=answers[key];
   let ctrl="";
   if(c.type==="textarea")
     ctrl=`<textarea data-k="${ke}" class="pv-in" rows="3"${dis}${rdOnly}></textarea>`;
@@ -907,7 +908,6 @@ function fieldHtml(c,rp,scopes){
   else
     ctrl=`<input type="text" data-k="${ke}" class="pv-in" placeholder="${esc(c.placeholder||"")}"${dis}${rdOnly}>`;
   let vmsg="";
-  const val=answers[key];
   if(!pvEmpty(val)){
     (c.validations||[]).forEach(v=>{
       if(!v.test)return;
