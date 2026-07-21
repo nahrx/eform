@@ -105,6 +105,7 @@ func (s *Server) Routes() http.Handler {
 	mux.Handle("GET /api/public/forms/{token}/my-response", s.respondentMW(s.myResponse))
 	mux.Handle("GET /api/public/forms/{token}/my-responses", s.respondentMW(s.myResponses))
 	mux.Handle("GET /api/public/forms/{token}/check-access", s.respondentMW(s.checkAccess))
+	mux.Handle("POST /api/public/forms/{token}/uploads", s.respondentMW(s.publicUpload))
 	mux.Handle("POST /api/public/forms/{token}/responses", s.respondentMW(s.publicSubmit))
 	mux.Handle("POST /api/public/forms/{token}/responses/{responseId}/unsubmit", s.respondentMW(s.unsubmitResponse))
 	mux.Handle("GET /api/public/forms/{token}/draft", s.respondentMW(s.myDraft))
@@ -119,9 +120,9 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /login", s.page("login.html"))
 	mux.HandleFunc("GET /admin", s.page("admin.html"))
 	mux.HandleFunc("GET /builder", s.page("builder.html"))
-	mux.HandleFunc("GET /f/{token}", s.page("public.html"))                  // halaman isi kuesioner publik
-	mux.HandleFunc("GET /responses", s.page("responses.html"))               // halaman daftar jawaban
-	mux.HandleFunc("GET /response-view", s.page("response-view.html"))       // halaman lihat detail jawaban
+	mux.HandleFunc("GET /f/{token}", s.page("public.html"))                          // halaman isi kuesioner publik
+	mux.HandleFunc("GET /responses", s.page("responses.html"))                       // halaman daftar jawaban
+	mux.HandleFunc("GET /response-view", s.page("response-view.html"))               // halaman lihat detail jawaban
 	mux.HandleFunc("GET /viewer-portal", s.page("viewer-portal.html"))               // portal viewer & editor
 	mux.HandleFunc("GET /viewer-responses", s.page("viewer-responses.html"))         // jawaban terbatas viewer
 	mux.HandleFunc("GET /editor-responses", s.page("editor-responses.html"))         // jawaban editor

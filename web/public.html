@@ -89,10 +89,14 @@ input,select,textarea{font-family:inherit;font-size:13.5px;color:var(--ink)}
 .pv-sigpad[data-disabled="1"]{cursor:not-allowed;opacity:.6}
 .pv-sigactions{display:flex}
 .pv-photowrap{display:flex;flex-direction:column;gap:8px}
+.pv-photorow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .pv-photolabel{display:inline-flex;align-items:center;gap:6px;cursor:pointer;background:var(--panel);border:1.5px dashed var(--line);border-radius:var(--radius-s);padding:10px 16px;font-size:13px;font-weight:500;color:var(--ink-soft);transition:.12s;user-select:none}
 .pv-photolabel:hover:not(.pv-photolabel-dis){border-color:var(--accent);background:var(--accent-soft);color:var(--ink)}
 .pv-photolabel.pv-photolabel-dis{opacity:.5;cursor:not-allowed}
 .pv-photofile{display:none}
+.pv-photostate{font-size:11.5px;color:var(--muted)}
+.pv-photostate.pending{color:var(--warn)}
+.pv-photostate.ok{color:var(--ok)}
 .pv-photopreview{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap}
 .pv-photoimg{max-width:240px;max-height:180px;border-radius:var(--radius-s);border:1.5px solid var(--line);object-fit:cover;display:block}
 .pv-scanmodal video{width:100%;max-width:340px;border-radius:var(--radius-s);background:#000;margin-bottom:14px}
@@ -262,6 +266,7 @@ let ACCESS_MODE="public";  // 'public' atau 'restricted'
 let EDITING_RESPONSE_ID=null; // ID baris form_responses yang sedang diedit (draft mode)
 let DRAFT_RESTORED_AT=null; // timestamp draf lokal yang sedang dipakai (null jika tidak ada)
 let AUTOSAVE_TIMER=null;
+let PENDING_UPLOADS={};
 
 try{RESP_USER=JSON.parse(localStorage.getItem("eform_resp_user")||"null");}catch(_){}
 
@@ -279,6 +284,38 @@ function loadDraft(){
 function clearDraft(){
   const key=draftKey();if(!key)return;
   try{localStorage.removeItem(key);}catch(_){}
+}
+function clearPendingUpload(key){
+  const item=PENDING_UPLOADS[key];
+  if(item&&item.objectUrl)URL.revokeObjectURL(item.objectUrl);
+  delete PENDING_UPLOADS[key];
+}
+function resetPendingUploads(){
+  Object.keys(PENDING_UPLOADS).forEach(clearPendingUpload);
+}
+function pendingUploadKeys(){
+  return Object.keys(PENDING_UPLOADS).filter(key=>PENDING_UPLOADS[key]&&PENDING_UPLOADS[key].file);
+}
+function showNavError(msg){
+  const err=document.getElementById("pvNavErr");
+  if(!err)return;
+  err.textContent=msg;
+  setTimeout(()=>{if(err.textContent===msg)err.textContent="";},3000);
+}
+function ensureNoPendingUploads(){
+  if(!pendingUploadKeys().length)return true;
+  showNavError("Masih ada file yang dipilih tetapi belum diupload. Upload dulu sebelum menyimpan draf atau mengirim jawaban.");
+  return false;
+}
+function mediaSourceOf(val){
+  if(!val)return "";
+  const s=String(val);
+  if(/^data:image\//i.test(s)||/^data:application\//i.test(s))return s;
+  if(/^https?:\/\//i.test(s)||s.startsWith("/")||s.startsWith("blob:"))return s;
+  return s.startsWith("base64,")?"data:image/*;base64,"+s.slice(7):"";
+}
+function isImageMediaSource(fieldType,src){
+  return fieldType==="photo"||/^data:image\//i.test(src);
 }
 
 /* ---- mesin ekspresi (visibleWhen/enableWhen/requiredWhen/validations/calculate/skip) ---- */
@@ -639,6 +676,7 @@ function renderMyResponsesList(meta,responses){
 }
 
 function startNewResponse(){
+  resetPendingUploads();
   EDITING_RESPONSE_ID=null;
   EXISTING_RESPONSE=null;
   answers={};
@@ -651,6 +689,7 @@ function editDraftResponseById(id){
   const r=_responseMap[id];if(r)editDraftResponse(r);
 }
 function editDraftResponse(resp){
+  resetPendingUploads();
   EDITING_RESPONSE_ID=resp.id;
   EXISTING_RESPONSE=null;
   try{answers=typeof resp.answers==="string"?JSON.parse(resp.answers):(resp.answers||{});}catch{answers={};}
@@ -712,6 +751,10 @@ async function fetchMyDraft(){
 async function saveDraftToServer(){
   const btn=document.getElementById("pvSaveDraft");
   if(btn){btn.disabled=true;btn.textContent="Menyimpan…";}
+  if(!ensureNoPendingUploads()){
+    if(btn){btn.disabled=false;btn.textContent="Simpan Draf";}
+    return;
+  }
   saveAnswers();
   const ans=collectAll();
   try{
@@ -743,11 +786,12 @@ async function saveDraftToServer(){
     if(btn){btn.className="pv-savedraft saved";btn.textContent="✓ Tersimpan "+formatDraftTime(savedAt);setTimeout(()=>{if(btn){btn.className="pv-savedraft";btn.textContent="Simpan Draf";btn.disabled=false;}},3000);}
   }catch(e){
     if(btn){btn.disabled=false;btn.textContent="Simpan Draf";}
-    const err=document.getElementById("pvNavErr");if(err){err.textContent=e.message;setTimeout(()=>{err.textContent="";},3000);}
+    showNavError(e.message);
   }
 }
 
 function clearRespSession(){
+  resetPendingUploads();
   RESP_TOKEN="";
   RESP_USER=null;
   localStorage.removeItem("eform_resp_token");
@@ -858,7 +902,7 @@ function fieldHtml(c,rp,scopes){
     const isPhoto=c.type==="photo";
     const disClass=(!enabled||c.readOnly)?' pv-photolabel-dis':'';
     const dis2=(!enabled||c.readOnly)?' disabled':'';
-    ctrl=`<div class="pv-photowrap"><input type="hidden" data-k="${ke}"><label class="pv-photolabel${disClass}"><input type="file" class="pv-photofile"${isPhoto?' accept="image/*" capture="environment"':''}${dis2}>${isPhoto?'📷 Ambil / Pilih Foto':'📎 Pilih File'}</label><div class="pv-photopreview" hidden></div></div>`;
+    ctrl=`<div class="pv-photowrap" data-field-type="${isPhoto?'photo':'file'}"><input type="hidden" data-k="${ke}" value="${esc(val)}"><div class="pv-photorow"><label class="pv-photolabel${disClass}"><input type="file" class="pv-photofile"${isPhoto?' accept="image/*" capture="environment"':''}${dis2}>${isPhoto?'📷 Ambil / Pilih Foto':'📎 Pilih File'}</label><button type="button" class="pv-smbtn pv-photoupload"${dis2} disabled>Upload</button></div><div class="pv-photostate"></div><div class="pv-photopreview" hidden></div></div>`;
   }
   else
     ctrl=`<input type="text" data-k="${ke}" class="pv-in" placeholder="${esc(c.placeholder||"")}"${dis}${rdOnly}>`;
@@ -1698,34 +1742,105 @@ function wirePhotoField(wrap){
   if(wrap._wired)return;wrap._wired=true;
   const hidden=wrap.querySelector("input[type=hidden]");
   const fileInput=wrap.querySelector(".pv-photofile");
+  const uploadBtn=wrap.querySelector(".pv-photoupload");
+  const state=wrap.querySelector(".pv-photostate");
   const preview=wrap.querySelector(".pv-photopreview");
-  if(!hidden||!fileInput||!preview)return;
-  if(hidden.value)showPhotoPreview(preview,hidden.value,fileInput.disabled);
+  if(!hidden||!fileInput||!uploadBtn||!state||!preview)return;
+  const key=hidden.dataset.k;
+  const fieldType=wrap.dataset.fieldType||"file";
+  renderPhotoPreview(wrap);
   fileInput.addEventListener("change",()=>{
     const f=fileInput.files[0];if(!f)return;
-    const reader=new FileReader();
-    reader.onload=e=>{
-      hidden.value=e.target.result;
-      hidden.dispatchEvent(new Event("change",{bubbles:true}));
-      showPhotoPreview(preview,e.target.result,false);
+    clearPendingUpload(key);
+    PENDING_UPLOADS[key]={
+      file:f,
+      fieldType,
+      objectUrl:(fieldType==="photo"||String(f.type||"").startsWith("image/"))?URL.createObjectURL(f):""
     };
-    reader.readAsDataURL(f);
+    renderPhotoPreview(wrap);
+  });
+  uploadBtn.addEventListener("click",async()=>{
+    const pending=PENDING_UPLOADS[key];
+    if(!pending||!pending.file)return;
+    uploadBtn.disabled=true;
+    fileInput.disabled=true;
+    state.className="pv-photostate pending";
+    state.textContent="Mengupload file…";
+    try{
+      const fd=new FormData();
+      fd.append("file",pending.file);
+      fd.append("fieldType",fieldType);
+      const r=await fetch("/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/uploads",{
+        method:"POST",
+        headers:pubHeaders({}),
+        body:fd
+      });
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||"Gagal mengupload file");
+      hidden.value=d.url||"";
+      fileInput.value="";
+      fileInput.disabled=false;
+      clearPendingUpload(key);
+      hidden.dispatchEvent(new Event("change",{bubbles:true}));
+    }catch(e){
+      fileInput.disabled=false;
+      renderPhotoPreview(wrap,e.message);
+    }
   });
   preview.addEventListener("click",e=>{
+    if(e.target.classList.contains("pv-photocancel")){
+      clearPendingUpload(key);
+      fileInput.value="";
+      renderPhotoPreview(wrap);
+      return;
+    }
     if(!e.target.classList.contains("pv-photoclear"))return;
+    clearPendingUpload(key);
     hidden.value="";fileInput.value="";
     preview.hidden=true;preview.innerHTML="";
     hidden.dispatchEvent(new Event("change",{bubbles:true}));
   });
 }
-function showPhotoPreview(preview,dataUrl,disabled){
-  const isImage=dataUrl.startsWith("data:image");
-  const dis=disabled?" disabled":"";
-  if(isImage)
-    preview.innerHTML=`<img class="pv-photoimg" src="${dataUrl}"><button type="button" class="pv-smbtn pv-photoclear"${dis}>Hapus foto</button>`;
-  else
-    preview.innerHTML=`<span style="font-size:12.5px;color:var(--ink-soft)">File dipilih</span><button type="button" class="pv-smbtn pv-photoclear"${dis}>Hapus</button>`;
-  preview.hidden=false;
+function renderPhotoPreview(wrap,errorMsg){
+  const hidden=wrap.querySelector("input[type=hidden]");
+  const fileInput=wrap.querySelector(".pv-photofile");
+  const uploadBtn=wrap.querySelector(".pv-photoupload");
+  const state=wrap.querySelector(".pv-photostate");
+  const preview=wrap.querySelector(".pv-photopreview");
+  if(!hidden||!fileInput||!uploadBtn||!state||!preview)return;
+  const key=hidden.dataset.k;
+  const fieldType=wrap.dataset.fieldType||"file";
+  const pending=PENDING_UPLOADS[key];
+  const disabled=fileInput.disabled;
+  const savedValue=String(hidden.value||"");
+  if(pending&&pending.file){
+    const dis=disabled?" disabled":"";
+    const media=pending.objectUrl?`<img class="pv-photoimg" src="${pending.objectUrl}">`:`<span style="font-size:12.5px;color:var(--ink-soft)">${esc(pending.file.name)}</span>`;
+    preview.innerHTML=`${media}<button type="button" class="pv-smbtn pv-photocancel"${dis}>Batalkan pilihan</button>`;
+    preview.hidden=false;
+    uploadBtn.disabled=disabled;
+    state.className="pv-photostate pending";
+    state.textContent=errorMsg||"File sudah dipilih. Tekan Upload untuk menyimpan ke server.";
+    return;
+  }
+  uploadBtn.disabled=true;
+  if(savedValue){
+    const dis=disabled?" disabled":"";
+    const src=mediaSourceOf(savedValue)||savedValue;
+    if(isImageMediaSource(fieldType,src)){
+      preview.innerHTML=`<img class="pv-photoimg" src="${src}"><button type="button" class="pv-smbtn pv-photoclear"${dis}>Hapus foto</button>`;
+    }else{
+      preview.innerHTML=`<a href="${esc(src)}" target="_blank" rel="noreferrer" style="font-size:12.5px;color:var(--accent)">Buka file</a><button type="button" class="pv-smbtn pv-photoclear"${dis}>Hapus</button>`;
+    }
+    preview.hidden=false;
+    state.className="pv-photostate ok";
+    state.textContent="File siap digunakan.";
+    return;
+  }
+  preview.hidden=true;
+  preview.innerHTML="";
+  state.className="pv-photostate";
+  state.textContent=errorMsg||"";
 }
 
 /* ---- async options ---- */
@@ -1795,6 +1910,7 @@ async function submit(){
   const btn=document.getElementById("pvSubmit"),msg=document.getElementById("msg");
   if(!btn||!msg)return;
   msg.className="msg";
+  if(!ensureNoPendingUploads())return;
   const ans=collectAll();
   if(!Object.keys(ans).length){msg.className="msg err";msg.textContent="Belum ada jawaban yang diisi.";return;}
   btn.disabled=true;btn.textContent="Mengirim…";

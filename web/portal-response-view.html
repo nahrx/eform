@@ -198,6 +198,18 @@ function rowInterp(text,answers,rowPrefix){
     return"";
   });
 }
+function getMediaSource(val){
+  if(!val)return "";
+  if(Array.isArray(val))return getMediaSource(val[0]);
+  if(typeof val==="object")return getMediaSource(val.dataUrl||val.url||val.src||val.value||val.base64||"");
+  const s=String(val);
+  if(/^data:image\//i.test(s)||/^data:application\//i.test(s))return s;
+  if(/^https?:\/\//i.test(s)||s.startsWith("/")||s.startsWith("blob:"))return s;
+  return s.startsWith("base64,")?"data:image/*;base64,"+s.slice(7):"";
+}
+function isImageMedia(c,src){
+  return c.type==="photo"||c.type==="signature"||/^data:image\//i.test(src);
+}
 
 async function api(path,opts){
   opts=opts||{};
@@ -510,9 +522,9 @@ function renderReadField(c,answers,rp){
   }
   // Photo / File / Signature
   if(c.type==="photo"||c.type==="file"||c.type==="signature"){
-    const src=val&&String(val);
+    const src=getMediaSource(val);
     if(!src)return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer empty">—</div></div>`;
-    if(src.startsWith("data:image")||src.startsWith("data:application/octet")){
+    if(isImageMedia(c,src)){
       return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-photo-wrap"><img class="rv-photo" src="${src}" onclick="openPhotoModal(this.src)" title="Klik untuk perbesar"></div></div>`;
     }
     const mime=(src.match(/^data:([^;]+)/)||[])[1]||"file";
@@ -597,9 +609,9 @@ function renderEditField(c,answers,rp){
 
   // Photo / File / Signature — read-only preview saat edit
   if(c.type==="photo"||c.type==="file"||c.type==="signature"){
-    const src=val&&String(val);
+    const src=getMediaSource(val);
     if(!src)return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<div class="rv-answer empty">—</div></div>`;
-    if(src.startsWith("data:image")||src.startsWith("data:application/octet"))
+    if(isImageMedia(c,src))
       return`<div class="ed-field"><div class="ed-label">${label} <span style="font-size:10px;color:var(--muted)">(tidak dapat diubah di sini)</span></div>${desc}<div class="rv-photo-wrap"><img class="rv-photo" src="${src}" onclick="openPhotoModal(this.src)" title="Klik untuk perbesar"></div></div>`;
     const mime=(src.match(/^data:([^;]+)/)||[])[1]||"file";
     return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<div class="rv-answer"><a href="${src}" download="file" style="color:var(--accent)">Unduh file (${esc(mime)})</a></div></div>`;
