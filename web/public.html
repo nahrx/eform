@@ -248,7 +248,13 @@ textarea.pv-in{width:100%;resize:vertical;min-height:72px}
   .pv-side-bd.show{display:block}
   .pv-body{padding:18px 14px 60px}
   .pv-card{padding:16px}
-  .pv-nav{padding:11px 0 14px}
+  .pv-nav{padding:11px 0 14px;flex-wrap:wrap;align-items:flex-start;row-gap:10px;column-gap:8px}
+  .pv-nav>span:empty{display:none}
+  .pv-nav>.btn{flex:0 1 auto;min-width:0;white-space:normal;padding:8px 12px}
+  .pv-nav>.pv-prog-wrap{order:3;flex:1 0 100%;padding:0}
+  .pv-nav>div:last-child{order:2;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;flex:1 1 0;min-width:0}
+  .pv-nav>div:last-child .btn,
+  .pv-nav>div:last-child .pv-savedraft{flex:1 1 auto;min-width:0;white-space:normal;text-align:center;padding:8px 12px}
 }
 </style>
 </head>
