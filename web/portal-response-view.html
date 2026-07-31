@@ -366,13 +366,16 @@ function renderPage(){
   const answers=EDIT_MODE?editedAnswers:parseAnswers(RESP.answers);
   const meta=parseAnswers(RESP.meta);
   const pages=(SCHEMA&&SCHEMA.pages)||[];
+  const visited=computeVisitedPages(pages,answers);
+  if(pages.length&&!visited.includes(CUR_PG))CUR_PG=visited.length?visited[0]:0;
   if(CUR_PG>=pages.length)CUR_PG=Math.max(0,pages.length-1);
+  const visIdx=Math.max(0,visited.indexOf(CUR_PG));
 
-  // Sidebar
-  if(pages.length>1){
+  // Sidebar — hanya halaman yang benar-benar dilalui responden
+  if(visited.length>1){
     document.getElementById("sidebar").hidden=false;
-    document.getElementById("pgList").innerHTML=pages.map((p,i)=>
-      `<div class="pg-item${i===CUR_PG?" active":""}" onclick="goPage(${i})">${esc(txt(p.title)||p.name||"Hal "+(i+1))}</div>`
+    document.getElementById("pgList").innerHTML=visited.map(i=>
+      `<div class="pg-item${i===CUR_PG?" active":""}" onclick="goPage(${i})">${esc(txt(pages[i].title)||pages[i].name||"Hal "+(i+1))}</div>`
     ).join("");
   }
 
@@ -387,8 +390,9 @@ function renderPage(){
   let body="";
   if(pages.length){
     const p=pages[CUR_PG];
+    const hiddenNames=computePageSkipState(p,answers).hidden;
     body+=`<div class="page-title">${esc(txt(p.title)||p.name||"Halaman "+(CUR_PG+1))}</div>`;
-    body+=renderNodes(p.components||[],answers,"");
+    body+=renderNodes(p.components||[],answers,"",hiddenNames);
   } else {
     body=renderFlatAnswers(answers);
   }
@@ -397,12 +401,12 @@ function renderPage(){
 
   // Fixed bottom nav footer
   const foot=document.getElementById("pgFoot");
-  if(pages.length>1){
+  if(visited.length>1){
     foot.hidden=false;
     document.getElementById("pgFootIn").innerHTML=
-      `<button class="btn" ${CUR_PG===0?"disabled":""} onclick="goPage(${CUR_PG-1})">← Sebelumnya</button>`+
-      `<span class="pg-prog">Halaman ${CUR_PG+1} / ${pages.length}</span>`+
-      `<button class="btn" ${CUR_PG>=pages.length-1?"disabled":""} onclick="goPage(${CUR_PG+1})">Selanjutnya →</button>`;
+      `<button class="btn" ${visIdx===0?"disabled":""} onclick="goPage(${visited[visIdx-1]})">← Sebelumnya</button>`+
+      `<span class="pg-prog">Halaman ${visIdx+1} / ${visited.length}</span>`+
+      `<button class="btn" ${visIdx>=visited.length-1?"disabled":""} onclick="goPage(${visited[visIdx+1]})">Selanjutnya →</button>`;
   }else{
     foot.hidden=true;
   }
@@ -449,16 +453,17 @@ function goPage(idx){
 }
 
 /* ---- render nodes (read + edit mode) ---- */
-function renderNodes(comps,answers,rp){
-  return(comps||[]).map(c=>renderNode(c,answers,rp)).join("");
+function renderNodes(comps,answers,rp,hiddenNames){
+  return(comps||[]).map(c=>renderNode(c,answers,rp,hiddenNames)).join("");
 }
-function renderNode(c,answers,rp){
+function renderNode(c,answers,rp,hiddenNames){
   if(!evalVisible(c.visibleWhen,rp,answers))return"";
   if(c.kind==="field"&&VISIBLE_FIELDS&&!VISIBLE_FIELDS.has(c.name))return"";
+  if(c.kind==="field"&&hiddenNames&&hiddenNames.has(c.name))return"";
   if(c.kind==="block")
-    return`<div class="rv-block">${c.title?`<div class="rv-block-title">${esc(rowInterp(txt(c.title),answers,rp))}</div>`:""}${renderNodes(c.components||[],answers,rp)}</div>`;
+    return`<div class="rv-block">${c.title?`<div class="rv-block-title">${esc(rowInterp(txt(c.title),answers,rp))}</div>`:""}${renderNodes(c.components||[],answers,rp,hiddenNames)}</div>`;
   if(c.kind==="section")
-    return`<div class="rv-section">${c.title?`<div class="rv-section-title">${esc(rowInterp(txt(c.title),answers,rp))}</div>`:""}${renderNodes(c.components||[],answers,rp)}</div>`;
+    return`<div class="rv-section">${c.title?`<div class="rv-section-title">${esc(rowInterp(txt(c.title),answers,rp))}</div>`:""}${renderNodes(c.components||[],answers,rp,hiddenNames)}</div>`;
   if(c.kind==="roster")return renderRoster(c,answers,rp);
   return EDIT_MODE?renderEditField(c,answers,rp):renderReadField(c,answers,rp);
 }
@@ -467,6 +472,88 @@ function renderNode(c,answers,rp){
 const Expr=(function(){const FUNCS=new Set(["isempty","notempty","len","count","sum","avg","min","max","in","today","age","regex","if","number","round","abs","floor","ceil","contains","upper","lower","trim"]);function tokenize(src){const t=[];let i=0;const n=src.length;const id=c=>/[A-Za-z0-9_]/.test(c);while(i<n){let c=src[i];if(c===" "||c==="\t"||c==="\n"||c==="\r"){i++;continue;}if(c==="$"&&src[i+1]==="{"){let j=i+2,s="";while(j<n&&src[j]!=="}")s+=src[j++];i=j+1;t.push({t:"ref",v:s.trim()});continue;}if(c==="'"||c==='"'){const q=c;let j=i+1,s="";while(j<n&&src[j]!==q){if(src[j]==="\\"){s+=src[j+1];j+=2;}else s+=src[j++];}i=j+1;t.push({t:"str",v:s});continue;}if((c>="0"&&c<="9")||(c==="."&&src[i+1]>="0"&&src[i+1]<="9")){let j=i,s="";while(j<n&&((src[j]>="0"&&src[j]<="9")||src[j]===".")){s+=src[j++];}i=j;t.push({t:"num",v:parseFloat(s)});continue;}if(/[A-Za-z_]/.test(c)){let j=i,s="";while(j<n&&id(src[j]))s+=src[j++];i=j;if(s==="true")t.push({t:"bool",v:true});else if(s==="false")t.push({t:"bool",v:false});else if(s==="null")t.push({t:"null"});else t.push({t:"id",v:s});continue;}const two=src.substr(i,2);if(["==","!=","<=",">=","&&","||"].includes(two)){t.push({t:"op",v:two});i+=2;continue;}if("+-*/%<>!".includes(c)){t.push({t:"op",v:c});i++;continue;}if(c==="("){t.push({t:"lp"});i++;continue;}if(c===")"){t.push({t:"rp"});i++;continue;}if(c==="["){t.push({t:"lb"});i++;continue;}if(c==="]"){t.push({t:"rb"});i++;continue;}if(c===","){t.push({t:"comma"});i++;continue;}throw new Error("karakter tak dikenal: "+c);}return t;}function parse(src){const toks=tokenize(src);let p=0;const peek=()=>toks[p],next=()=>toks[p++];const expect=k=>{if(!toks[p]||toks[p].t!==k)throw new Error("diharapkan '"+k+"'");return toks[p++];};function or(){let l=and();while(peek()&&peek().t==="op"&&peek().v==="||"){next();l={type:"bin",op:"||",l,r:and()};}return l;}function and(){let l=eq();while(peek()&&peek().t==="op"&&peek().v==="&&"){next();l={type:"bin",op:"&&",l,r:eq()};}return l;}function eq(){let l=cmp();while(peek()&&peek().t==="op"&&(peek().v==="=="||peek().v==="!=")){const o=next().v;l={type:"bin",op:o,l,r:cmp()};}return l;}function cmp(){let l=add();while(peek()&&peek().t==="op"&&["<","<=",">",">="].includes(peek().v)){const o=next().v;l={type:"bin",op:o,l,r:add()};}return l;}function add(){let l=mul();while(peek()&&peek().t==="op"&&(peek().v==="+"||peek().v==="-")){const o=next().v;l={type:"bin",op:o,l,r:mul()};}return l;}function mul(){let l=un();while(peek()&&peek().t==="op"&&["*","/","%"].includes(peek().v)){const o=next().v;l={type:"bin",op:o,l,r:un()};}return l;}function un(){if(peek()&&peek().t==="op"&&(peek().v==="!"||peek().v==="-")){const o=next().v;return {type:"un",op:o,e:un()};}return prim();}function prim(){const k=peek();if(!k)throw new Error("ekspresi terpotong");if(k.t==="num"||k.t==="str"||k.t==="bool"){next();return {type:"lit",v:k.v};}if(k.t==="null"){next();return {type:"lit",v:null};}if(k.t==="ref"){next();return {type:"ref",name:k.v};}if(k.t==="lp"){next();const e=or();expect("rp");return e;}if(k.t==="lb"){next();const items=[];if(peek()&&peek().t!=="rb"){items.push(or());while(peek()&&peek().t==="comma"){next();items.push(or());}}expect("rb");return {type:"arr",items};}if(k.t==="id"){next();if(peek()&&peek().t==="lp"){const fn=k.v.toLowerCase();if(!FUNCS.has(fn))throw new Error("fungsi tak dikenal: "+k.v);next();const args=[];if(peek()&&peek().t!=="rp"){args.push(or());while(peek()&&peek().t==="comma"){next();args.push(or());}}expect("rp");return {type:"call",fn,args};}throw new Error("pakai ${...} untuk merujuk field");}throw new Error("token tak terduga");}const ast=or();return ast;}const toNum=v=>v===true?1:v===false?0:(v==null||v==="")?NaN:Number(v);const isEmp=x=>x==null||x===""||(Array.isArray(x)&&x.length===0);const flat=a=>{const o=[];a.forEach(x=>Array.isArray(x)?x.forEach(y=>o.push(y)):o.push(x));return o;};const nums=a=>flat(a).map(Number).filter(x=>!isNaN(x));const LIB={isempty:a=>isEmp(a[0]),notempty:a=>!isEmp(a[0]),len:a=>{const x=a[0];return Array.isArray(x)?x.length:(x==null?0:String(x).length);},count:a=>{const arr=Array.isArray(a[0])?a[0]:a;return arr.filter(x=>!isEmp(x)).length;},sum:a=>flat(a).reduce((s,x)=>s+(isEmp(x)?0:(Number(x)||0)),0),avg:a=>{const f=nums(a);return f.length?f.reduce((s,x)=>s+x,0)/f.length:0;},min:a=>{const f=nums(a);return f.length?Math.min(...f):0;},max:a=>{const f=nums(a);return f.length?Math.max(...f):0;},in:a=>{const x=a[0];const rest=a.length===2&&Array.isArray(a[1])?a[1]:a.slice(1);return rest.map(String).includes(String(x));},today:()=>new Date().toISOString().slice(0,10),age:a=>{const d=new Date(a[0]);if(isNaN(d))return NaN;const t=new Date();let g=t.getFullYear()-d.getFullYear();const m=t.getMonth()-d.getMonth();if(m<0||(m===0&&t.getDate()<d.getDate()))g--;return g;},regex:a=>{try{return new RegExp(a[1]).test(String(a[0]??""));}catch(_){return false;}},if:a=>a[0]?a[1]:a[2],number:a=>{const x=Number(a[0]);return isNaN(x)?0:x;},round:a=>{const f=Math.pow(10,a[1]||0);return Math.round((Number(a[0])||0)*f)/f;},abs:a=>Math.abs(Number(a[0])||0),floor:a=>Math.floor(Number(a[0])||0),ceil:a=>Math.ceil(Number(a[0])||0),contains:a=>{const h=a[0];return Array.isArray(h)?h.map(String).includes(String(a[1])):String(h??"").includes(String(a[1]));},upper:a=>String(a[0]??"").toUpperCase(),lower:a=>String(a[0]??"").toLowerCase(),trim:a=>String(a[0]??"").trim()};function eqv(a,b){if(typeof a==="number"||typeof b==="number"){const x=toNum(a),y=toNum(b);if(!isNaN(x)&&!isNaN(y))return x===y;}if(typeof a==="boolean"||typeof b==="boolean")return Boolean(a)===Boolean(b);if(a==null||b==null)return a==null&&b==null;return String(a)===String(b);}function ev(n,res){switch(n.type){case "lit":return n.v;case "ref":return res(n.name);case "arr":return n.items.map(x=>ev(x,res));case "un":{const v=ev(n.e,res);return n.op==="!"?!v:-toNum(v);}case "call":return LIB[n.fn](n.args.map(a=>ev(a,res)));case "bin":{const op=n.op;if(op==="&&")return !!ev(n.l,res)&&!!ev(n.r,res);if(op==="||")return !!ev(n.l,res)||!!ev(n.r,res);const a=ev(n.l,res),b=ev(n.r,res);switch(op){case "+":return toNum(a)+toNum(b);case "-":return toNum(a)-toNum(b);case "*":return toNum(a)*toNum(b);case "/":return toNum(a)/toNum(b);case "%":return toNum(a)%toNum(b);case "<":return toNum(a)<toNum(b);case "<=":return toNum(a)<=toNum(b);case ">":return toNum(a)>toNum(b);case ">=":return toNum(a)>=toNum(b);case "==":return eqv(a,b);case "!=":return !eqv(a,b);}}}}const cache=new Map();function parseCached(src){if(cache.has(src))return cache.get(src);const a=parse(src);cache.set(src,a);return a;}return{evalSrc(src,res){if(!src)return undefined;let a;try{a=parseCached(src);}catch(_){return undefined;}try{return ev(a,res);}catch(_){return undefined;}}};})();
 function coerceVal(v){if(v==="true")return true;if(v==="false")return false;if(typeof v==="string"&&v.trim()!==""&&!isNaN(Number(v)))return Number(v);return v;}
 function evalVisible(src,rp,answers){if(!src)return true;const res=n=>{const k=(rp||"")+n;const val=k in answers?answers[k]:(n in answers?answers[n]:undefined);return coerceVal(val);};const v=Expr.evalSrc(src,res);return v===undefined?true:!!v;}
+
+/* ---- skip-to: replay memakai jawaban final, supaya field/halaman yang
+   sebenarnya tidak pernah ditampilkan ke responden (dilewati skip-to) tidak
+   ikut dirender seolah kosong. Tidak memakai heuristik "pending" milik form
+   pengisian karena di sini datanya sudah final. ---- */
+const CHOICE_TYPES=new Set(["select","multiselect","radio","checkbox"]);
+function nodeContainsName(node,target){if(node.name===target)return true;return(node.components||[]).some(c=>nodeContainsName(c,target));}
+function pageIndexOfTarget(target,pages){
+  if(!target||target==="__next"||target==="__prev")return null;
+  if(target==="__end")return pages.length-1;
+  for(let i=0;i<pages.length;i++){if(nodeContainsName(pages[i],target))return i;}
+  return null;
+}
+function fieldSkipTarget(f,answers,rp){
+  rp=rp||"";
+  for(const s of f.skips||[]){
+    if(!s.when||!s.to)continue;
+    if(evalVisible(s.when,rp,answers))return s.to;
+  }
+  if(CHOICE_TYPES.has(f.type)&&Array.isArray(f.options)){
+    const v=answers[rp+f.name];
+    const sel=Array.isArray(v)?v.map(String):[String(v)];
+    for(const o of f.options){if(o.skipTo&&sel.includes(String(o.value)))return o.skipTo;}
+  }
+  return null;
+}
+function flatFields(node){
+  const fields=[];
+  (function walk(n){(n.components||[]).forEach(c=>{if(c.kind==="field")fields.push(c);else if(c.kind!=="roster")walk(c);});})(node);
+  return fields;
+}
+function computePageSkipState(page,answers){
+  const hidden=new Set();
+  const fields=flatFields(page);
+  let skipActive=false,skipTarget=null,crossPageTarget=null;
+  for(const f of fields){
+    if(skipActive){
+      if(f.name===skipTarget){skipActive=false;skipTarget=null;}
+      else{hidden.add(f.name);continue;}
+    }
+    const t=fieldSkipTarget(f,answers,"");
+    if(t&&t!=="__next"){
+      if(nodeContainsName(page,t)&&t!==f.name){skipActive=true;skipTarget=t;}
+      else{skipActive=true;skipTarget=null;crossPageTarget=t;}
+    }
+  }
+  return{hidden,crossPageTarget:skipActive?crossPageTarget:null};
+}
+function computeRosterRowSkipState(roster,rowIdx,answers,parentRp){
+  const rp=rosterRowPrefix(roster,rowIdx,parentRp||"");
+  const allRowFields=flatFields(roster);
+  const allNames=new Set(allRowFields.map(f=>f.name));
+  const hidden=new Set();
+  let skipActive=false,skipTarget=null;
+  for(const f of allRowFields){
+    if(skipActive){
+      if(skipTarget&&f.name===skipTarget){skipActive=false;skipTarget=null;}
+      else{hidden.add(f.name);continue;}
+    }
+    const t=fieldSkipTarget(f,answers,rp);
+    if(t==="__end"){skipActive=true;skipTarget=null;}
+    else if(t&&allNames.has(t)&&t!==f.name){skipActive=true;skipTarget=t;}
+  }
+  return hidden;
+}
+function computeVisitedPages(pages,answers){
+  const visited=[];
+  const guard=new Set();
+  let idx=0;
+  while(idx>=0&&idx<pages.length&&!guard.has(idx)){
+    guard.add(idx);
+    if(!evalVisible(pages[idx].visibleWhen,"",answers)){idx+=1;continue;}
+    visited.push(idx);
+    const{crossPageTarget}=computePageSkipState(pages[idx],answers);
+    if(crossPageTarget){
+      const t=pageIndexOfTarget(crossPageTarget,pages);
+      if(t!=null&&t>idx){idx=t;continue;}
+    }
+    idx+=1;
+  }
+  return visited;
+}
 
 /* ---- READ-ONLY field ---- */
 function renderReadField(c,answers,rp){
@@ -670,7 +757,8 @@ function renderRoster(r,answers,rp){
     const rowLbl=(i,childRp)=>r.rowTitle?`${esc(rowInterp(txt(r.rowTitle),answers,childRp))} #${i+1}`:`Baris #${i+1}`;
     for(let i=0;i<count;i++){
       const childRp=rosterRowPrefix(r,i,rp);
-      html+=`<div class="rv-row"><div class="rv-row-num">${rowLbl(i,childRp)}</div>${renderNodes(r.components||[],answers,childRp)}</div>`;
+      const rowHidden=computeRosterRowSkipState(r,i,answers,rp);
+      html+=`<div class="rv-row"><div class="rv-row-num">${rowLbl(i,childRp)}</div>${renderNodes(r.components||[],answers,childRp,rowHidden)}</div>`;
     }
   }
   if(EDIT_MODE)html+=`<div class="roster-edit-note">Data roster tidak dapat diubah melalui tampilan ini.</div>`;

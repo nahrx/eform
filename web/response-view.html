@@ -688,17 +688,23 @@
         const answers = parseAnswers(RESP.answers);
         const meta = parseAnswers(RESP.meta);
         const pages = (SCHEMA && SCHEMA.pages) || [];
+        const visited = computeVisitedPages(pages, answers);
+        if (pages.length && !visited.includes(CUR_PG)) {
+          CUR_PG = visited.length ? visited[0] : 0;
+        }
         if (CUR_PG >= pages.length) CUR_PG = pages.length - 1;
         if (CUR_PG < 0) CUR_PG = 0;
+        const visIdx = Math.max(0, visited.indexOf(CUR_PG));
 
-        // Sidebar
-        if (pages.length > 1) {
+        // Sidebar — hanya halaman yang benar-benar dilalui responden
+        // (visibleWhen halaman terpenuhi & tidak dilompati oleh skip-to)
+        if (visited.length > 1) {
           const sidebar = document.getElementById("sidebar");
           sidebar.hidden = false;
-          document.getElementById("pgList").innerHTML = pages
+          document.getElementById("pgList").innerHTML = visited
             .map(
-              (p, i) =>
-                `<div class="pg-item${i === CUR_PG ? " active" : ""}" onclick="goPage(${i})">${esc(txt(p.title) || p.name || "Halaman " + (i + 1))}</div>`,
+              (i) =>
+                `<div class="pg-item${i === CUR_PG ? " active" : ""}" onclick="goPage(${i})">${esc(txt(pages[i].title) || pages[i].name || "Halaman " + (i + 1))}</div>`,
             )
             .join("");
         }
@@ -723,8 +729,9 @@
         let body = "";
         if (pages.length) {
           const p = pages[CUR_PG];
+          const hiddenNames = computePageSkipState(p, answers).hidden;
           body += `<div class="page-title">${esc(rowInterp(txt(p.title) || p.name || "Halaman " + (CUR_PG + 1), answers, ""))}</div>`;
-          body += renderNodes(p.components || [], answers, "");
+          body += renderNodes(p.components || [], answers, "", hiddenNames);
         } else {
           body = renderFlatAnswers(answers);
         }
@@ -733,12 +740,12 @@
 
         // Fixed bottom nav footer
         const foot = document.getElementById("pgFoot");
-        if (pages.length > 1) {
+        if (visited.length > 1) {
           foot.hidden = false;
           document.getElementById("pgFootIn").innerHTML =
-            `<button class="btn" ${CUR_PG === 0 ? "disabled" : ""} onclick="goPage(${CUR_PG - 1})">← Sebelumnya</button>` +
-            `<span class="pg-prog">Halaman ${CUR_PG + 1} / ${pages.length}</span>` +
-            `<button class="btn" ${CUR_PG >= pages.length - 1 ? "disabled" : ""} onclick="goPage(${CUR_PG + 1})">Selanjutnya →</button>`;
+            `<button class="btn" ${visIdx === 0 ? "disabled" : ""} onclick="goPage(${visited[visIdx - 1]})">← Sebelumnya</button>` +
+            `<span class="pg-prog">Halaman ${visIdx + 1} / ${visited.length}</span>` +
+            `<button class="btn" ${visIdx >= visited.length - 1 ? "disabled" : ""} onclick="goPage(${visited[visIdx + 1]})">Selanjutnya →</button>`;
         } else {
           foot.hidden = true;
         }
@@ -1217,16 +1224,150 @@
         return v === undefined ? true : !!v;
       }
 
-      /* ---- render nodes ---- */
-      function renderNodes(comps, answers, rp) {
-        return (comps || []).map((c) => renderNode(c, answers, rp)).join("");
+      /* ---- skip-to: replay memakai jawaban final (bukan heuristik "pending"
+         milik form pengisian) untuk menentukan halaman/field mana yang
+         sebenarnya TIDAK PERNAH ditampilkan ke responden, supaya detail
+         jawaban tidak menampilkan field yang di-skip seolah kosong. ---- */
+      const CHOICE_TYPES = new Set(["select", "multiselect", "radio", "checkbox"]);
+      function nodeContainsName(node, target) {
+        if (node.name === target) return true;
+        return (node.components || []).some((c) => nodeContainsName(c, target));
       }
-      function renderNode(c, answers, rp) {
+      function pageIndexOfTarget(target, pages) {
+        if (!target || target === "__next" || target === "__prev") return null;
+        if (target === "__end") return pages.length - 1;
+        for (let i = 0; i < pages.length; i++) {
+          if (nodeContainsName(pages[i], target)) return i;
+        }
+        return null;
+      }
+      function fieldSkipTarget(f, answers, rp) {
+        rp = rp || "";
+        for (const s of f.skips || []) {
+          if (!s.when || !s.to) continue;
+          if (evalVisible(s.when, rp, answers)) return s.to;
+        }
+        if (CHOICE_TYPES.has(f.type) && Array.isArray(f.options)) {
+          const v = answers[rp + f.name];
+          const sel = Array.isArray(v) ? v.map(String) : [String(v)];
+          for (const o of f.options) {
+            if (o.skipTo && sel.includes(String(o.value))) return o.skipTo;
+          }
+        }
+        return null;
+      }
+      function flatFields(node) {
+        const fields = [];
+        (function walk(n) {
+          (n.components || []).forEach((c) => {
+            if (c.kind === "field") fields.push(c);
+            else if (c.kind !== "roster") walk(c);
+          });
+        })(node);
+        return fields;
+      }
+      // Field mana di halaman ini yang tersembunyi karena skip aktif, dan target
+      // halaman lain bila skip yang aktif belum "selesai" sampai akhir halaman.
+      function computePageSkipState(page, answers) {
+        const hidden = new Set();
+        const fields = flatFields(page);
+        let skipActive = false,
+          skipTarget = null,
+          crossPageTarget = null;
+        for (const f of fields) {
+          if (skipActive) {
+            if (f.name === skipTarget) {
+              skipActive = false;
+              skipTarget = null;
+            } else {
+              hidden.add(f.name);
+              continue;
+            }
+          }
+          const t = fieldSkipTarget(f, answers, "");
+          if (t && t !== "__next") {
+            if (nodeContainsName(page, t) && t !== f.name) {
+              skipActive = true;
+              skipTarget = t;
+            } else {
+              skipActive = true;
+              skipTarget = null;
+              crossPageTarget = t;
+            }
+          }
+        }
+        return { hidden, crossPageTarget: skipActive ? crossPageTarget : null };
+      }
+      // Field dalam satu baris roster yang tersembunyi karena skip-to (skip di
+      // dalam roster hanya berlaku sampai akhir baris yang sama, target "__end").
+      function computeRosterRowSkipState(roster, rowIdx, answers, parentRp) {
+        const rp = rosterRowPrefix(roster, rowIdx, parentRp || "");
+        const allRowFields = flatFields(roster);
+        const allNames = new Set(allRowFields.map((f) => f.name));
+        const hidden = new Set();
+        let skipActive = false,
+          skipTarget = null;
+        for (const f of allRowFields) {
+          if (skipActive) {
+            if (skipTarget && f.name === skipTarget) {
+              skipActive = false;
+              skipTarget = null;
+            } else {
+              hidden.add(f.name);
+              continue;
+            }
+          }
+          const t = fieldSkipTarget(f, answers, rp);
+          if (t === "__end") {
+            skipActive = true;
+            skipTarget = null;
+          } else if (t && allNames.has(t) && t !== f.name) {
+            skipActive = true;
+            skipTarget = t;
+          }
+        }
+        return hidden;
+      }
+      // Urutan halaman yang benar-benar dilalui responden: mulai dari halaman
+      // pertama, ikuti visibleWhen halaman + lompatan skip-to lintas-halaman.
+      function computeVisitedPages(pages, answers) {
+        const visited = [];
+        const guard = new Set();
+        let idx = 0;
+        while (idx >= 0 && idx < pages.length && !guard.has(idx)) {
+          guard.add(idx);
+          if (!evalVisible(pages[idx].visibleWhen, "", answers)) {
+            idx += 1;
+            continue;
+          }
+          visited.push(idx);
+          const { crossPageTarget } = computePageSkipState(pages[idx], answers);
+          if (crossPageTarget) {
+            const t = pageIndexOfTarget(crossPageTarget, pages);
+            if (t != null && t > idx) {
+              idx = t;
+              continue;
+            }
+          }
+          idx += 1;
+        }
+        return visited;
+      }
+
+      /* ---- render nodes ---- */
+      function renderNodes(comps, answers, rp, hiddenNames) {
+        return (comps || [])
+          .map((c) => renderNode(c, answers, rp, hiddenNames))
+          .join("");
+      }
+      function renderNode(c, answers, rp, hiddenNames) {
         if (!evalVisible(c.visibleWhen, rp, answers)) return "";
+        if (c.kind === "field" && hiddenNames && hiddenNames.has(c.name))
+          return "";
         if (c.kind === "block")
-          return `<div class="rv-block">${c.title ? `<div class="rv-block-title">${esc(rowInterp(txt(c.title), answers, rp))}</div>` : ""}${renderNodes(c.components || [], answers, rp)}</div>`;
+          return `<div class="rv-block">${c.title ? `<div class="rv-block-title">${esc(rowInterp(txt(c.title), answers, rp))}</div>` : ""}${renderNodes(c.components || [], answers, rp, hiddenNames)}</div>`;
         if (c.kind === "section")
-          return `<div class="rv-section">${c.title ? `<div class="rv-section-title">${esc(rowInterp(txt(c.title), answers, rp))}</div>` : ""}${renderNodes(c.components || [], answers, rp)}</div>`;
+          return `<div class="rv-section">${c.title ? `<div class="rv-section-title">${esc(rowInterp(txt(c.title), answers, rp))}</div>` : ""}${renderNodes(c.components || [], answers, rp, hiddenNames)}</div>`;
         if (c.kind === "roster") return renderRoster(c, answers, rp);
         return renderField(c, answers, rp);
       }
@@ -1362,7 +1503,8 @@
               : `Baris #${i + 1}`;
           for (let i = 0; i < count; i++) {
             const childRp = rosterRowPrefix(r, i, rp);
-            html += `<div class="rv-row"><div class="rv-row-num">${rowLbl(i, childRp)}</div>${renderNodes(r.components || [], answers, childRp)}</div>`;
+            const rowHidden = computeRosterRowSkipState(r, i, answers, rp);
+            html += `<div class="rv-row"><div class="rv-row-num">${rowLbl(i, childRp)}</div>${renderNodes(r.components || [], answers, childRp, rowHidden)}</div>`;
           }
         }
         return html + `</div>`;
