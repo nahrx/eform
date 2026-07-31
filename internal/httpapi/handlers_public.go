@@ -1,10 +1,13 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/bpskaltim/eform-backend/internal/auth"
@@ -351,6 +354,90 @@ func (s *Server) wilayahList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, items)
+}
+
+var optionsProxyClient = &http.Client{
+	Timeout: 10 * time.Second,
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 5 {
+			return errors.New("terlalu banyak redirect")
+		}
+		return ensurePublicHost(req.URL.Hostname())
+	},
+}
+
+// ensurePublicHost menolak host yang mengarah ke jaringan privat/lokal, agar
+// endpoint proxy ini tidak bisa disalahgunakan untuk memindai jaringan internal (SSRF).
+func ensurePublicHost(host string) error {
+	if host == "" {
+		return errors.New("host kosong")
+	}
+	var ips []net.IP
+	if ip := net.ParseIP(host); ip != nil {
+		ips = []net.IP{ip}
+	} else {
+		resolved, err := net.LookupIP(host)
+		if err != nil {
+			return err
+		}
+		ips = resolved
+	}
+	for _, ip := range ips {
+		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
+			ip.IsLinkLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast() {
+			return errors.New("alamat host tidak diizinkan")
+		}
+	}
+	return nil
+}
+
+// GET /api/options-proxy?url=... — proxy sisi server untuk sumber opsi dropdown
+// dinamis (optionsApi di skema kuesioner) yang menunjuk ke API eksternal.
+// Dibuat agar browser tidak perlu connect-src langsung ke domain pihak ketiga
+// (yang bisa berbeda-beda tergantung konfigurasi pembuat formulir), sekaligus
+// mencegah token internal (Authorization admin/viewer/editor) ikut terkirim
+// ke server pihak ketiga. Endpoint ini tidak memerlukan autentikasi karena
+// hanya meneruskan permintaan GET ke URL yang sudah ditentukan di skema.
+func (s *Server) optionsProxy(w http.ResponseWriter, r *http.Request) {
+	target := r.URL.Query().Get("url")
+	if target == "" {
+		writeErr(w, http.StatusBadRequest, "parameter url wajib diisi")
+		return
+	}
+	u, err := url.Parse(target)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		writeErr(w, http.StatusBadRequest, "url tidak valid")
+		return
+	}
+	if err := ensurePublicHost(u.Hostname()); err != nil {
+		writeErr(w, http.StatusBadRequest, "url tidak diizinkan")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, "gagal membuat permintaan")
+		return
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := optionsProxyClient.Do(req)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, "gagal menghubungi API eksternal")
+		return
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 5<<20))
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, "gagal membaca respons API eksternal")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	w.Write(body)
 }
 
 func clientIP(r *http.Request) string {

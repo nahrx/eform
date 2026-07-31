@@ -945,7 +945,7 @@ async function optionsFor(c,rp){
     // Cari nilai dep: roster-prefixed dahulu, fallback ke field halaman
     const url=c.optionsApi.url.replace(/\{([^}]+)\}/g,(_,k)=>encodeURIComponent((rp?(answers[rp+k]??answers[k]):answers[k])??''));
     if(apiCache[url])return apiCache[url];
-    try{const r=await fetch(url);const d=await r.json();
+    try{const r=await fetch("/api/options-proxy?url="+encodeURIComponent(url));const d=await r.json();
       let arr=c.optionsApi.path?getPath(d,c.optionsApi.path):(Array.isArray(d)?d:(d.data||d.items||d.results||[]));
       const vf=c.optionsApi.valueField||"code",lf=c.optionsApi.labelField||"label";
       const opts=(arr||[]).map(it=>({value:it[vf],label:txt(it[lf])||String(it[vf])}));

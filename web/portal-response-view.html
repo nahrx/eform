@@ -413,7 +413,7 @@ function renderPage(){
 async function resolveEditOptions(){
   function fetchOpts(cfg){
     const url=(cfg.url||"").replace(/\{([^}]+)\}/g,(_,k)=>encodeURIComponent(editedAnswers[k]??''));
-    return fetch(url,{headers:H}).then(r=>r.json()).then(d=>{
+    return fetch("/api/options-proxy?url="+encodeURIComponent(url)).then(r=>r.json()).then(d=>{
       let arr=cfg.path?(cfg.path.split(".").reduce((x,k)=>x==null?x:x[k],d)):(Array.isArray(d)?d:(d.data||d.items||d.results||[]));
       const vf=cfg.valueField||"code",lf=cfg.labelField||"label";
       return(arr||[]).map(it=>({value:String(it[vf]),label:txt(it[lf])||String(it[vf])}));
@@ -758,7 +758,7 @@ async function prefetchApiOptions(answers){
   (SCHEMA.pages||[]).forEach(pg=>collectFields(pg.components||[],""));
   await Promise.all([...jobs.entries()].map(async([url,apiCfg])=>{
     try{
-      const data=await fetch(url,{headers:H}).then(r=>r.ok?r.json():null);
+      const data=await fetch("/api/options-proxy?url="+encodeURIComponent(url)).then(r=>r.ok?r.json():null);
       if(!data)return;
       let arr=apiCfg.path?getPath(data,apiCfg.path):Array.isArray(data)?data:data.data||data.items||data.results||[];
       const vf=apiCfg.valueField||"code",lf=apiCfg.labelField||"label";

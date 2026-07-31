@@ -101,6 +101,7 @@ func (s *Server) Routes() http.Handler {
 
 	// --- publik: data referensi (tanpa login) ---
 	mux.HandleFunc("GET /api/wilayah", s.wilayahList)
+	mux.HandleFunc("GET /api/options-proxy", s.optionsProxy)
 
 	// --- publik: akses kuesioner (tanpa login) ---
 	mux.HandleFunc("GET /api/public/forms/{token}", s.publicGetForm)

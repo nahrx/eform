@@ -1565,9 +1565,9 @@
         await Promise.all(
           [...jobs.entries()].map(async ([url, apiCfg]) => {
             try {
-              const data = await fetch(url, { headers: H }).then((r) =>
-                r.ok ? r.json() : null,
-              );
+              const data = await fetch(
+                "/api/options-proxy?url=" + encodeURIComponent(url),
+              ).then((r) => (r.ok ? r.json() : null));
               if (!data) return;
               let arr = apiCfg.path
                 ? getPath(data, apiCfg.path)

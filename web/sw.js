@@ -11,6 +11,7 @@ const CACHEABLE_GET = [
   /^\/f\/[^/]+$/,
   /^\/api\/public\/forms\/[^/]+$/,
   /^\/api\/wilayah(\?.*)?$/,
+  /^\/api\/options-proxy\?.*$/,
 ];
 
 self.addEventListener("install", () => {

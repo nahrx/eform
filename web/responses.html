@@ -290,7 +290,7 @@ const _apiOptCache={};
 async function fetchApiOpts(src){
   if(_apiOptCache[src.url])return _apiOptCache[src.url];
   try{
-    const r=await fetch(src.url,{headers:H});
+    const r=await fetch("/api/options-proxy?url="+encodeURIComponent(src.url));
     const d=await r.json();
     const getPath=(o,p)=>String(p).split(".").reduce((x,k)=>x==null?x:x[k],o);
     let arr=src.path?getPath(d,src.path):(Array.isArray(d)?d:(d.data||d.items||d.results||[]));

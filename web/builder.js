@@ -808,7 +808,7 @@ function buildApiUrl(tbl,parentVal,rp){
 function apiFetch(tbl,parentVal,rp){
   pv.apiCache=pv.apiCache||{};const url=buildApiUrl(tbl,parentVal,rp);let e=pv.apiCache[url];
   if(!e){e=pv.apiCache[url]={state:"loading",opts:[]};
-    fetch(url,{method:tbl.method||"GET",headers:tbl.headers||{}})
+    fetch("/api/options-proxy?url="+encodeURIComponent(url))
       .then(r=>{if(!r.ok)throw new Error("HTTP "+r.status);return r.json();})
       .then(data=>{let arr=tbl.path?getPath(data,tbl.path):(Array.isArray(data)?data:(data.data||data.items||data.results||[]));if(!Array.isArray(arr))arr=[];const vf=tbl.valueField||"code",lf=tbl.labelField||"label";e.opts=arr.map(it=>({value:it[vf],label:textOf(it[lf])??String(it[vf])}));e.state="done";if(!document.getElementById("preview").hidden)renderPreview();})
       .catch(err=>{e.state="error";e.error=String(err.message||err);if(!document.getElementById("preview").hidden)renderPreview();});
