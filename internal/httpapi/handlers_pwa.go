@@ -7,6 +7,13 @@ import (
 	"image/png"
 	"net/http"
 	"strconv"
+	"strings"
+	"unicode"
+
+	"golang.org/x/image/font"
+	"golang.org/x/image/font/gofont/goregular"
+	"golang.org/x/image/font/opentype"
+	"golang.org/x/image/math/fixed"
 
 	"github.com/bpskaltim/eform-backend/internal/models"
 )
@@ -85,10 +92,12 @@ func (s *Server) publicManifest(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(manifest)
 }
 
-// GET /api/public/forms/{token}/icon.png?size=192|512 -- ikon PWA sederhana, digambar di server
-// (persegi warna aksen dengan kotak lebih terang di tengah) tanpa perlu aset gambar tambahan.
+// GET /api/public/forms/{token}/icon.png?size=192|512 -- ikon PWA digambar di server: kotak warna
+// aksen dengan huruf/angka pertama judul kuesioner di tengah, supaya tiap kuesioner yang di-install
+// punya ikon yang berbeda (tanpa perlu admin mengunggah gambar apa pun).
 func (s *Server) publicIcon(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.resolvePWAForm(w, r); !ok {
+	f, ok := s.resolvePWAForm(w, r)
+	if !ok {
 		return
 	}
 	size, _ := strconv.Atoi(r.URL.Query().Get("size"))
@@ -98,17 +107,76 @@ func (s *Server) publicIcon(w http.ResponseWriter, r *http.Request) {
 	img := image.NewNRGBA(image.Rect(0, 0, size, size))
 	bg := color.NRGBA{R: 0x0e, G: 0x74, B: 0x90, A: 0xff} // --accent
 	fg := color.NRGBA{R: 0xd6, G: 0xed, B: 0xf1, A: 0xff} // --accent-soft
-	margin := size / 5
 	for y := 0; y < size; y++ {
 		for x := 0; x < size; x++ {
-			if x >= margin && x < size-margin && y >= margin && y < size-margin {
-				img.Set(x, y, fg)
-			} else {
-				img.Set(x, y, bg)
-			}
+			img.Set(x, y, bg)
 		}
 	}
+	drawIconInitial(img, iconInitial(f.Title), fg, size)
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Cache-Control", "public, max-age=86400, immutable")
 	_ = png.Encode(w, img)
+}
+
+// iconInitial mengambil huruf/angka pertama yang bermakna dari judul kuesioner
+// (dikapitalkan) sebagai identitas visual ikon; "K" (Kuesioner) sebagai fallback.
+func iconInitial(title string) string {
+	for _, r := range strings.TrimSpace(title) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			return strings.ToUpper(string(r))
+		}
+	}
+	return "K"
+}
+
+// drawIconInitial menggambar huruf besar di tengah ikon persegi, dengan label
+// kecil "- eForm -" di bawahnya (keduanya diperlakukan sebagai satu grup dan
+// dipusatkan bersama secara vertikal). Gagal-diam (ikon tetap berupa kotak
+// polos) bila font tak bisa dimuat/di-render, supaya endpoint ikon tidak
+// pernah error hanya karena masalah rendering teks.
+func drawIconInitial(img *image.NRGBA, letter string, fg color.NRGBA, size int) {
+	fnt, err := opentype.Parse(goregular.TTF)
+	if err != nil {
+		return
+	}
+
+	letterFace, err := opentype.NewFace(fnt, &opentype.FaceOptions{
+		Size:    float64(size) * 0.46,
+		DPI:     72,
+		Hinting: font.HintingFull,
+	})
+	if err != nil {
+		return
+	}
+	defer letterFace.Close()
+
+	captionFace, err := opentype.NewFace(fnt, &opentype.FaceOptions{
+		Size:    float64(size) * 0.1,
+		DPI:     72,
+		Hinting: font.HintingFull,
+	})
+	if err != nil {
+		return
+	}
+	defer captionFace.Close()
+
+	const caption = "- eForm -"
+	gap := fixed.I(size) / 24
+
+	letterMetrics := letterFace.Metrics()
+	captionMetrics := captionFace.Metrics()
+	groupHeight := letterMetrics.Ascent + letterMetrics.Descent + gap + captionMetrics.Ascent + captionMetrics.Descent
+	top := (fixed.I(size) - groupHeight) / 2
+
+	letterDrawer := &font.Drawer{Dst: img, Src: image.NewUniform(fg), Face: letterFace}
+	letterWidth := letterDrawer.MeasureString(letter)
+	letterBaseline := top + letterMetrics.Ascent
+	letterDrawer.Dot = fixed.Point26_6{X: (fixed.I(size) - letterWidth) / 2, Y: letterBaseline}
+	letterDrawer.DrawString(letter)
+
+	captionDrawer := &font.Drawer{Dst: img, Src: image.NewUniform(fg), Face: captionFace}
+	captionWidth := captionDrawer.MeasureString(caption)
+	captionBaseline := top + letterMetrics.Ascent + letterMetrics.Descent + gap + captionMetrics.Ascent
+	captionDrawer.Dot = fixed.Point26_6{X: (fixed.I(size) - captionWidth) / 2, Y: captionBaseline}
+	captionDrawer.DrawString(caption)
 }
