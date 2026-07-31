@@ -951,7 +951,12 @@ async function optionsFor(c,rp){
     }catch(e){return[];}
   }
   if(c.optionsRef){const t=(SCHEMA.referenceData||{})[c.optionsRef];
-    if(t&&t.items)return t.items.map(it=>({value:it.code,label:txt(it.label)}));return[];}
+    if(!t||!t.items)return[];
+    const parentVal=c.optionsFilterBy?refResolve(c.optionsFilterBy,rp):null;
+    const items=(c.optionsFilterBy&&parentVal!=null&&parentVal!=="")
+      ?t.items.filter(it=>String(it.parent)===String(parentVal))
+      :t.items;
+    return items.map(it=>({value:it.code,label:txt(it.label)}));}
   return(c.options||[]).map(o=>({value:o.value,label:txt(o.label)||String(o.value)}));
 }
 
@@ -2049,11 +2054,13 @@ function resolveOptions(){
     const box=document.getElementById("opt-"+ke);if(!box)return;
     const dis=enabled===false?" disabled":"";
 
-    // Dependency: placeholder {dep} di URL optionsApi + dataKey trigger eksplisit (depKeys)
+    // Dependency: placeholder {dep} di URL optionsApi + dataKey trigger eksplisit (depKeys),
+    // atau field induk (optionsFilterBy) untuk cascading dari referenceData inline (optionsRef).
     const urlTpl=(c.optionsApi&&c.optionsApi.url)||"";
     const urlDeps=[...urlTpl.matchAll(/\{([^}]+)\}/g)].map(m=>m[1]);
     const explicitDeps=((c.optionsApi&&c.optionsApi.depKeys)||"").split(",").map(s=>s.trim()).filter(Boolean);
-    const deps=[...new Set([...urlDeps,...explicitDeps])];
+    const refDeps=(c.optionsRef&&c.optionsFilterBy)?[c.optionsFilterBy.trim()]:[];
+    const deps=[...new Set([...urlDeps,...explicitDeps,...refDeps])];
 
     // Re-render yang tepat: baris roster atau halaman biasa
     const rerender=()=>{saveAnswers();rosterView?renderRosterRow():renderCurrentPage();};
