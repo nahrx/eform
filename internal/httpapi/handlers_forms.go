@@ -524,31 +524,37 @@ func (s *Server) exportResponses(w http.ResponseWriter, r *http.Request) {
 	_ = cw.Write(header)
 	// 3. Stream setiap baris langsung ke CSV tanpa buffering di memori
 	_ = s.st.ForEachResponseByForm(r.Context(), formID, func(rr models.Response) error {
-		a := map[string]any{}
-		_ = json.Unmarshal(rr.Answers, &a)
-		m := map[string]any{}
-		_ = json.Unmarshal(rr.Meta, &m)
-		respondentID := ""
-		if rr.RespondentID != nil {
-			respondentID = *rr.RespondentID
-		}
-		waktu := ""
-		if !rr.SubmittedAt.IsZero() {
-			waktu = rr.SubmittedAt.Format(time.RFC3339)
-		}
-		row := []string{rr.ID, respondentID, toStr(m["name"]), toStr(m["email"]), rr.Status, waktu}
-		for _, c := range cols {
-			v := a[c]
-			if sv, ok := v.(string); ok && len(sv) > 200 && (strings.HasPrefix(sv, "data:image") || strings.HasPrefix(sv, "data:application")) {
-				row = append(row, "")
-			} else {
-				row = append(row, toStr(v))
-			}
-		}
-		_ = cw.Write(row)
-		cw.Flush()
+		writeCSVRow(cw, rr, cols)
 		return nil
 	})
+}
+
+// writeCSVRow menulis satu baris respons ke csv.Writer sesuai daftar kolom jawaban yang diberikan.
+// Dipakai bersama oleh ekspor CSV admin, viewer, dan editor.
+func writeCSVRow(cw *csv.Writer, rr models.Response, cols []string) {
+	a := map[string]any{}
+	_ = json.Unmarshal(rr.Answers, &a)
+	m := map[string]any{}
+	_ = json.Unmarshal(rr.Meta, &m)
+	respondentID := ""
+	if rr.RespondentID != nil {
+		respondentID = *rr.RespondentID
+	}
+	waktu := ""
+	if !rr.SubmittedAt.IsZero() {
+		waktu = rr.SubmittedAt.Format(time.RFC3339)
+	}
+	row := []string{rr.ID, respondentID, toStr(m["name"]), toStr(m["email"]), rr.Status, waktu}
+	for _, c := range cols {
+		v := a[c]
+		if sv, ok := v.(string); ok && len(sv) > 200 && (strings.HasPrefix(sv, "data:image") || strings.HasPrefix(sv, "data:application")) {
+			row = append(row, "")
+		} else {
+			row = append(row, toStr(v))
+		}
+	}
+	_ = cw.Write(row)
+	cw.Flush()
 }
 
 // ensureResultAccess membatasi akses hasil/jawaban: editor tidak boleh mengakses.

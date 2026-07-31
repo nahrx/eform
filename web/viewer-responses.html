@@ -73,6 +73,7 @@ table.resp-tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:500p
     <span class="form-title" id="formTitle">Memuat…</span>
     <span class="count-badge" id="countBadge" hidden></span>
     <span class="notice" id="accessNotice" hidden></span>
+    <button class="btn" id="btnCsv" onclick="downloadCsv()">↓ CSV</button>
   </header>
 
   <div class="filter-bar">
@@ -482,6 +483,17 @@ function renderTable(){
   </div>`:"";
 
   document.getElementById("tblWrap").innerHTML=html+footer;
+}
+
+async function downloadCsv(){
+  try{
+    const r=await fetch("/api/viewer/forms/"+FORM_ID+"/responses.csv",{headers:H});
+    if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.error||"Gagal");}
+    const blob=await r.blob();
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");a.href=url;a.download="responses-"+FORM_ID+".csv";a.click();
+    URL.revokeObjectURL(url);
+  }catch(e){alert(e.message);}
 }
 
 init();

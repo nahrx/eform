@@ -3,12 +3,14 @@ package httpapi
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/csv"
 	"errors"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/bpskaltim/eform-backend/internal/auth"
+	"github.com/bpskaltim/eform-backend/internal/models"
 	"github.com/bpskaltim/eform-backend/internal/store"
 )
 
@@ -429,6 +431,51 @@ func (s *Server) viewerListResponses(w http.ResponseWriter, r *http.Request) {
 	}
 	count, _ := s.st.CountViewerResponses(r.Context(), viewerID, formID, f)
 	writeJSON(w, http.StatusOK, map[string]any{"responses": resp, "total": count})
+}
+
+// viewerExportResponses menghasilkan CSV jawaban yang boleh dilihat viewer, mengikuti pembatasan
+// permission-nya (respondentAccess, fieldFilters per baris, visibleFields per kolom).
+func (s *Server) viewerExportResponses(w http.ResponseWriter, r *http.Request) {
+	viewerID := userFrom(r.Context()).Subject
+	formID := r.PathValue("id")
+
+	perm, err := s.st.GetViewerPermission(r.Context(), viewerID, formID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusForbidden, "tidak memiliki akses ke kuesioner ini")
+		} else {
+			writeErr(w, http.StatusInternalServerError, "gagal memeriksa akses")
+		}
+		return
+	}
+	cols, err := s.st.GetFormAnswerColumns(r.Context(), formID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		return
+	}
+	if len(perm.VisibleFields) > 0 {
+		allowed := make(map[string]bool, len(perm.VisibleFields))
+		for _, f := range perm.VisibleFields {
+			allowed[f] = true
+		}
+		filtered := make([]string, 0, len(cols))
+		for _, c := range cols {
+			if allowed[c] {
+				filtered = append(filtered, c)
+			}
+		}
+		cols = filtered
+	}
+
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", "attachment; filename=\"responses-"+formID+".csv\"")
+	cw := csv.NewWriter(w)
+	header := append([]string{"id", "respondent_id", "nama", "email", "status", "waktu_kirim"}, cols...)
+	_ = cw.Write(header)
+	_ = s.st.ForEachViewerResponse(r.Context(), viewerID, formID, func(rr models.Response) error {
+		writeCSVRow(cw, rr, cols)
+		return nil
+	})
 }
 
 // viewerGetResponse mengembalikan detail satu respons yang boleh dilihat viewer.

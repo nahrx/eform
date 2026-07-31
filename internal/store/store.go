@@ -606,10 +606,14 @@ func (s *Store) GetResponseByID(ctx context.Context, id string) (*models.Respons
 		}
 		return r, nil
 	}
-	// Fallback: cari di response_drafts (draf form single-response)
+	// Fallback: cari di response_drafts (draf form single-response). response_drafts tidak
+	// punya kolom meta sendiri, jadi email/nama responden diambil dari tabel respondents.
 	err2 := s.pool.QueryRow(ctx,
-		`SELECT id,form_id,share_id,respondent_id,answers,'{}'::jsonb,saved_at
-		 FROM response_drafts WHERE id=$1`, id,
+		`SELECT rd.id,rd.form_id,rd.share_id,rd.respondent_id,rd.answers,
+		        jsonb_strip_nulls(jsonb_build_object('email',resp.email,'name',resp.name)),rd.saved_at
+		 FROM response_drafts rd
+		 LEFT JOIN respondents resp ON resp.id=rd.respondent_id
+		 WHERE rd.id=$1`, id,
 	).Scan(&r.ID, &r.FormID, &r.ShareID, &r.RespondentID, &r.Answers, &r.Meta, &r.SubmittedAt)
 	if errors.Is(err2, pgx.ErrNoRows) {
 		return nil, ErrNotFound
@@ -654,8 +658,11 @@ func (s *Store) ForEachResponseByForm(ctx context.Context, formID string, fn fun
 		  SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at
 		    FROM form_responses WHERE form_id=$1
 		  UNION ALL
-		  SELECT id,form_id,share_id,respondent_id,'draft'::text,answers,'{}'::jsonb,saved_at
-		    FROM response_drafts WHERE form_id=$1
+		  SELECT rd.id,rd.form_id,rd.share_id,rd.respondent_id,'draft'::text,rd.answers,
+		         jsonb_strip_nulls(jsonb_build_object('email',resp.email,'name',resp.name)),rd.saved_at
+		    FROM response_drafts rd
+		    LEFT JOIN respondents resp ON resp.id=rd.respondent_id
+		    WHERE rd.form_id=$1
 		) combined ORDER BY submitted_at DESC`
 	rows, err := s.pool.Query(ctx, q, formID)
 	if err != nil {
@@ -709,8 +716,11 @@ func (s *Store) ListAllResponsesByForm(ctx context.Context, formID string, f Res
 		  SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at
 		    FROM form_responses WHERE form_id=$1
 		  UNION ALL
-		  SELECT id,form_id,share_id,respondent_id,'draft'::text,answers,'{}'::jsonb,saved_at
-		    FROM response_drafts WHERE form_id=$1
+		  SELECT rd.id,rd.form_id,rd.share_id,rd.respondent_id,'draft'::text,rd.answers,
+		         jsonb_strip_nulls(jsonb_build_object('email',resp.email,'name',resp.name)),rd.saved_at
+		    FROM response_drafts rd
+		    LEFT JOIN respondents resp ON resp.id=rd.respondent_id
+		    WHERE rd.form_id=$1
 		) combined
 		WHERE 1=1%s
 		ORDER BY %s %s NULLS LAST
@@ -741,7 +751,11 @@ func (s *Store) CountAllResponsesByForm(ctx context.Context, formID string, f Re
 		SELECT count(*) FROM (
 		  SELECT status,share_id,meta,answers FROM form_responses WHERE form_id=$1
 		  UNION ALL
-		  SELECT 'draft'::text,share_id,'{}'::jsonb,answers FROM response_drafts WHERE form_id=$1
+		  SELECT 'draft'::text,rd.share_id,
+		         jsonb_strip_nulls(jsonb_build_object('email',resp.email,'name',resp.name)),rd.answers
+		    FROM response_drafts rd
+		    LEFT JOIN respondents resp ON resp.id=rd.respondent_id
+		    WHERE rd.form_id=$1
 		) combined
 		WHERE 1=1%s`, where),
 		args...,
@@ -1429,8 +1443,11 @@ func (s *Store) ListViewerResponses(ctx context.Context, viewerID, formID string
 		  SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at
 		    FROM form_responses WHERE form_id=$1
 		  UNION ALL
-		  SELECT id,form_id,share_id,respondent_id,'draft'::text,answers,'{}'::jsonb,saved_at
-		    FROM response_drafts WHERE form_id=$1
+		  SELECT rd.id,rd.form_id,rd.share_id,rd.respondent_id,'draft'::text,rd.answers,
+		         jsonb_strip_nulls(jsonb_build_object('email',resp.email,'name',resp.name)),rd.saved_at
+		    FROM response_drafts rd
+		    LEFT JOIN respondents resp ON resp.id=rd.respondent_id
+		    WHERE rd.form_id=$1
 		) combined
 		WHERE 1=1%s%s%s
 		ORDER BY %s %s NULLS LAST
@@ -1481,12 +1498,107 @@ func (s *Store) CountViewerResponses(ctx context.Context, viewerID, formID strin
 		SELECT count(*) FROM (
 		  SELECT status,share_id,meta,answers,respondent_id FROM form_responses WHERE form_id=$1
 		  UNION ALL
-		  SELECT 'draft'::text,share_id,'{}'::jsonb,answers,respondent_id FROM response_drafts WHERE form_id=$1
+		  SELECT 'draft'::text,rd.share_id,
+		         jsonb_strip_nulls(jsonb_build_object('email',resp.email,'name',resp.name)),rd.answers,rd.respondent_id
+		    FROM response_drafts rd
+		    LEFT JOIN respondents resp ON resp.id=rd.respondent_id
+		    WHERE rd.form_id=$1
 		) combined
 		WHERE 1=1%s%s%s`, where, respondentClause, permClause),
 		args...,
 	).Scan(&n)
 	return n, err
+}
+
+// ForEachViewerResponse men-stream semua respons yang boleh dilihat viewer (tanpa limit/offset,
+// tanpa filter query — sama seperti ekspor CSV admin), dengan masking VisibleFields.
+// Dipakai untuk ekspor CSV viewer.
+func (s *Store) ForEachViewerResponse(ctx context.Context, viewerID, formID string, fn func(models.Response) error) error {
+	perm, err := s.GetViewerPermission(ctx, viewerID, formID)
+	if err != nil {
+		return err
+	}
+	args := []any{formID}
+	respondentClause := ""
+	if perm.RespondentAccess == "selected" {
+		n := len(args) + 1
+		respondentClause = fmt.Sprintf(
+			" AND respondent_id IN (SELECT respondent_id FROM viewer_allowed_respondents WHERE permission_id=$%d)", n)
+		args = append(args, perm.ID)
+	}
+	permClause, args := buildPermissionFieldFilter(perm.FieldFilters, args)
+
+	q := fmt.Sprintf(`
+		SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at FROM (
+		  SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at
+		    FROM form_responses WHERE form_id=$1
+		  UNION ALL
+		  SELECT rd.id,rd.form_id,rd.share_id,rd.respondent_id,'draft'::text,rd.answers,
+		         jsonb_strip_nulls(jsonb_build_object('email',resp.email,'name',resp.name)),rd.saved_at
+		    FROM response_drafts rd
+		    LEFT JOIN respondents resp ON resp.id=rd.respondent_id
+		    WHERE rd.form_id=$1
+		) combined
+		WHERE 1=1%s%s
+		ORDER BY submitted_at DESC`, respondentClause, permClause)
+
+	rows, err := s.pool.Query(ctx, q, args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		r := models.Response{}
+		if err := rows.Scan(&r.ID, &r.FormID, &r.ShareID, &r.RespondentID, &r.Status, &r.Answers, &r.Meta, &r.SubmittedAt); err != nil {
+			return err
+		}
+		r.Answers = maskAnswers(r.Answers, perm.VisibleFields)
+		if err := fn(r); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
+}
+
+// ForEachEditorResponse men-stream semua respons untuk form yang ditugaskan ke editor (tanpa
+// limit/offset), dibatasi field_filters permission editor. Dipakai untuk ekspor CSV editor.
+func (s *Store) ForEachEditorResponse(ctx context.Context, editorID, formID string, fn func(models.Response) error) error {
+	perm, err := s.GetEditorPermissionByEditorAndForm(ctx, editorID, formID)
+	if err != nil {
+		return err
+	}
+	args := []any{formID}
+	permClause, args := buildPermissionFieldFilter(perm.FieldFilters, args)
+
+	q := fmt.Sprintf(`
+		SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at FROM (
+		  SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at
+		    FROM form_responses WHERE form_id=$1
+		  UNION ALL
+		  SELECT rd.id,rd.form_id,rd.share_id,rd.respondent_id,'draft'::text,rd.answers,
+		         jsonb_strip_nulls(jsonb_build_object('email',resp.email,'name',resp.name)),rd.saved_at
+		    FROM response_drafts rd
+		    LEFT JOIN respondents resp ON resp.id=rd.respondent_id
+		    WHERE rd.form_id=$1
+		) combined
+		WHERE 1=1%s
+		ORDER BY submitted_at DESC`, permClause)
+
+	rows, err := s.pool.Query(ctx, q, args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		r := models.Response{}
+		if err := rows.Scan(&r.ID, &r.FormID, &r.ShareID, &r.RespondentID, &r.Status, &r.Answers, &r.Meta, &r.SubmittedAt); err != nil {
+			return err
+		}
+		if err := fn(r); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
 }
 
 // GetViewerResponseByID mengambil satu respons untuk viewer, dengan masking visibleFields dan cek respondentAccess.
@@ -1513,6 +1625,7 @@ func (s *Store) GetViewerResponseByID(ctx context.Context, viewerID, formID, res
 }
 
 // GetResponseByFormAndID mengambil satu respons (submitted atau draft) dari form tertentu.
+// Dipakai oleh detail viewer (GetViewerResponseByID) dan editor (GetEditorResponseByID).
 func (s *Store) GetResponseByFormAndID(ctx context.Context, formID, responseID string) (*models.Response, error) {
 	r := &models.Response{}
 	err := s.pool.QueryRow(ctx, `
@@ -1520,8 +1633,11 @@ func (s *Store) GetResponseByFormAndID(ctx context.Context, formID, responseID s
 		  SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at
 		    FROM form_responses WHERE form_id=$1 AND id=$2
 		  UNION ALL
-		  SELECT id,form_id,share_id,respondent_id,'draft'::text,answers,'{}'::jsonb,saved_at
-		    FROM response_drafts WHERE form_id=$1 AND id=$2
+		  SELECT rd.id,rd.form_id,rd.share_id,rd.respondent_id,'draft'::text,rd.answers,
+		         jsonb_strip_nulls(jsonb_build_object('email',resp.email,'name',resp.name)),rd.saved_at
+		    FROM response_drafts rd
+		    LEFT JOIN respondents resp ON resp.id=rd.respondent_id
+		    WHERE rd.form_id=$1 AND rd.id=$2
 		) combined LIMIT 1`,
 		formID, responseID,
 	).Scan(&r.ID, &r.FormID, &r.ShareID, &r.RespondentID, &r.Status, &r.Answers, &r.Meta, &r.SubmittedAt)

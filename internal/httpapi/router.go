@@ -89,6 +89,7 @@ func (s *Server) Routes() http.Handler {
 	mux.Handle("GET /api/viewer/forms/{id}/permission", s.authMW(s.requireRole(s.viewerMyFormPermission, "viewer")))
 	mux.Handle("GET /api/viewer/forms/{id}/responses", s.authMW(s.requireRole(s.viewerListResponses, "viewer")))
 	mux.Handle("GET /api/viewer/forms/{id}/responses/{responseId}", s.authMW(s.requireRole(s.viewerGetResponse, "viewer")))
+	mux.Handle("GET /api/viewer/forms/{id}/responses.csv", s.authMW(s.requireRole(s.viewerExportResponses, "viewer")))
 
 	// --- editor portal (akses editor yang sudah login) ---
 	mux.Handle("GET /api/editor/my-forms", s.authMW(s.requireRole(s.editorMyForms, "editor")))
@@ -96,6 +97,7 @@ func (s *Server) Routes() http.Handler {
 	mux.Handle("GET /api/editor/forms/{id}/responses", s.authMW(s.requireRole(s.editorListResponses, "editor")))
 	mux.Handle("GET /api/editor/forms/{id}/responses/{responseId}", s.authMW(s.requireRole(s.editorGetResponse, "editor")))
 	mux.Handle("PATCH /api/editor/forms/{id}/responses/{responseId}", s.authMW(s.requireRole(s.editorUpdateResponse, "editor")))
+	mux.Handle("GET /api/editor/forms/{id}/responses.csv", s.authMW(s.requireRole(s.editorExportResponses, "editor")))
 
 	// --- publik: data referensi (tanpa login) ---
 	mux.HandleFunc("GET /api/wilayah", s.wilayahList)

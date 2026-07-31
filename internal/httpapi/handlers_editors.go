@@ -3,6 +3,7 @@ package httpapi
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/bpskaltim/eform-backend/internal/auth"
+	"github.com/bpskaltim/eform-backend/internal/models"
 	"github.com/bpskaltim/eform-backend/internal/store"
 )
 
@@ -290,6 +292,35 @@ func (s *Server) editorListResponses(w http.ResponseWriter, r *http.Request) {
 	}
 	count, _ := s.st.CountAllResponsesByForm(r.Context(), formID, f)
 	writeJSON(w, http.StatusOK, map[string]any{"responses": resp, "total": count})
+}
+
+// editorExportResponses menghasilkan CSV jawaban untuk form yang ditugaskan ke editor,
+// dibatasi field_filters permission (membatasi baris, bukan kolom -- editor melihat semua kolom).
+func (s *Server) editorExportResponses(w http.ResponseWriter, r *http.Request) {
+	editorID := userFrom(r.Context()).Subject
+	formID := r.PathValue("id")
+	if _, err := s.st.GetEditorPermissionByEditorAndForm(r.Context(), editorID, formID); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusForbidden, "tidak memiliki akses ke kuesioner ini")
+		} else {
+			writeErr(w, http.StatusInternalServerError, "gagal memeriksa akses")
+		}
+		return
+	}
+	cols, err := s.st.GetFormAnswerColumns(r.Context(), formID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		return
+	}
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", "attachment; filename=\"responses-"+formID+".csv\"")
+	cw := csv.NewWriter(w)
+	header := append([]string{"id", "respondent_id", "nama", "email", "status", "waktu_kirim"}, cols...)
+	_ = cw.Write(header)
+	_ = s.st.ForEachEditorResponse(r.Context(), editorID, formID, func(rr models.Response) error {
+		writeCSVRow(cw, rr, cols)
+		return nil
+	})
 }
 
 // editorGetResponse mengembalikan detail satu respons untuk editor, dengan cek field_filters.
