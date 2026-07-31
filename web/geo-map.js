@@ -17,10 +17,11 @@
 
   function setDefaultIcon() {
     if (window.L && window.L.Icon && window.L.Icon.Default) {
+      // Icon.Default._getIconUrl menggabungkan imagePath + nama file opsi
+      // (iconUrl/iconRetinaUrl/shadowUrl) — jangan isi opsi itu dengan path
+      // absolut, cukup set imagePath saja dan biarkan nama file bawaannya.
       window.L.Icon.Default.mergeOptions({
-        iconRetinaUrl: "/vendor/leaflet/images/marker-icon-2x.png",
-        iconUrl: "/vendor/leaflet/images/marker-icon.png",
-        shadowUrl: "/vendor/leaflet/images/marker-shadow.png",
+        imagePath: "/vendor/leaflet/images/",
       });
       return true;
     }
