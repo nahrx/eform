@@ -262,6 +262,7 @@ textarea.pv-in{width:100%;resize:vertical;min-height:72px}
 </head>
 <body>
 <div id="root"><div class="init-wrap"><span class="init-msg">Memuat kuesioner…</span></div></div>
+<script src="/searchable-select.js"></script>
 <script>
 const SHARE_TOKEN=location.pathname.split("/").filter(Boolean).pop();
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));

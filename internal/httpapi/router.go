@@ -145,6 +145,7 @@ func (s *Server) Routes() http.Handler {
 		"login.css", "login.js",
 		"admin.css", "admin.js",
 		"builder.css", "builder.js", "builder-bridge.js",
+		"searchable-select.js",
 	} {
 		mux.HandleFunc("GET /"+f, s.page(f))
 	}
