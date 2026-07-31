@@ -145,10 +145,13 @@ func (s *Server) Routes() http.Handler {
 		"login.css", "login.js",
 		"admin.css", "admin.js",
 		"builder.css", "builder.js", "builder-bridge.js",
-		"searchable-select.js",
+		"searchable-select.js", "geo-map.js",
 	} {
 		mux.HandleFunc("GET /"+f, s.page(f))
 	}
+
+	// aset pustaka pihak ketiga yang di-vendor (mis. Leaflet) — disajikan dari web/vendor/
+	mux.Handle("GET /vendor/", http.StripPrefix("/vendor/", http.FileServer(http.Dir(filepath.Join(s.cfg.WebDir, "vendor")))))
 
 	// uploads: hanya file yang boleh diakses langsung, listing folder ditolak.
 	mux.HandleFunc("GET /uploads/", s.uploadFileOnly)

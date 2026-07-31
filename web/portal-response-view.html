@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Detail Jawaban</title>
+<link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
 <style>
 :root{
   --ink:#13171e;--ink-soft:#4a525e;--muted:#79828f;
@@ -160,6 +161,8 @@ button,input,select,textarea{font-family:inherit}
   <div class="pg-foot-in" id="pgFootIn"></div>
 </div>
 <script src="/searchable-select.js"></script>
+<script src="/vendor/leaflet/leaflet.js"></script>
+<script src="/geo-map.js"></script>
 <script>
 const TOKEN=localStorage.getItem("eform_token");
 if(!TOKEN){document.getElementById("content").innerHTML='<p style="padding:40px;text-align:center;color:#b91c1c">Sesi habis. Silakan login ulang.</p>';}
@@ -210,6 +213,17 @@ function getMediaSource(val){
 }
 function isImageMedia(c,src){
   return c.type==="photo"||c.type==="signature"||/^data:image\//i.test(src)||/\.(jpe?g|png|gif|webp|bmp|svg)(\?.*)?$/i.test(src);
+}
+// Parse nilai geopoint "lat, lng" (format yang disimpan tombol "Ambil Lokasi"
+// di form pengisian) menjadi {lat,lng} atau null.
+function parseGeoPoint(val){
+  if(val==null||val==="")return null;
+  const parts=String(val).split(",").map(s=>s.trim());
+  if(parts.length!==2)return null;
+  const lat=Number(parts[0]),lng=Number(parts[1]);
+  if(!Number.isFinite(lat)||!Number.isFinite(lng))return null;
+  if(lat<-90||lat>90||lng<-180||lng>180)return null;
+  return{lat,lng};
 }
 
 async function api(path,opts){
@@ -619,6 +633,14 @@ function renderReadField(c,answers,rp){
     return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer"><a href="${src}" download="file" style="color:var(--accent)">Unduh file (${esc(mime)})</a></div></div>`;
   }
 
+  // Geopoint — koordinat + peta interaktif
+  if(c.type==="geopoint"){
+    const g=parseGeoPoint(val);
+    const coordText=g?`${g.lat.toFixed(6)}, ${g.lng.toFixed(6)}`:"—";
+    const map=g?`<div class="geo-map" data-lat="${g.lat}" data-lng="${g.lng}"></div>`:"";
+    return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer${g?"":" empty"}">${esc(coordText)}</div>${map}</div>`;
+  }
+
   const display=val==null||val===""?null:String(val);
   const isEmpty=display==null;
   if(c.type==="textarea"||c.type==="text_long")
@@ -730,10 +752,12 @@ function renderEditField(c,answers,rp){
   if(c.type==="datetime")
     return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<input id="ed_${safeKey}" type="datetime-local" class="ed-input" value="${esc(val??"")}"></div>`;
 
-  // Geopoint — read-only koordinat
+  // Geopoint — read-only koordinat + peta
   if(c.type==="geopoint"){
-    const d=val==null||val===""?"—":esc(String(val));
-    return`<div class="ed-field"><div class="ed-label">${label} <span style="font-size:10px;color:var(--muted)">(koordinat, tidak dapat diubah di sini)</span></div>${desc}<div class="rv-answer">${d}</div></div>`;
+    const g=parseGeoPoint(val);
+    const d=g?`${g.lat.toFixed(6)}, ${g.lng.toFixed(6)}`:"—";
+    const map=g?`<div class="geo-map" data-lat="${g.lat}" data-lng="${g.lng}"></div>`:"";
+    return`<div class="ed-field"><div class="ed-label">${label} <span style="font-size:10px;color:var(--muted)">(koordinat, tidak dapat diubah di sini)</span></div>${desc}<div class="rv-answer">${d}</div>${map}</div>`;
   }
 
   // Barcode — read-only

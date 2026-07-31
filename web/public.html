@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kuesioner</title>
+<link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
 <style>
 :root{
   --ink:#13171e;--ink-soft:#4a525e;--muted:#79828f;
@@ -263,6 +264,8 @@ textarea.pv-in{width:100%;resize:vertical;min-height:72px}
 <body>
 <div id="root"><div class="init-wrap"><span class="init-msg">Memuat kuesioner…</span></div></div>
 <script src="/searchable-select.js"></script>
+<script src="/vendor/leaflet/leaflet.js"></script>
+<script src="/geo-map.js"></script>
 <script>
 const SHARE_TOKEN=location.pathname.split("/").filter(Boolean).pop();
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -971,6 +974,16 @@ const DT_INPUT_TYPE={date:"date",time:"time",datetime:"datetime-local"};
 let pending=[];
 
 function pvEmpty(v){return v==null||v===""||(Array.isArray(v)&&v.length===0);}
+// Parse nilai geopoint "lat, lng" (format yang disimpan tombol "Ambil Lokasi") menjadi {lat,lng} atau null.
+function parseGeoPoint(val){
+  if(val==null||val==="")return null;
+  const parts=String(val).split(",").map(s=>s.trim());
+  if(parts.length!==2)return null;
+  const lat=Number(parts[0]),lng=Number(parts[1]);
+  if(!Number.isFinite(lat)||!Number.isFinite(lng))return null;
+  if(lat<-90||lat>90||lng<-180||lng>180)return null;
+  return{lat,lng};
+}
 function fieldHtml(c,rp,scopes){
   rp=rp||"";
   const scopeList=[rp,...normScopes(scopes)];
@@ -1014,8 +1027,11 @@ function fieldHtml(c,rp,scopes){
     ctrl=`<div class="pv-radios" id="opt-${ke}"><div class="pv-loading">Memuat pilihan…</div></div>`;
     pending.push({c,rp,enabled:enabled&&!c.readOnly});
   }
-  else if(c.type==="geopoint")
-    ctrl=`<div class="pv-inbtn"><input type="text" data-k="${ke}" class="pv-in" placeholder="lat, lng"${dis}${rdOnly}><button type="button" class="pv-smbtn pv-geobtn"${disAll}>📍 Ambil Lokasi</button></div><div class="pv-geomsg"></div>`;
+  else if(c.type==="geopoint"){
+    const g=parseGeoPoint(val);
+    const geoMap=g?`<div class="geo-map" data-lat="${g.lat}" data-lng="${g.lng}"></div>`:"";
+    ctrl=`<div class="pv-inbtn"><input type="text" data-k="${ke}" class="pv-in" placeholder="lat, lng"${dis}${rdOnly}><button type="button" class="pv-smbtn pv-geobtn"${disAll}>📍 Ambil Lokasi</button></div><div class="pv-geomsg"></div>${geoMap}`;
+  }
   else if(c.type==="barcode")
     ctrl=`<div class="pv-inbtn"><input type="text" data-k="${ke}" class="pv-in" placeholder="scan / ketik kode"${dis}${rdOnly}><button type="button" class="pv-smbtn pv-scanbtn"${disAll}>📷 Pindai</button></div>`;
   else if(c.type==="signature")
