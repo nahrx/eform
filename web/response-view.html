@@ -1317,7 +1317,8 @@
         if (
           c.type === "photo" ||
           c.type === "image" ||
-          c.type === "signature"
+          c.type === "signature" ||
+          (c.type === "file" && isImageSrc(getMediaSource(val)))
         ) {
           const src = getMediaSource(val);
           if (!src) {
@@ -1325,6 +1326,16 @@
           }
           const alt = esc(rowInterp(txt(c.label) || c.name, answers, rp));
           return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-photo-wrap"><a class="rv-photo-link" href="${esc(src)}" target="_blank" rel="noreferrer">Buka gambar</a><img class="rv-photo-img" src="${esc(src)}" alt="${alt}"></div></div>`;
+        }
+
+        // File (non-gambar): tautan unduh, bukan teks path mentah
+        if (c.type === "file") {
+          const src = getMediaSource(val);
+          if (!src) {
+            return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer empty">—</div></div>`;
+          }
+          const mime = (src.match(/^data:([^;]+)/) || [])[1] || "file";
+          return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer"><a href="${esc(src)}" download="file" style="color:var(--accent)">Unduh file (${esc(mime)})</a></div></div>`;
         }
 
         // Textarea / text / number / date / dsb
@@ -1672,6 +1683,12 @@
         return s.startsWith("base64,")
           ? "data:image/*;base64," + s.slice(7)
           : "";
+      }
+      function isImageSrc(src) {
+        return (
+          /^data:image\//i.test(src) ||
+          /\.(jpe?g|png|gif|webp|bmp|svg)(\?.*)?$/i.test(src)
+        );
       }
       function getRosterCount(r, answers, rowPrefix) {
         const from = String(r.countFrom || "").trim();

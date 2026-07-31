@@ -208,7 +208,7 @@ function getMediaSource(val){
   return s.startsWith("base64,")?"data:image/*;base64,"+s.slice(7):"";
 }
 function isImageMedia(c,src){
-  return c.type==="photo"||c.type==="signature"||/^data:image\//i.test(src);
+  return c.type==="photo"||c.type==="signature"||/^data:image\//i.test(src)||/\.(jpe?g|png|gif|webp|bmp|svg)(\?.*)?$/i.test(src);
 }
 
 async function api(path,opts){

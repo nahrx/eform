@@ -411,7 +411,7 @@ function mediaSourceOf(val){
   return s.startsWith("base64,")?"data:image/*;base64,"+s.slice(7):"";
 }
 function isImageMediaSource(fieldType,src){
-  return fieldType==="photo"||/^data:image\//i.test(src);
+  return fieldType==="photo"||/^data:image\//i.test(src)||/\.(jpe?g|png|gif|webp|bmp|svg)(\?.*)?$/i.test(src);
 }
 
 /* ---- mesin ekspresi (visibleWhen/enableWhen/requiredWhen/validations/calculate/skip) ---- */
@@ -748,7 +748,8 @@ function renderMyResponsesList(meta,responses){
   const fmt=iso=>{try{return new Date(iso).toLocaleString("id-ID",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});}catch{return iso;}};
   const userBar=RESP_USER?`<div class="gate-ubar">
     ${RESP_USER.picture?`<img class="pv-uavatar" src="${esc(RESP_USER.picture)}" referrerpolicy="no-referrer">`:`<div class="pv-uavatar"></div>`}
-    <span>${esc(RESP_USER.name||RESP_USER.email)}</span>
+    <span style="flex:1">${esc(RESP_USER.name||RESP_USER.email)}</span>
+    <span id="pvInstallWrap"></span>
     <button class="btn" onclick="logout()">Keluar</button>
   </div>`:"";
   const hasDraft=responses.some(r=>r.status==="draft");
@@ -778,6 +779,7 @@ function renderMyResponsesList(meta,responses){
     <div class="resp-list">${emptyNote}${rows}</div>
     ${newBtn}
   </div></div>`);
+  renderInstallButton();
 }
 
 function startNewResponse(){
