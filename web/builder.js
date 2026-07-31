@@ -137,7 +137,7 @@ const collapsed={sb1:false,sb2:false};
 function blankState(){
   const p={uid:uid(),kind:"page",name:"page_1",title:"Halaman 1",visibleWhen:"",components:[]};
   return {id:"instrumen-baru",title:"Instrumen Baru",version:"1.0.0",acronym:"",locales:["id"],defaultLocale:"id",
-    settings:{mode:["capi"],navigation:{mode:"section",showProgress:true,allowBack:true,gateRequired:false}},
+    settings:{mode:["capi"],navigation:{mode:"section",showProgress:true,allowBack:true,gateRequired:false},offline:{enabled:false}},
     referenceData:{},pages:[p]};
 }
 function allUsedNames(){const used=new Set();(function walk(arr){(arr||[]).forEach(n=>{if(n.name)used.add(n.name);if(n.components)walk(n.components);});})(state.pages);return used;}
@@ -485,15 +485,18 @@ function renderInspector(){
   else pane.innerHTML=fieldForm(n);
   wireForm(pane,n);
 }
-function instrumentForm(){const nv=state.settings.navigation;return `<div class="empty-state"><div class="big">{ }</div>Tidak ada yang dipilih — pengaturan instrumen.</div>
+function instrumentForm(){const nv=state.settings.navigation;const off=state.settings.offline||(state.settings.offline={enabled:false});return `<div class="empty-state"><div class="big">{ }</div>Tidak ada yang dipilih — pengaturan instrumen.</div>
   <div class="field"><label>ID instrumen</label><input class="ctrl mono" data-i="id" value="${esc(state.id)}"></div>
   <div class="row2"><div class="field"><label>Versi</label><input class="ctrl mono" data-i="version" value="${esc(state.version)}"></div><div class="field"><label>Akronim</label><input class="ctrl" data-i="acronym" value="${esc(state.acronym||"")}"></div></div>
   <div class="row2"><div class="field"><label>Locales</label><input class="ctrl mono" data-i="locales" value="${esc(state.locales.join(","))}"></div><div class="field"><label>Locale utama</label><input class="ctrl mono" data-i="defaultLocale" value="${esc(state.defaultLocale)}"></div></div>
   <div class="group"><div class="gh">Navigasi</div>
     <div class="field"><label>Mode</label><select class="ctrl" data-i="nav.mode">${opt("scroll","Scroll",nv.mode)}${opt("section","Section per halaman",nv.mode)}${opt("field","Field per layar",nv.mode)}</select></div>
     <label class="check"><input type="checkbox" data-i="nav.gateRequired" ${nv.gateRequired?"checked":""}> Wajib selesai sebelum lanjut</label></div>
+  <div class="group"><div class="gh">Mode Offline (PWA)</div>
+    <label class="check"><input type="checkbox" data-i="offline.enabled" ${off.enabled?"checked":""}> Aktifkan mode offline</label>
+    <div class="help" style="margin-left:0;margin-top:6px">Kuesioner bisa di-install seperti aplikasi native di ponsel dan diisi tanpa internet — jawaban tersimpan di perangkat lalu terkirim otomatis saat online kembali. <b>Hanya berlaku</b> untuk tautan share yang diatur sebagai <b>multi-respons</b>.</div></div>
   <div class="group"><div class="gh">Sumber lookup / Reference data (JSON)</div><textarea class="ctrl mono" data-i="referenceData" rows="6" placeholder='{ "kabupaten": { "items":[ {"code":"6472","label":"Samarinda"} ] } }'>${esc(jsonOrEmpty(state.referenceData))}</textarea><div class="help" style="margin-left:0;margin-top:6px">Tiap tabel bisa <b>inline</b> (pakai <code>items</code>) atau <b>API</b>:<br><code>"kec": { "source":"api", "url":"https://.../kec?prov={parent}", "valueField":"kode", "labelField":"nama", "parentParam":"prov", "path":"data" }</code><br>API: <code>valueField</code>/<code>labelField</code>=key di respons; <code>{parent}</code> atau <code>parentParam</code> untuk cascading; <code>path</code> bila array bersarang. Rujuk dari field lewat <b>optionsRef</b>.</div></div>`;}
-function wireInstrument(pane){pane.querySelectorAll("[data-i]").forEach(inp=>inp.addEventListener("input",()=>{const k=inp.dataset.i,v=inp.type==="checkbox"?inp.checked:inp.value;if(k.startsWith("nav."))state.settings.navigation[k.slice(4)]=v;else if(k==="locales")state.locales=v.split(",").map(s=>s.trim()).filter(Boolean);else if(k==="referenceData"){try{state.referenceData=v.trim()?JSON.parse(v):{};inp.style.borderColor="";}catch(_){inp.style.borderColor="var(--bad)";}}else state[k]=v;runValidation();}));}
+function wireInstrument(pane){pane.querySelectorAll("[data-i]").forEach(inp=>inp.addEventListener("input",()=>{const k=inp.dataset.i,v=inp.type==="checkbox"?inp.checked:inp.value;if(k.startsWith("nav."))state.settings.navigation[k.slice(4)]=v;else if(k.startsWith("offline."))state.settings.offline[k.slice(8)]=v;else if(k==="locales")state.locales=v.split(",").map(s=>s.trim()).filter(Boolean);else if(k==="referenceData"){try{state.referenceData=v.trim()?JSON.parse(v):{};inp.style.borderColor="";}catch(_){inp.style.borderColor="var(--bad)";}}else state[k]=v;runValidation();}));}
 
 function navForm(n,kind){
   const titleLabel=kind==="page"?"Judul halaman":kind==="block"?"Judul block (opsional)":"Judul section (opsional)";
@@ -685,7 +688,7 @@ function highlight(j){return esc(j).replace(/&quot;([^&]+?)&quot;(\s*:)/g,'<span
 function importJSON(obj){try{
   const st=blankState();st.pages=[];
   st.id=obj.id||st.id;st.version=obj.version||st.version;st.acronym=obj.acronym||"";st.title=textOf(obj.title)||st.title;st.locales=obj.locales||["id"];st.defaultLocale=obj.defaultLocale||st.defaultLocale;
-  if(obj.settings){st.settings=Object.assign(st.settings,obj.settings);st.settings.navigation=Object.assign(blankState().settings.navigation,obj.settings.navigation||{});}
+  if(obj.settings){st.settings=Object.assign(st.settings,obj.settings);st.settings.navigation=Object.assign(blankState().settings.navigation,obj.settings.navigation||{});st.settings.offline=Object.assign(blankState().settings.offline,obj.settings.offline||{});}
   st.referenceData=obj.referenceData||{};
   const pages = obj.pages || (obj.sections? obj.sections.map(s=>({kind:"page",name:s.name,title:s.title,visibleWhen:s.visibleWhen,components:s.components})) : []);
   pages.forEach(p=>st.pages.push(impNode(p,"page")));

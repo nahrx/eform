@@ -103,6 +103,11 @@ func (s *Server) Routes() http.Handler {
 	// --- publik: akses kuesioner (tanpa login) ---
 	mux.HandleFunc("GET /api/public/forms/{token}", s.publicGetForm)
 
+	// --- publik: PWA (mode offline khusus kuesioner multi-respons) ---
+	mux.HandleFunc("GET /api/public/forms/{token}/manifest.webmanifest", s.publicManifest)
+	mux.HandleFunc("GET /api/public/forms/{token}/icon.png", s.publicIcon)
+	mux.HandleFunc("GET /sw.js", s.page("sw.js"))
+
 	// --- publik: respondent (perlu JWT Google) ---
 	mux.Handle("GET /api/public/me", s.respondentMW(s.respondentMe))
 	mux.Handle("GET /api/public/forms/{token}/my-response", s.respondentMW(s.myResponse))

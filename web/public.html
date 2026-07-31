@@ -279,6 +279,9 @@ let EDITING_RESPONSE_ID=null; // ID baris form_responses yang sedang diedit (dra
 let DRAFT_RESTORED_AT=null; // timestamp draf lokal yang sedang dipakai (null jika tidak ada)
 let AUTOSAVE_TIMER=null;
 let PENDING_UPLOADS={};
+let OFFLINE_MODE=false; // settings.offline.enabled di instrumen DAN share multi-respons
+let DEFERRED_INSTALL_PROMPT=null;
+window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();DEFERRED_INSTALL_PROMPT=e;renderInstallButton();});
 
 try{RESP_USER=JSON.parse(localStorage.getItem("eform_resp_user")||"null");}catch(_){}
 
@@ -297,6 +300,87 @@ function clearDraft(){
   const key=draftKey();if(!key)return;
   try{localStorage.removeItem(key);}catch(_){}
 }
+
+/* ---- PWA & antrean offline (khusus kuesioner multi-respons dengan mode offline aktif) ----
+   Kontrak IndexedDB dipakai bersama web/sw.js: DB "eform-offline", store "queue" (keyPath id, autoIncrement). */
+function setupPWA(){
+  if(document.getElementById("pvManifestLink"))return;
+  const link=document.createElement("link");link.id="pvManifestLink";link.rel="manifest";
+  link.href="/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/manifest.webmanifest";document.head.appendChild(link);
+  const touch=document.createElement("link");touch.rel="apple-touch-icon";
+  touch.href="/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/icon.png?size=192";document.head.appendChild(touch);
+  const theme=document.createElement("meta");theme.name="theme-color";theme.content="#0e7490";document.head.appendChild(theme);
+  if("serviceWorker" in navigator)navigator.serviceWorker.register("/sw.js").catch(()=>{});
+}
+function renderInstallButton(){
+  const wrap=document.getElementById("pvInstallWrap");if(!wrap)return;
+  if(!(OFFLINE_MODE&&DEFERRED_INSTALL_PROMPT)){wrap.innerHTML="";return;}
+  wrap.innerHTML='<button class="btn" id="pvInstallBtn" style="padding:5px 10px;font-size:12px">⬇ Instal Aplikasi</button>';
+  wrap.querySelector("#pvInstallBtn").onclick=async()=>{
+    const prompt=DEFERRED_INSTALL_PROMPT;if(!prompt)return;
+    prompt.prompt();await prompt.userChoice;DEFERRED_INSTALL_PROMPT=null;renderInstallButton();
+  };
+}
+function updateOfflineBadge(){
+  const el=document.getElementById("pvOfflineBadge");if(!el)return;
+  pendingCount().then(n=>{
+    el.textContent=n>0?`⏳ ${n} menunggu dikirim`:"";
+    el.style.cssText=n>0?"font-size:11px;color:var(--warn);white-space:nowrap":"";
+  });
+}
+const OFFLINE_DB_NAME="eform-offline",OFFLINE_STORE="queue";
+function openOfflineDB(){
+  return new Promise((resolve,reject)=>{
+    const req=indexedDB.open(OFFLINE_DB_NAME,1);
+    req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains(OFFLINE_STORE))req.result.createObjectStore(OFFLINE_STORE,{keyPath:"id",autoIncrement:true});};
+    req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);
+  });
+}
+function isNetworkError(e){return !navigator.onLine||e instanceof TypeError;}
+async function queueOfflineRequest(url,headers,body){
+  const db=await openOfflineDB();
+  await new Promise((resolve,reject)=>{
+    const tx=db.transaction(OFFLINE_STORE,"readwrite");
+    tx.objectStore(OFFLINE_STORE).add({url,method:"POST",headers,body,ts:Date.now()});
+    tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);
+  });
+  try{
+    if("serviceWorker" in navigator&&"SyncManager" in window){
+      const reg=await navigator.serviceWorker.ready;await reg.sync.register("eform-flush");
+    }
+  }catch(_e){}
+  updateOfflineBadge();
+}
+async function pendingCount(){
+  try{
+    const db=await openOfflineDB();
+    return await new Promise((resolve,reject)=>{
+      const req=db.transaction(OFFLINE_STORE,"readonly").objectStore(OFFLINE_STORE).count();
+      req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);
+    });
+  }catch(_e){return 0;}
+}
+async function flushOfflineQueue(){
+  if(!navigator.onLine)return;
+  let db;try{db=await openOfflineDB();}catch(_e){return;}
+  const records=await new Promise((resolve,reject)=>{
+    const req=db.transaction(OFFLINE_STORE,"readonly").objectStore(OFFLINE_STORE).getAll();
+    req.onsuccess=()=>resolve(req.result||[]);req.onerror=()=>reject(req.error);
+  });
+  records.sort((a,b)=>a.ts-b.ts);
+  for(const rec of records){
+    try{
+      const res=await fetch(rec.url,{method:rec.method||"POST",headers:rec.headers||{},body:rec.body});
+      if(!res.ok)break;
+      await new Promise((resolve,reject)=>{
+        const tx=db.transaction(OFFLINE_STORE,"readwrite");tx.objectStore(OFFLINE_STORE).delete(rec.id);
+        tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);
+      });
+    }catch(_e){break;}
+  }
+  updateOfflineBadge();
+}
+window.addEventListener("online",()=>flushOfflineQueue());
 function clearPendingUpload(key){
   const item=PENDING_UPLOADS[key];
   if(item&&item.objectUrl)URL.revokeObjectURL(item.objectUrl);
@@ -520,6 +604,8 @@ async function fetchForm(){
   SCHEMA=data.schema; ALLOW=data.allowResponses;
   MULTI_RESPONSE=!!data.multiResponse;
   ACCESS_MODE=data.accessMode||"public";
+  OFFLINE_MODE=!!(SCHEMA?.settings?.offline?.enabled)&&MULTI_RESPONSE;
+  if(OFFLINE_MODE)setupPWA();
 
   if(!data.googleEnabled){
     setRoot(`<div class="init-wrap"><div class="pw-card"><div class="msg err" style="display:block">Login Google belum dikonfigurasi oleh administrator.</div></div></div>`);
@@ -531,14 +617,21 @@ async function fetchForm(){
     return;
   }
 
-  const meR=await fetch("/api/public/me",{headers:{"Authorization":"Bearer "+RESP_TOKEN}});
-  if(!meR.ok){
+  let meR,meNetworkErr=false;
+  try{meR=await fetch("/api/public/me",{headers:{"Authorization":"Bearer "+RESP_TOKEN}});}
+  catch(e){meNetworkErr=isNetworkError(e);if(!meNetworkErr)throw e;}
+  if(meNetworkErr){
+    // Offline sungguhan (mis. PWA dibuka tanpa internet): jangan paksa logout, pakai sesi
+    // yang sudah tersimpan di perangkat sejak login terakhir kali online.
+    if(!RESP_USER){renderLoginGate(data);return;}
+  }else if(!meR.ok){
     clearRespSession();
     renderLoginGate(data);
     return;
+  }else{
+    RESP_USER=await meR.json();
+    localStorage.setItem("eform_resp_user",JSON.stringify(RESP_USER));
   }
-  RESP_USER=await meR.json();
-  localStorage.setItem("eform_resp_user",JSON.stringify(RESP_USER));
 
   // Cek akses jika mode terbatas
   if(ACCESS_MODE==="restricted"){
@@ -770,20 +863,28 @@ async function saveDraftToServer(){
   saveAnswers();
   const ans=collectAll();
   try{
-    let savedAt;
+    let savedAt,offlineQueued=false;
     if(MULTI_RESPONSE){
       // Untuk multi-response, simpan draf ke form_responses (bukan response_drafts)
       const body={answers:ans,draft:true};
       if(EDITING_RESPONSE_ID)body.responseId=EDITING_RESPONSE_ID;
-      const r=await fetch("/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/responses",{
-        method:"POST",
-        headers:pubHeaders({"Content-Type":"application/json"}),
-        body:JSON.stringify(body)
-      });
-      if(!r.ok)throw new Error("Gagal menyimpan draf");
-      const d=await r.json();
-      EDITING_RESPONSE_ID=d.id; // simpan ID agar save berikutnya update baris yang sama
-      savedAt=d.submittedAt;
+      const url="/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/responses";
+      const headers=pubHeaders({"Content-Type":"application/json"});
+      let r;
+      try{
+        r=await fetch(url,{method:"POST",headers,body:JSON.stringify(body)});
+      }catch(e){
+        if(OFFLINE_MODE&&isNetworkError(e)){
+          await queueOfflineRequest(url,headers,JSON.stringify(body));
+          offlineQueued=true;savedAt=new Date().toISOString();
+        }else throw new Error("Tidak ada koneksi internet.");
+      }
+      if(!offlineQueued){
+        if(!r.ok)throw new Error("Gagal menyimpan draf");
+        const d=await r.json();
+        EDITING_RESPONSE_ID=d.id; // simpan ID agar save berikutnya update baris yang sama
+        savedAt=d.submittedAt;
+      }
     }else{
       const r=await fetch("/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/draft",{
         method:"POST",
@@ -795,7 +896,7 @@ async function saveDraftToServer(){
       savedAt=d.savedAt;
     }
     saveDraft(); // perbarui draf lokal juga
-    if(btn){btn.className="pv-savedraft saved";btn.textContent="✓ Tersimpan "+formatDraftTime(savedAt);setTimeout(()=>{if(btn){btn.className="pv-savedraft";btn.textContent="Simpan Draf";btn.disabled=false;}},3000);}
+    if(btn){btn.className="pv-savedraft saved";btn.textContent=offlineQueued?"⏳ Tersimpan offline":"✓ Tersimpan "+formatDraftTime(savedAt);setTimeout(()=>{if(btn){btn.className="pv-savedraft";btn.textContent="Simpan Draf";btn.disabled=false;}},3000);}
   }catch(e){
     if(btn){btn.disabled=false;btn.textContent="Simpan Draf";}
     showNavError(e.message);
@@ -1400,7 +1501,7 @@ function render(meta){
       <button id="draftNoteClose" title="Tutup">×</button>
     </div>`:"";
   setRoot(`<div class="pv">
-    <div class="pv-bar"><button class="pv-side-tog" id="pvSideTog" title="Daftar halaman">☰</button><span class="pv-title">${esc(title)}</span><span class="pv-brand">eForm · BPS Kaltim</span></div>
+    <div class="pv-bar"><button class="pv-side-tog" id="pvSideTog" title="Daftar halaman">☰</button><span class="pv-title">${esc(title)}</span><span id="pvOfflineBadge"></span><span id="pvInstallWrap"></span><span class="pv-brand">eForm · BPS Kaltim</span></div>
     <div id="pvSideBd" class="pv-side-bd"></div>
     ${draftNote}
     <div class="pv-main">
@@ -1413,6 +1514,7 @@ function render(meta){
   </div>`);
   document.getElementById("draftNoteClose")?.addEventListener("click",()=>{document.getElementById("draftNote")?.remove();});
   setupSidebarToggle(document.getElementById("pvSide"));
+  renderInstallButton();updateOfflineBadge();
   curPage=0;rosterView=null;
   goToPage(0);
   // Jaring pengaman: simpan draf berkala supaya ketikan yang belum sempat
@@ -2010,12 +2112,27 @@ async function submit(){
   const ans=collectAll();
   if(!Object.keys(ans).length){msg.className="msg err";msg.textContent="Belum ada jawaban yang diisi.";return;}
   btn.disabled=true;btn.textContent="Mengirim…";
+  const headers=pubHeaders({"Content-Type":"application/json"});
+  const body={answers:ans};
+  if(EDITING_RESPONSE_ID)body.responseId=EDITING_RESPONSE_ID;
+  const url="/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/responses";
+  let r;
   try{
-    const headers=pubHeaders({"Content-Type":"application/json"});
-    const body={answers:ans};
-    if(EDITING_RESPONSE_ID)body.responseId=EDITING_RESPONSE_ID;
-    const r=await fetch("/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/responses",
-      {method:"POST",headers,body:JSON.stringify(body)});
+    r=await fetch(url,{method:"POST",headers,body:JSON.stringify(body)});
+  }catch(e){
+    if(OFFLINE_MODE&&isNetworkError(e)){
+      await queueOfflineRequest(url,headers,JSON.stringify(body));
+      clearDraft();EDITING_RESPONSE_ID=null;document.getElementById("draftNote")?.remove();
+      msg.className="msg ok";
+      msg.textContent="Tersimpan di perangkat — akan dikirim otomatis begitu online kembali.";
+      btn.disabled=false;btn.textContent=MULTI_RESPONSE?"Kirim Jawaban":((EXISTING_RESPONSE||EDITING_RESPONSE_ID)?"Perbarui Jawaban":"Kirim Jawaban");
+      return;
+    }
+    msg.className="msg err";msg.textContent="Tidak ada koneksi internet.";
+    btn.disabled=false;btn.textContent=MULTI_RESPONSE?"Kirim Jawaban":((EXISTING_RESPONSE||EDITING_RESPONSE_ID)?"Perbarui Jawaban":"Kirim Jawaban");
+    return;
+  }
+  try{
     const d=await r.json();
     if(r.status===401){msg.className="msg err";msg.textContent="Sesi habis. Silakan login ulang.";btn.disabled=false;btn.textContent=(EXISTING_RESPONSE||EDITING_RESPONSE_ID)?"Perbarui Jawaban":"Kirim Jawaban";return;}
     if(!r.ok)throw new Error(d.error||"Gagal mengirim");
@@ -2047,6 +2164,7 @@ async function submit(){
   }catch(e){msg.className="msg err";msg.textContent=e.message;btn.disabled=false;btn.textContent=MULTI_RESPONSE?"Kirim Jawaban":((EXISTING_RESPONSE||EDITING_RESPONSE_ID)?"Perbarui Jawaban":"Kirim Jawaban");}
 }
 
+flushOfflineQueue().catch(()=>{});
 fetchForm().catch(e=>showErr(e.message));
 </script>
 </body>
