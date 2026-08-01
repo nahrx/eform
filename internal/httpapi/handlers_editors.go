@@ -262,7 +262,16 @@ func (s *Server) editorListResponses(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		val := strings.TrimSpace(vals[0])
-		if strings.HasPrefix(key, "fe_") {
+		if applyRangeFilter(&f, key, val) {
+			// sudah ditangani
+		} else if strings.HasPrefix(key, "fea_") {
+			if f.FieldAnyFilters == nil {
+				f.FieldAnyFilters = make(map[string][]string)
+			}
+			if len(f.FieldAnyFilters) < 10 {
+				f.FieldAnyFilters[key[4:]] = splitFilterValues(val)
+			}
+		} else if strings.HasPrefix(key, "fe_") {
 			if f.FieldExactFilters == nil {
 				f.FieldExactFilters = make(map[string]string)
 			}

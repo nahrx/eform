@@ -406,6 +406,54 @@ func (s *Server) removeAllowedEmail(w http.ResponseWriter, r *http.Request) {
 
 /* ---------------- responses ---------------- */
 
+// splitFilterValues memecah nilai filter "fea_" (checkbox/multiselect, dipisah koma dari
+// frontend) menjadi slice bersih, dibatasi jumlahnya agar query tidak disalahgunakan.
+func splitFilterValues(raw string) []string {
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		out = append(out, p)
+		if len(out) >= 20 {
+			break
+		}
+	}
+	return out
+}
+
+// applyRangeFilter menangani parameter "fer_<field>_min"/"fer_<field>_max" (filter rentang
+// angka, untuk field number/integer/decimal/currency/range/rating). Mengembalikan true bila
+// key cocok pola ini (dipakai/tidaknya nilai tetap dihitung "sudah ditangani").
+func applyRangeFilter(f *store.ResponseFilter, key, val string) bool {
+	if !strings.HasPrefix(key, "fer_") {
+		return false
+	}
+	rest := key[4:]
+	var fieldName string
+	bound := 0
+	if strings.HasSuffix(rest, "_min") {
+		fieldName = strings.TrimSuffix(rest, "_min")
+	} else if strings.HasSuffix(rest, "_max") {
+		fieldName = strings.TrimSuffix(rest, "_max")
+		bound = 1
+	} else {
+		return true
+	}
+	if f.FieldRangeFilters == nil {
+		f.FieldRangeFilters = make(map[string][2]string)
+	}
+	if _, exists := f.FieldRangeFilters[fieldName]; !exists && len(f.FieldRangeFilters) >= 10 {
+		return true
+	}
+	cur := f.FieldRangeFilters[fieldName]
+	cur[bound] = val
+	f.FieldRangeFilters[fieldName] = cur
+	return true
+}
+
 func (s *Server) listResponses(w http.ResponseWriter, r *http.Request) {
 	if !s.ensureResultAccess(w, r) {
 		return
@@ -425,14 +473,26 @@ func (s *Server) listResponses(w http.ResponseWriter, r *http.Request) {
 		SortDir: q.Get("sortDir"),
 	}
 	// Parse filter per-field schema:
-	//   "f_namafield=nilai"  → ILIKE (teks bebas)
-	//   "fe_namafield=nilai" → exact match (dropdown/radio)
+	//   "f_namafield=nilai"           → ILIKE (teks bebas)
+	//   "fe_namafield=nilai"          → exact match (dropdown/radio/tanggal)
+	//   "fea_namafield=a,b,c"         → cocok salah satu (checkbox/multiselect)
+	//   "fer_namafield_min/_max=nilai"→ rentang angka (number/integer/decimal/dst)
 	for key, vals := range q {
 		if len(vals) == 0 || strings.TrimSpace(vals[0]) == "" {
 			continue
 		}
 		val := strings.TrimSpace(vals[0])
-		if strings.HasPrefix(key, "fe_") {
+		if applyRangeFilter(&f, key, val) {
+			// sudah ditangani
+		} else if strings.HasPrefix(key, "fea_") {
+			fieldName := key[4:]
+			if f.FieldAnyFilters == nil {
+				f.FieldAnyFilters = make(map[string][]string)
+			}
+			if len(f.FieldAnyFilters) < 10 {
+				f.FieldAnyFilters[fieldName] = splitFilterValues(val)
+			}
+		} else if strings.HasPrefix(key, "fe_") {
 			fieldName := key[3:]
 			if f.FieldExactFilters == nil {
 				f.FieldExactFilters = make(map[string]string)

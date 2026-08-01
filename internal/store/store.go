@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/bpskaltim/eform-backend/internal/models"
@@ -14,13 +16,15 @@ import (
 
 // ResponseFilter parameter untuk filter dan sort daftar jawaban admin.
 type ResponseFilter struct {
-	Status            string            // 'submitted'|'draft'|'' (kosong = semua)
-	ShareID           string            // uuid string atau '' (kosong = semua)
-	Search            string            // pencarian parsial pada meta.name / meta.email
-	SortBy            string            // 'waktu'|'status'|'share'|'who'|nama_field_schema
-	SortDir           string            // 'asc'|'desc'
-	FieldFilters      map[string]string // fieldName â†’ nilai teks (ILIKE, untuk field bebas)
-	FieldExactFilters map[string]string // fieldName â†’ nilai pasti (=, untuk dropdown/radio)
+	Status            string              // 'submitted'|'draft'|'' (kosong = semua)
+	ShareID           string              // uuid string atau '' (kosong = semua)
+	Search            string              // pencarian parsial pada meta.name / meta.email
+	SortBy            string              // 'waktu'|'status'|'share'|'who'|nama_field_schema
+	SortDir           string              // 'asc'|'desc'
+	FieldFilters      map[string]string   // fieldName â†’ nilai teks (ILIKE, untuk field bebas)
+	FieldExactFilters map[string]string   // fieldName â†’ nilai pasti (=, untuk dropdown/radio/tanggal)
+	FieldAnyFilters   map[string][]string // fieldName â†’ daftar nilai (array berisi salah satu, untuk checkbox/multiselect)
+	FieldRangeFilters map[string][2]string // fieldName â†’ [min,max] (rentang angka; salah satu boleh kosong)
 }
 
 // isSafeIdentifier memvalidasi nama field schema agar aman diinterpolasi ke SQL.
@@ -68,6 +72,40 @@ func buildResponseWhere(f ResponseFilter) (string, []any) {
 		if isSafeIdentifier(fieldName) && val != "" {
 			n := add(val)
 			where += fmt.Sprintf(" AND answers->>'%s'=$%d", fieldName, n)
+		}
+	}
+	for fieldName, vals := range f.FieldAnyFilters {
+		if isSafeIdentifier(fieldName) && len(vals) > 0 {
+			n := add(vals)
+			// answers->'field' berisi array JSON (checkbox/multiselect) — cocok bila
+			// mengandung SALAH SATU dari nilai yang dipilih di filter (semantik OR).
+			where += fmt.Sprintf(" AND answers->'%s' ?| $%d::text[]", fieldName, n)
+		}
+	}
+	for fieldName, bounds := range f.FieldRangeFilters {
+		if !isSafeIdentifier(fieldName) {
+			continue
+		}
+		minV, maxV := strings.TrimSpace(bounds[0]), strings.TrimSpace(bounds[1])
+		// Validasi angka di sisi Go dulu — nilai ini dikirim sebagai parameter dengan
+		// cast eksplisit ::numeric, jadi kalau bukan angka, query akan error saat
+		// dieksekusi bila tidak disaring lebih dulu di sini.
+		_, minErr := strconv.ParseFloat(minV, 64)
+		_, maxErr := strconv.ParseFloat(maxV, 64)
+		minOk, maxOk := minV != "" && minErr == nil, maxV != "" && maxErr == nil
+		if !minOk && !maxOk {
+			continue
+		}
+		// answers->>'field' bisa berisi teks bukan-angka (jawaban kosong/tak valid) —
+		// pola regex jadi penjaga supaya cast ::numeric tidak pernah gagal di tengah query.
+		numGuard := fmt.Sprintf("answers->>'%s' ~ '^-?[0-9]+(\\.[0-9]+)?$'", fieldName)
+		if minOk {
+			n := add(minV)
+			where += fmt.Sprintf(" AND %s AND (answers->>'%s')::numeric >= $%d::numeric", numGuard, fieldName, n)
+		}
+		if maxOk {
+			n := add(maxV)
+			where += fmt.Sprintf(" AND %s AND (answers->>'%s')::numeric <= $%d::numeric", numGuard, fieldName, n)
 		}
 	}
 	return where, args

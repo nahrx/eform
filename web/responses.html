@@ -171,7 +171,10 @@ let SEL_COLS=[], ALL_FIELDS=[], SHARE_MAP={};
 let SORT_BY="waktu", SORT_DIR="desc";
 let FILTER_STATUS="", FILTER_SHARE="", FILTER_SEARCH="";
 let FIELD_FILTERS={};       // fieldName → nilai teks (ILIKE)
-let FIELD_EXACT_FILTERS={}; // fieldName → nilai pasti (=, untuk dropdown/radio)
+let FIELD_EXACT_FILTERS={}; // fieldName → nilai pasti (=, untuk dropdown/radio/tanggal)
+let FIELD_ANY_FILTERS={};   // fieldName → daftar nilai (salah satu, untuk checkbox/multiselect)
+let FIELD_RANGE_FILTERS={}; // fieldName → {min,max} (rentang angka)
+const NUMER_TYPES=new Set(["number","integer","decimal","currency","range","rating"]);
 let _searchTimer=null, _fieldTimer=null;
 
 async function api(path,opts){
@@ -244,44 +247,50 @@ function getOptions(c){
   return opts;
 }
 
-// Tentukan jenis filter untuk satu field:
-//  {kind:"select", opts:[...]}              → dropdown statis
-//  {kind:"api", url, ...}                   → dropdown dari API (tanpa dependensi)
-//  {kind:"cascade", urlTpl, deps, ...}      → dropdown API yang bergantung pada field lain
-//  {kind:"text"}                            → input teks bebas
+// Tentukan jenis filter untuk satu field, disesuaikan dengan tipe input aslinya:
+//  {kind:"select"/"multiselect", opts:[...]}         → dropdown statis (1 atau banyak pilihan)
+//  {kind:"api"/"multiapi", url, ...}                 → dropdown dari API (tanpa dependensi)
+//  {kind:"cascade"/"multicascade", urlTpl, deps, ...}→ dropdown API yang bergantung pada field lain
+//  {kind:"date"/"datetime"/"time"}                   → input tanggal/waktu native
+//  {kind:"text"}                                     → input teks bebas (ILIKE)
 function fieldFilterKind(c){
   if(!c)return{kind:"text"};
   if(c.type==="boolean")
     return{kind:"select",opts:[{value:"true",label:"Ya"},{value:"false",label:"Tidak"}]};
-  if(c.type==="radio"||c.type==="select"){
+  if(c.type==="date")return{kind:"date"};
+  if(c.type==="datetime")return{kind:"datetime"};
+  if(c.type==="time")return{kind:"time"};
+  if(NUMER_TYPES.has(c.type))return{kind:"number"};
+  if(c.type==="radio"||c.type==="select"||c.type==="checkbox"||c.type==="multiselect"){
+    const multi=c.type==="checkbox"||c.type==="multiselect";
     // Sumber: optionsApi langsung di field
     if(c.optionsApi&&c.optionsApi.url){
       const deps=[...c.optionsApi.url.matchAll(/\{([^}]+)\}/g)].map(m=>m[1]);
       const base={valueField:c.optionsApi.valueField||"code",
                   labelField:c.optionsApi.labelField||"label",
                   path:c.optionsApi.path||null};
-      if(deps.length)return{kind:"cascade",urlTpl:c.optionsApi.url,deps,...base};
-      return{kind:"api",url:c.optionsApi.url,...base};
+      if(deps.length)return{kind:multi?"multicascade":"cascade",urlTpl:c.optionsApi.url,deps,...base};
+      return{kind:multi?"multiapi":"api",url:c.optionsApi.url,...base};
     }
     // Sumber: referenceData via optionsRef
     if(c.optionsRef){
       const tbl=(SCHEMA.referenceData||{})[c.optionsRef];
       if(tbl){
         if(tbl.items)
-          return{kind:"select",opts:tbl.items.map(it=>({value:String(it.code),label:txt(it.label)}))};
+          return{kind:multi?"multiselect":"select",opts:tbl.items.map(it=>({value:String(it.code),label:txt(it.label)}))};
         if(tbl.source==="api"&&tbl.url){
           const deps=[...tbl.url.matchAll(/\{([^}]+)\}/g)].map(m=>m[1]);
           const base={valueField:tbl.valueField||"code",
                       labelField:tbl.labelField||"label",
                       path:tbl.path||null};
-          if(deps.length)return{kind:"cascade",urlTpl:tbl.url,deps,...base};
-          return{kind:"api",url:tbl.url,...base};
+          if(deps.length)return{kind:multi?"multicascade":"cascade",urlTpl:tbl.url,deps,...base};
+          return{kind:multi?"multiapi":"api",url:tbl.url,...base};
         }
       }
     }
     // Sumber: opsi inline di field
     if(c.options&&c.options.length)
-      return{kind:"select",opts:c.options.map(o=>({value:String(o.value),label:txt(o.label)||String(o.value)}))};
+      return{kind:multi?"multiselect":"select",opts:c.options.map(o=>({value:String(o.value),label:txt(o.label)||String(o.value)}))};
   }
   return{kind:"text"};
 }
@@ -311,6 +320,8 @@ function renderFieldFilters(){
     const fk=fieldFilterKind(findField(SCHEMA,name));
     if(fk.kind==="cascade"&&fk.deps.find(dep=>!FIELD_EXACT_FILTERS[dep]))
       delete FIELD_EXACT_FILTERS[name];
+    if(fk.kind==="multicascade"&&fk.deps.find(dep=>!FIELD_EXACT_FILTERS[dep]))
+      delete FIELD_ANY_FILTERS[name];
   });
   const parts=SEL_COLS.map((name,i)=>{
     const fd=findField(SCHEMA,name);
@@ -327,23 +338,33 @@ function renderFieldFilters(){
         <select class="ff-input" data-field="${esc(name)}" onchange="onFieldSelect(this)">${optHtml}</select>
       </div>`;
     }
-    if(fk.kind==="api"){
-      // Render placeholder dulu, isi setelah fetch
+    if(fk.kind==="multiselect"){
+      const curVals=FIELD_ANY_FILTERS[name]||[];
+      const optHtml=fk.opts.map(o=>`<option value="${esc(o.value)}"${curVals.includes(o.value)?" selected":""}>${esc(o.label)}</option>`).join("");
       return`${sep}<div class="ff-group">
         <span class="ff-lbl">${esc(label)}</span>
-        <select class="ff-input" data-field="${esc(name)}" data-api-src="${esc(JSON.stringify(fk))}"
-                onchange="onFieldSelect(this)" disabled>
+        <select class="ff-input" multiple size="4" data-field="${esc(name)}" onchange="onFieldMultiSelect(this)">${optHtml}</select>
+      </div>`;
+    }
+    if(fk.kind==="api"||fk.kind==="multiapi"){
+      // Render placeholder dulu, isi setelah fetch
+      const multiAttr=fk.kind==="multiapi"?' multiple size="4"':"";
+      return`${sep}<div class="ff-group">
+        <span class="ff-lbl">${esc(label)}</span>
+        <select class="ff-input"${multiAttr} data-field="${esc(name)}" data-api-src="${esc(JSON.stringify(fk))}"
+                onchange="${fk.kind==='multiapi'?'onFieldMultiSelect(this)':'onFieldSelect(this)'}" disabled>
           <option value="">Memuat…</option>
         </select>
       </div>`;
     }
-    if(fk.kind==="cascade"){
+    if(fk.kind==="cascade"||fk.kind==="multicascade"){
+      const isMulti=fk.kind==="multicascade";
       const missingDep=fk.deps.find(dep=>!FIELD_EXACT_FILTERS[dep]);
       if(missingDep){
         const depLabel=(ALL_FIELDS.find(ff=>ff.name===missingDep)||{}).label||missingDep;
         return`${sep}<div class="ff-group">
           <span class="ff-lbl">${esc(label)}</span>
-          <select class="ff-input" data-field="${esc(name)}" disabled>
+          <select class="ff-input"${isMulti?' multiple size="4"':""} data-field="${esc(name)}" disabled>
             <option value="">— pilih ${esc(depLabel)} dahulu —</option>
           </select>
         </div>`;
@@ -352,10 +373,30 @@ function renderFieldFilters(){
       const src={url:resolvedUrl,valueField:fk.valueField,labelField:fk.labelField,path:fk.path};
       return`${sep}<div class="ff-group">
         <span class="ff-lbl">${esc(label)}</span>
-        <select class="ff-input" data-field="${esc(name)}" data-api-src="${esc(JSON.stringify(src))}"
-                onchange="onFieldSelect(this)" disabled>
+        <select class="ff-input"${isMulti?' multiple size="4"':""} data-field="${esc(name)}" data-api-src="${esc(JSON.stringify(src))}"
+                onchange="${isMulti?'onFieldMultiSelect(this)':'onFieldSelect(this)'}" disabled>
           <option value="">Memuat…</option>
         </select>
+      </div>`;
+    }
+    if(fk.kind==="date"||fk.kind==="datetime"||fk.kind==="time"){
+      const inputType=fk.kind==="datetime"?"datetime-local":fk.kind;
+      const curVal=FIELD_EXACT_FILTERS[name]||"";
+      return`${sep}<div class="ff-group">
+        <span class="ff-lbl">${esc(label)}</span>
+        <input type="${inputType}" class="ff-input" style="width:auto" value="${esc(curVal)}"
+               data-field="${esc(name)}" onchange="onFieldSelect(this)">
+      </div>`;
+    }
+    if(fk.kind==="number"){
+      const cur=FIELD_RANGE_FILTERS[name]||{min:"",max:""};
+      return`${sep}<div class="ff-group">
+        <span class="ff-lbl">${esc(label)}</span>
+        <input type="number" class="ff-input" style="width:72px" placeholder="Min" value="${esc(cur.min)}"
+               data-field="${esc(name)}" data-bound="min" oninput="onFieldRangeInput(this)">
+        <span style="color:var(--muted)">–</span>
+        <input type="number" class="ff-input" style="width:72px" placeholder="Max" value="${esc(cur.max)}"
+               data-field="${esc(name)}" data-bound="max" oninput="onFieldRangeInput(this)">
       </div>`;
     }
     // text
@@ -368,13 +409,18 @@ function renderFieldFilters(){
   });
   bar.innerHTML=parts.join("");
 
-  // Isi dropdown API secara async
+  // Isi dropdown API secara async (single maupun multi-select)
   bar.querySelectorAll("select[data-api-src]").forEach(async sel=>{
     const src=JSON.parse(sel.dataset.apiSrc);
     const opts=await fetchApiOpts(src);
-    const curVal=FIELD_EXACT_FILTERS[sel.dataset.field]||"";
-    sel.innerHTML=`<option value="">Semua</option>`+
-      opts.map(o=>`<option value="${esc(o.value)}"${curVal===o.value?" selected":""}>${esc(o.label)}</option>`).join("");
+    if(sel.multiple){
+      const curVals=FIELD_ANY_FILTERS[sel.dataset.field]||[];
+      sel.innerHTML=opts.map(o=>`<option value="${esc(o.value)}"${curVals.includes(o.value)?" selected":""}>${esc(o.label)}</option>`).join("");
+    }else{
+      const curVal=FIELD_EXACT_FILTERS[sel.dataset.field]||"";
+      sel.innerHTML=`<option value="">Semua</option>`+
+        opts.map(o=>`<option value="${esc(o.value)}"${curVal===o.value?" selected":""}>${esc(o.label)}</option>`).join("");
+    }
     sel.disabled=false;
   });
 }
@@ -387,6 +433,15 @@ function onFieldInput(el){
   _fieldTimer=setTimeout(()=>loadPage(0),350);
 }
 
+function onFieldRangeInput(el){
+  const name=el.dataset.field,bound=el.dataset.bound;
+  const cur=FIELD_RANGE_FILTERS[name]||{min:"",max:""};
+  cur[bound]=el.value.trim();
+  if(cur.min||cur.max)FIELD_RANGE_FILTERS[name]=cur; else delete FIELD_RANGE_FILTERS[name];
+  clearTimeout(_fieldTimer);
+  _fieldTimer=setTimeout(()=>loadPage(0),350);
+}
+
 function onFieldSelect(el){
   const name=el.dataset.field;
   const val=el.value;
@@ -395,7 +450,20 @@ function onFieldSelect(el){
   const hasCascadeChild=SEL_COLS.some(colName=>{
     if(colName===name)return false;
     const fk=fieldFilterKind(findField(SCHEMA,colName));
-    return fk.kind==="cascade"&&fk.deps.includes(name);
+    return(fk.kind==="cascade"||fk.kind==="multicascade")&&fk.deps.includes(name);
+  });
+  if(hasCascadeChild)renderFieldFilters();
+  loadPage(0);
+}
+
+function onFieldMultiSelect(el){
+  const name=el.dataset.field;
+  const vals=[...el.selectedOptions].map(o=>o.value).filter(Boolean);
+  if(vals.length)FIELD_ANY_FILTERS[name]=vals; else delete FIELD_ANY_FILTERS[name];
+  const hasCascadeChild=SEL_COLS.some(colName=>{
+    if(colName===name)return false;
+    const fk=fieldFilterKind(findField(SCHEMA,colName));
+    return(fk.kind==="cascade"||fk.kind==="multicascade")&&fk.deps.includes(name);
   });
   if(hasCascadeChild)renderFieldFilters();
   loadPage(0);
@@ -418,7 +486,7 @@ function onSearchDebounce(){
 
 function resetFilters(){
   FILTER_STATUS="";FILTER_SHARE="";FILTER_SEARCH="";
-  FIELD_FILTERS={};FIELD_EXACT_FILTERS={};
+  FIELD_FILTERS={};FIELD_EXACT_FILTERS={};FIELD_ANY_FILTERS={};FIELD_RANGE_FILTERS={};
   document.getElementById("fStatus").value="";
   document.getElementById("fShare").value="";
   document.getElementById("fSearch").value="";
@@ -450,6 +518,26 @@ function updateFilterUI(){
     }
     parts.push(`${esc(f?f.label:k)}: ${esc(displayVal)}`);
   });
+  Object.entries(FIELD_ANY_FILTERS).forEach(([k,v])=>{
+    const fd=findField(SCHEMA,k);
+    const fk=fieldFilterKind(fd);
+    const f=ALL_FIELDS.find(ff=>ff.name===k);
+    let labels=v;
+    if(fk.kind==="multiselect"){
+      labels=v.map(val=>{const o=fk.opts.find(x=>x.value===val);return o?o.label:val;});
+    } else if(fk.kind==="multiapi"&&_apiOptCache[fk.url]){
+      labels=v.map(val=>{const o=_apiOptCache[fk.url].find(x=>x.value===val);return o?o.label:val;});
+    } else if(fk.kind==="multicascade"){
+      const ru=fk.urlTpl.replace(/\{([^}]+)\}/g,(_,dk)=>encodeURIComponent(FIELD_EXACT_FILTERS[dk]||""));
+      if(_apiOptCache[ru])labels=v.map(val=>{const o=_apiOptCache[ru].find(x=>x.value===val);return o?o.label:val;});
+    }
+    parts.push(`${esc(f?f.label:k)}: ${esc(labels.join(", "))}`);
+  });
+  Object.entries(FIELD_RANGE_FILTERS).forEach(([k,v])=>{
+    const f=ALL_FIELDS.find(ff=>ff.name===k);
+    const text=v.min&&v.max?`${v.min}–${v.max}`:(v.min?`≥ ${v.min}`:`≤ ${v.max}`);
+    parts.push(`${esc(f?f.label:k)}: ${esc(text)}`);
+  });
   const chip=document.getElementById("filterChip");
   const btnR=document.getElementById("btnReset");
   if(parts.length){chip.textContent=parts.join(" · ");chip.hidden=false;btnR.hidden=false;}
@@ -474,12 +562,17 @@ async function loadPage(page){
     if(FILTER_SEARCH)params.set("search",FILTER_SEARCH);
     Object.entries(FIELD_FILTERS).forEach(([k,v])=>{if(v)params.set("f_"+k,v);});
     Object.entries(FIELD_EXACT_FILTERS).forEach(([k,v])=>{if(v)params.set("fe_"+k,v);});
+    Object.entries(FIELD_ANY_FILTERS).forEach(([k,v])=>{if(v&&v.length)params.set("fea_"+k,v.join(","));});
+    Object.entries(FIELD_RANGE_FILTERS).forEach(([k,v])=>{
+      if(v.min)params.set("fer_"+k+"_min",v.min);
+      if(v.max)params.set("fer_"+k+"_max",v.max);
+    });
 
     const data=await api("/api/forms/"+FORM_ID+"/responses?"+params);
     RESPONSES=data.responses||[];
     TOTAL=data.total||0;
 
-    const isFiltered=FILTER_STATUS||FILTER_SHARE||FILTER_SEARCH||Object.keys(FIELD_FILTERS).length||Object.keys(FIELD_EXACT_FILTERS).length;
+    const isFiltered=FILTER_STATUS||FILTER_SHARE||FILTER_SEARCH||Object.keys(FIELD_FILTERS).length||Object.keys(FIELD_EXACT_FILTERS).length||Object.keys(FIELD_ANY_FILTERS).length||Object.keys(FIELD_RANGE_FILTERS).length;
     const badge=document.getElementById("countBadge");
     badge.textContent=TOTAL+" jawaban"+(isFiltered?" (difilter)":"");
     badge.hidden=false;
@@ -540,7 +633,7 @@ function saveColsToServer(cols){
 document.getElementById("btnColApply")?.addEventListener("click",()=>{
   const newCols=[...document.querySelectorAll("#colList input:checked")].map(cb=>cb.value).slice(0,5);
   // bersihkan filter field yang kolomnya dihapus
-  SEL_COLS.filter(c=>!newCols.includes(c)).forEach(c=>{delete FIELD_FILTERS[c];delete FIELD_EXACT_FILTERS[c];});
+  SEL_COLS.filter(c=>!newCols.includes(c)).forEach(c=>{delete FIELD_FILTERS[c];delete FIELD_EXACT_FILTERS[c];delete FIELD_ANY_FILTERS[c];delete FIELD_RANGE_FILTERS[c];});
   SEL_COLS=newCols;
   saveColPref(SEL_COLS);
   saveColsToServer(SEL_COLS);
@@ -549,7 +642,7 @@ document.getElementById("btnColApply")?.addEventListener("click",()=>{
   loadPage(0);
 });
 document.getElementById("btnColReset")?.addEventListener("click",()=>{
-  SEL_COLS.forEach(c=>{delete FIELD_FILTERS[c];delete FIELD_EXACT_FILTERS[c];});
+  SEL_COLS.forEach(c=>{delete FIELD_FILTERS[c];delete FIELD_EXACT_FILTERS[c];delete FIELD_ANY_FILTERS[c];delete FIELD_RANGE_FILTERS[c];});
   SEL_COLS=[];saveColPref([]);
   saveColsToServer([]);
   document.querySelectorAll("#colList input").forEach(cb=>cb.checked=false);

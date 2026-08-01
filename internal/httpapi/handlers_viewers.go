@@ -411,7 +411,14 @@ func (s *Server) viewerListResponses(w http.ResponseWriter, r *http.Request) {
 		SortDir: q.Get("sortDir"),
 	}
 	for key, vals := range q {
-		if strings.HasPrefix(key, "f_") && len(vals) > 0 && vals[0] != "" {
+		if len(vals) > 0 && vals[0] != "" && applyRangeFilter(&f, key, vals[0]) {
+			// sudah ditangani
+		} else if strings.HasPrefix(key, "fea_") && len(vals) > 0 && vals[0] != "" {
+			if f.FieldAnyFilters == nil {
+				f.FieldAnyFilters = make(map[string][]string)
+			}
+			f.FieldAnyFilters[strings.TrimPrefix(key, "fea_")] = splitFilterValues(vals[0])
+		} else if strings.HasPrefix(key, "f_") && len(vals) > 0 && vals[0] != "" {
 			if f.FieldFilters == nil {
 				f.FieldFilters = make(map[string]string)
 			}
