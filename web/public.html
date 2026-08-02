@@ -204,9 +204,10 @@ textarea.pv-in{width:100%;resize:vertical;min-height:72px}
 .gate-card-wide{max-width:540px}
 .gate-ubar{display:flex;align-items:center;gap:10px;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--line);text-align:left;font-size:13px}
 .resp-list{text-align:left;margin:12px 0;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
-.resp-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);font-size:13px}
+.resp-item{display:flex;align-items:center;flex-wrap:wrap;row-gap:8px;column-gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);font-size:13px}
 .resp-item:last-child{border-bottom:none}
-.resp-item-left{display:flex;align-items:center;gap:7px;flex:1;min-width:0}
+.resp-item-left{display:flex;align-items:center;flex-wrap:wrap;row-gap:6px;gap:7px;flex:1 1 auto;min-width:0}
+.resp-item-right{display:flex;align-items:center;flex-wrap:wrap;row-gap:6px;gap:10px;flex:0 0 auto;margin-left:auto}
 .resp-num{font-weight:600;white-space:nowrap}
 .resp-date{color:var(--muted);font-size:12px;white-space:nowrap}
 .resp-badge{font-size:11px;padding:2px 7px;border-radius:999px;font-weight:700;white-space:nowrap}
@@ -767,8 +768,10 @@ function renderMyResponsesList(meta,responses){
       :`<button class="btn btn-xs" onclick="unsubmitResponseAPI('${r.id}')">Batalkan Submit</button>`;
     return `<div class="resp-item">
       <div class="resp-item-left"><span class="resp-num">Respons ${responses.length-i}</span>${badge}</div>
-      <span class="resp-date">${isDraft?"Draf · "+fmt(r.submittedAt):fmt(r.submittedAt)}</span>
-      ${ALLOW?action:""}
+      <div class="resp-item-right">
+        <span class="resp-date">${isDraft?"Draf · "+fmt(r.submittedAt):fmt(r.submittedAt)}</span>
+        ${ALLOW?action:""}
+      </div>
     </div>`;
   }).join("");
   const emptyNote=responses.length===0?`<div class="muted" style="padding:12px;text-align:center;font-size:13px">Belum ada respons.</div>`:"";
@@ -2151,7 +2154,9 @@ async function submit(){
       clearDraft();EDITING_RESPONSE_ID=null;document.getElementById("draftNote")?.remove();
       msg.className="msg ok";
       msg.textContent="Tersimpan di perangkat — akan dikirim otomatis begitu online kembali.";
-      btn.disabled=false;btn.textContent=MULTI_RESPONSE?"Kirim Jawaban":((EXISTING_RESPONSE||EDITING_RESPONSE_ID)?"Perbarui Jawaban":"Kirim Jawaban");
+      // Berhasil (tersimpan) — tombol tetap nonaktif supaya tidak terkirim dobel;
+      // hanya diaktifkan kembali kalau pengiriman gagal (lihat catch di bawah).
+      btn.textContent=MULTI_RESPONSE?"Kirim Jawaban":((EXISTING_RESPONSE||EDITING_RESPONSE_ID)?"Perbarui Jawaban":"Kirim Jawaban");
       return;
     }
     msg.className="msg err";msg.textContent="Tidak ada koneksi internet.";
@@ -2170,7 +2175,9 @@ async function submit(){
       // Multi-response: setelah kirim, tampilkan sukses lalu kembali ke daftar
       msg.className="msg ok";
       msg.textContent="Terima kasih! Respons Anda sudah terkirim.";
-      btn.textContent="Kirim Jawaban";btn.disabled=false;
+      // Berhasil terkirim — tombol tetap nonaktif sampai halaman berpindah ke
+      // daftar respons, supaya tidak bisa diklik dobel selagi menunggu redirect.
+      btn.textContent="Kirim Jawaban";
       document.getElementById("pvBody")?.scrollTo({top:0,behavior:"smooth"});
       setTimeout(async()=>{
         const prevResps=await fetchMyResponses();
