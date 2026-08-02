@@ -11,9 +11,9 @@
 
   const style = document.createElement("style");
   style.textContent = `
-.ss-wrap{position:relative;width:100%}
+.ss-wrap{position:relative;max-width:100%}
 .ss-native{position:absolute!important;left:-9999px!important;top:auto!important;width:1px!important;height:1px!important;opacity:0!important;pointer-events:none!important}
-.ss-ctrl{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;
+.ss-ctrl{display:flex;align-items:center;justify-content:space-between;gap:8px;
   border:1.5px solid var(--line,#dfe4ea);border-radius:var(--radius-s,7px);
   padding:9.5px 12px;background:var(--panel,#fff);color:var(--ink,#13171e);
   font-family:inherit;font-size:13.5px;cursor:pointer;text-align:left;box-sizing:border-box;
@@ -121,6 +121,11 @@
     if (!select || select.tagName !== "SELECT" || select.multiple) return;
     if (select.closest(".ss-wrap")) return;
 
+    // Salin class asli select (mis. "ff-input", "pv-in", "filter-sel") ke tombol
+    // pengganti, supaya lebar/ukuran yang sudah diatur halaman (max-width, width
+    // tetap, dst.) tetap berlaku — bukan selalu melebar penuh (width:100%).
+    const originalClasses = select.className;
+
     const wrap = document.createElement("div");
     wrap.className = "ss-wrap";
     select.parentNode.insertBefore(wrap, select);
@@ -130,7 +135,7 @@
 
     const ctrl = document.createElement("button");
     ctrl.type = "button";
-    ctrl.className = "ss-ctrl";
+    ctrl.className = ("ss-ctrl " + originalClasses).trim();
     ctrl.innerHTML = '<span class="ss-ctrl-label"></span><span class="ss-ctrl-arrow">▾</span>';
     wrap.appendChild(ctrl);
 

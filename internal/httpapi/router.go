@@ -42,6 +42,7 @@ func (s *Server) Routes() http.Handler {
 	// --- responses ---
 	mux.Handle("GET /api/forms/{id}/responses", s.authMW(s.listResponses))
 	mux.Handle("GET /api/forms/{id}/responses/{responseId}", s.authMW(s.getResponseDetail))
+	mux.Handle("PATCH /api/forms/{id}/responses/{responseId}", s.authMW(s.requireRole(s.updateResponse, "superadmin", "admin")))
 	mux.Handle("DELETE /api/forms/{id}/responses/{responseId}", s.authMW(s.requireRole(s.deleteResponse, "superadmin", "admin")))
 	mux.Handle("GET /api/forms/{id}/responses.csv", s.authMW(s.exportResponses))
 

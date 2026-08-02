@@ -29,9 +29,9 @@ func (s *Server) listForms(w http.ResponseWriter, r *http.Request) {
 		forms, err = s.st.ListForms(r.Context())
 	case "admin":
 		forms, err = s.st.ListFormsByOwner(r.Context(), u.Subject)
-	case "editor":
-		forms, err = s.st.ListFormsByEditor(r.Context(), u.Subject)
 	default:
+		// Editor tidak punya akses ke builder (lihat ensureFormAccess) — dia memakai
+		// endpoint terpisah /api/editor/my-forms untuk melihat kuesioner yang ditugaskan.
 		writeErr(w, http.StatusForbidden, "akses ditolak")
 		return
 	}
@@ -562,6 +562,41 @@ func (s *Server) deleteResponse(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
+// updateResponse mengubah jawaban suatu respons — hanya superadmin/admin (lihat router).
+func (s *Server) updateResponse(w http.ResponseWriter, r *http.Request) {
+	formID := r.PathValue("id")
+	if _, ok := s.ensureFormAccess(w, r, formID); !ok {
+		return
+	}
+	responseID := r.PathValue("responseId")
+
+	var in struct {
+		Answers json.RawMessage `json:"answers"`
+		Status  string          `json:"status"`
+	}
+	if err := decodeJSON(r, &in); err != nil {
+		writeErr(w, http.StatusBadRequest, "format permintaan salah")
+		return
+	}
+	if len(in.Answers) == 0 {
+		writeErr(w, http.StatusBadRequest, "answers wajib diisi")
+		return
+	}
+	if in.Status != "draft" && in.Status != "submitted" {
+		writeErr(w, http.StatusBadRequest, "status tidak valid")
+		return
+	}
+	if err := s.st.UpdateResponseAnswers(r.Context(), formID, responseID, in.Answers); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "respons tidak ditemukan")
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, "gagal menyimpan")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+}
+
 func (s *Server) exportResponses(w http.ResponseWriter, r *http.Request) {
 	if !s.ensureResultAccess(w, r) {
 		return
@@ -681,18 +716,10 @@ func (s *Server) ensureFormAccess(w http.ResponseWriter, r *http.Request, formID
 			return nil, false
 		}
 		return f, true
-	case "editor":
-		allowed, err := s.st.HasEditorFormPermission(r.Context(), u.Subject, formID)
-		if err != nil {
-			writeErr(w, http.StatusInternalServerError, "gagal memeriksa akses")
-			return nil, false
-		}
-		if !allowed {
-			writeErr(w, http.StatusForbidden, "akses ditolak")
-			return nil, false
-		}
-		return f, true
 	default:
+		// Editor (seperti viewer) tidak punya akses ke builder/skema kuesioner —
+		// dia hanya boleh melihat & mengedit jawaban lewat endpoint /api/editor/...
+		// (editorGetForm, editorGetResponse, editorUpdateResponse, dst).
 		writeErr(w, http.StatusForbidden, "akses ditolak")
 		return nil, false
 	}

@@ -358,17 +358,22 @@ function collectFromNodes(comps,rp,out){
 function collectFieldValue(c,rp,out){
   if(c.type==="note"||c.type==="markdown"||c.type==="hidden")return;
   const key=rp+c.name;
+  // Radio/checkbox (termasuk boolean, dan radio/select dengan sedikit opsi yang
+  // dirender sebagai radio-group) tidak punya id pada elemen pembungkus — dicek
+  // lewat name pada input-nya, bukan getElementById (yang akan selalu null).
+  const groupInputs=document.querySelectorAll(`input[name="ed_${CSS.escape(key)}"]`);
+  if(groupInputs.length){
+    if(c.type==="checkbox"||c.type==="multiselect"){
+      out[key]=[...groupInputs].filter(cb=>cb.checked).map(cb=>cb.value);
+    } else {
+      const checked=[...groupInputs].find(rb=>rb.checked);
+      out[key]=checked?checked.value:"";
+    }
+    return;
+  }
   const el=document.getElementById("ed_"+CSS.escape(key));
   if(!el)return;
-
-  if(c.type==="checkbox"||c.type==="multiselect"){
-    const checks=document.querySelectorAll(`input[name="ed_${CSS.escape(key)}"]`);
-    out[key]=[...checks].filter(cb=>cb.checked).map(cb=>cb.value);
-  } else if(c.type==="radio"||c.type==="boolean"){
-    const radios=document.querySelectorAll(`input[name="ed_${CSS.escape(key)}"]`);
-    const checked=[...radios].find(rb=>rb.checked);
-    out[key]=checked?checked.value:"";
-  } else if(c.type==="number"){
+  if(c.type==="number"){
     out[key]=el.value===""?null:Number(el.value);
   } else {
     out[key]=el.value;

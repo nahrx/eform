@@ -128,6 +128,143 @@
         font-weight: 600;
         flex: none;
       }
+      .edit-badge {
+        background: var(--accent-soft);
+        color: var(--accent-ink);
+        font-size: 11.5px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-weight: 700;
+        flex: none;
+      }
+      .btn.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+      .btn.primary:hover {
+        background: var(--accent-ink);
+        border-color: var(--accent-ink);
+      }
+      .btn[disabled] {
+        opacity: 0.6;
+        cursor: default;
+      }
+
+      /* mode edit (superadmin/admin) */
+      .ed-field {
+        padding: 10px 0;
+        border-bottom: 1px solid var(--line-2);
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+      .ed-field:last-child {
+        border-bottom: none;
+        padding-bottom: 0;
+      }
+      .ed-label {
+        font-size: 12px;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .ed-desc {
+        font-size: 11.5px;
+        color: var(--muted);
+      }
+      .ed-input,
+      .ed-textarea,
+      .ed-select {
+        font-size: 13.5px;
+        padding: 8px 11px;
+        border: 1.5px solid var(--line);
+        border-radius: var(--radius-s);
+        background: var(--panel);
+        color: var(--ink);
+        width: 100%;
+        transition: 0.12s;
+      }
+      .ed-textarea {
+        min-height: 90px;
+        resize: vertical;
+      }
+      .ed-input:focus,
+      .ed-textarea:focus,
+      .ed-select:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-soft);
+      }
+      .ed-radio-group,
+      .ed-check-group {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-top: 2px;
+      }
+      .ed-radio-item,
+      .ed-check-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        padding: 6px 10px;
+        border-radius: 6px;
+        cursor: pointer;
+        border: 1.5px solid transparent;
+        transition: 0.12s;
+      }
+      .ed-radio-item:hover,
+      .ed-check-item:hover {
+        background: var(--panel-2);
+      }
+      .ed-radio-item input,
+      .ed-check-item input {
+        accent-color: var(--accent);
+        width: 15px;
+        height: 15px;
+        cursor: pointer;
+        flex: none;
+      }
+      .roster-edit-note {
+        font-size: 11.5px;
+        color: var(--muted);
+        font-style: italic;
+        margin-top: 6px;
+        padding: 6px 10px;
+        background: var(--panel-2);
+        border-radius: 6px;
+      }
+      .toast {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        background: var(--ink);
+        color: #fff;
+        padding: 10px 18px;
+        border-radius: var(--radius-s);
+        font-size: 13px;
+        font-weight: 500;
+        z-index: 999;
+        animation: slideIn 0.2s ease;
+        max-width: 300px;
+      }
+      .toast.ok {
+        background: var(--ok);
+      }
+      .toast.err {
+        background: #b91c1c;
+      }
+      @keyframes slideIn {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
 
       /* layout */
       .shell {
@@ -521,8 +658,23 @@
       <img id="photoModalImg" src="" alt="" />
     </div>
     <header class="topbar">
-      <span class="ro-badge">Hanya Baca</span>
+      <span class="ro-badge" id="modeBadge">Hanya Baca</span>
       <span class="topbar-title" id="topTitle">Memuat…</span>
+      <button class="btn" id="btnToggleEdit" hidden onclick="toggleEdit()">
+        ✏️ Mode Edit
+      </button>
+      <button
+        class="btn primary"
+        id="btnSave"
+        hidden
+        disabled
+        onclick="saveEdits()"
+      >
+        Simpan
+      </button>
+      <button class="btn danger" id="btnCancelEdit" hidden onclick="cancelEdit()">
+        Batal
+      </button>
       <button
         class="btn danger"
         id="btnDelete"
@@ -582,10 +734,14 @@
       let SCHEMA = null,
         RESP = null,
         CUR_PG = 0;
+      let EDIT_MODE = false;
+      let editedAnswers = {}; // aktif saat mode edit, salinan answers yang sedang diubah
 
-      async function api(path) {
+      async function api(path, opts) {
+        opts = opts || {};
         const r = await fetch(path, {
-          headers: { ...H, "Content-Type": "application/json" },
+          ...opts,
+          headers: { ...H, "Content-Type": "application/json", ...(opts.headers || {}) },
         });
         if (r.status === 401) {
           localStorage.removeItem("eform_token");
@@ -611,6 +767,7 @@
           document.getElementById("topTitle").textContent = title;
           if (me && (me.role === "superadmin" || me.role === "admin")) {
             document.getElementById("btnDelete").hidden = false;
+            document.getElementById("btnToggleEdit").hidden = false;
           }
           await prefetchApiOptions(parseAnswers(resp.answers));
           CUR_PG = 0;
@@ -687,8 +844,177 @@
         }
       }
 
+      /* ---- mode edit (superadmin/admin) ---- */
+      function toggleEdit() {
+        if (EDIT_MODE) {
+          cancelEdit();
+          return;
+        }
+        EDIT_MODE = true;
+        editedAnswers = parseAnswers(RESP.answers);
+        document.getElementById("modeBadge").className = "edit-badge";
+        document.getElementById("modeBadge").textContent = "Mode Edit";
+        document.getElementById("btnToggleEdit").textContent = "👁 Mode Lihat";
+        document.getElementById("btnSave").hidden = false;
+        document.getElementById("btnSave").disabled = false;
+        document.getElementById("btnCancelEdit").hidden = false;
+        renderPage();
+      }
+
+      function cancelEdit() {
+        EDIT_MODE = false;
+        editedAnswers = {};
+        document.getElementById("modeBadge").className = "ro-badge";
+        document.getElementById("modeBadge").textContent = "Hanya Baca";
+        document.getElementById("btnToggleEdit").textContent = "✏️ Mode Edit";
+        document.getElementById("btnSave").hidden = true;
+        document.getElementById("btnCancelEdit").hidden = true;
+        renderPage();
+      }
+
+      async function saveEdits() {
+        collectCurrentPageAnswers();
+        const btn = document.getElementById("btnSave");
+        btn.disabled = true;
+        btn.textContent = "Menyimpan…";
+        try {
+          await api(`/api/forms/${FORM_ID}/responses/${RESP_ID}`, {
+            method: "PATCH",
+            body: JSON.stringify({ answers: editedAnswers, status: RESP.status }),
+          });
+          RESP.answers = editedAnswers;
+          cancelEdit();
+          showToast("Jawaban berhasil disimpan", "ok");
+        } catch (e) {
+          showToast("Gagal menyimpan: " + e.message, "err");
+          btn.disabled = false;
+          btn.textContent = "Simpan";
+        }
+      }
+
+      function showToast(msg, type) {
+        const t = document.createElement("div");
+        t.className = "toast" + (type ? " " + type : "");
+        t.textContent = msg;
+        document.body.appendChild(t);
+        setTimeout(() => t.remove(), 3000);
+      }
+
+      /* Kumpulkan nilai dari input di halaman yang sedang ditampilkan ke editedAnswers */
+      function collectCurrentPageAnswers() {
+        if (!EDIT_MODE) return;
+        const pages = (SCHEMA && SCHEMA.pages) || [];
+        if (!pages.length) return;
+        const pg = pages[CUR_PG];
+        collectFromNodes(pg.components || [], "", editedAnswers);
+      }
+
+      function collectFromNodes(comps, rp, out) {
+        for (const c of comps || []) {
+          if (c.kind === "block" || c.kind === "section") {
+            collectFromNodes(c.components || [], rp, out);
+            continue;
+          }
+          if (c.kind === "roster") continue; // roster tidak diedit di sini
+          collectFieldValue(c, rp, out);
+        }
+      }
+
+      function collectFieldValue(c, rp, out) {
+        if (c.type === "note" || c.type === "markdown" || c.type === "hidden")
+          return;
+        const key = rp + c.name;
+        // Radio/checkbox (termasuk boolean, dan radio/select dengan sedikit opsi
+        // yang dirender sebagai radio-group) tidak punya id pada elemen pembungkus
+        // — dicek lewat name pada input-nya, bukan getElementById.
+        const groupInputs = document.querySelectorAll(
+          `input[name="ed_${CSS.escape(key)}"]`,
+        );
+        if (groupInputs.length) {
+          if (c.type === "checkbox" || c.type === "multiselect") {
+            out[key] = [...groupInputs]
+              .filter((cb) => cb.checked)
+              .map((cb) => cb.value);
+          } else {
+            const checked = [...groupInputs].find((rb) => rb.checked);
+            out[key] = checked ? checked.value : "";
+          }
+          return;
+        }
+        const el = document.getElementById("ed_" + CSS.escape(key));
+        if (!el) return;
+        if (c.type === "number") {
+          out[key] = el.value === "" ? null : Number(el.value);
+        } else {
+          out[key] = el.value;
+        }
+      }
+
+      async function resolveEditOptions() {
+        function fetchOpts(cfg) {
+          const url = (cfg.url || "").replace(/\{([^}]+)\}/g, (_, k) =>
+            encodeURIComponent(editedAnswers[k] ?? ""),
+          );
+          return fetch("/api/options-proxy?url=" + encodeURIComponent(url))
+            .then((r) => r.json())
+            .then((d) => {
+              let arr = cfg.path
+                ? cfg.path.split(".").reduce((x, k) => (x == null ? x : x[k]), d)
+                : Array.isArray(d)
+                  ? d
+                  : d.data || d.items || d.results || [];
+              const vf = cfg.valueField || "code",
+                lf = cfg.labelField || "label";
+              return (arr || []).map((it) => ({
+                value: String(it[vf]),
+                label: txt(it[lf]) || String(it[vf]),
+              }));
+            });
+        }
+        for (const el of document.querySelectorAll("select.ed-async[data-oa]")) {
+          const cfg = JSON.parse(el.dataset.oa),
+            curVal = el.dataset.cv || "";
+          try {
+            const opts = await fetchOpts(cfg);
+            el.innerHTML =
+              `<option value="">— Pilih —</option>` +
+              opts
+                .map(
+                  (o) =>
+                    `<option value="${esc(o.value)}"${String(curVal) === String(o.value) ? " selected" : ""}>${esc(o.label)}</option>`,
+                )
+                .join("");
+          } catch {
+            el.innerHTML = `<option value="${esc(curVal)}">${esc(curVal) || "—"}</option>`;
+          }
+          delete el.dataset.oa;
+          delete el.dataset.cv;
+        }
+        for (const el of document.querySelectorAll(
+          ".ed-check-group.ed-async[data-oa]",
+        )) {
+          const cfg = JSON.parse(el.dataset.oa),
+            selected = JSON.parse(el.dataset.cv || "[]"),
+            name = el.id;
+          try {
+            const opts = await fetchOpts(cfg);
+            el.innerHTML = opts
+              .map(
+                (o) => `<label class="ed-check-item">
+              <input type="checkbox" name="${name}" value="${esc(o.value)}" ${selected.includes(String(o.value)) ? "checked" : ""}>
+              ${esc(o.label)}</label>`,
+              )
+              .join("");
+          } catch {
+            el.innerHTML = `<span style="color:var(--muted);font-size:12px">Gagal memuat opsi.</span>`;
+          }
+          delete el.dataset.oa;
+          delete el.dataset.cv;
+        }
+      }
+
       function renderPage() {
-        const answers = parseAnswers(RESP.answers);
+        const answers = EDIT_MODE ? editedAnswers : parseAnswers(RESP.answers);
         const meta = parseAnswers(RESP.meta);
         const pages = (SCHEMA && SCHEMA.pages) || [];
         const visited = computeVisitedPages(pages, answers);
@@ -754,9 +1080,11 @@
         }
 
         window.scrollTo({ top: 0, behavior: "instant" });
+        if (EDIT_MODE) resolveEditOptions();
       }
 
       function goPage(idx) {
+        if (EDIT_MODE) collectCurrentPageAnswers();
         CUR_PG = idx;
         renderPage();
       }
@@ -1372,7 +1700,7 @@
         if (c.kind === "section")
           return `<div class="rv-section">${c.title ? `<div class="rv-section-title">${esc(rowInterp(txt(c.title), answers, rp))}</div>` : ""}${renderNodes(c.components || [], answers, rp, hiddenNames)}</div>`;
         if (c.kind === "roster") return renderRoster(c, answers, rp);
-        return renderField(c, answers, rp);
+        return EDIT_MODE ? renderEditField(c, answers, rp) : renderField(c, answers, rp);
       }
 
       function renderField(c, answers, rp) {
@@ -1502,6 +1830,168 @@
         return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer${isEmpty ? " empty" : ""}">${isEmpty ? "—" : esc(display)}</div></div>`;
       }
 
+      /* ---- EDIT field (superadmin/admin) ---- */
+      function renderEditField(c, answers, rp) {
+        if (c.type === "hidden") return "";
+        if (c.type === "note")
+          return c.html
+            ? `<div class="rv-note">${sanitizeHtml(txt(c.html))}</div>`
+            : "";
+        if (c.type === "markdown")
+          return c.markdown
+            ? `<div class="rv-note rv-md">${mdToHtml(txt(c.markdown))}</div>`
+            : "";
+        const key = rp + c.name;
+        const val = answers[key];
+        const label = esc(rowInterp(txt(c.label) || c.name, answers, rp));
+        const safeKey = CSS.escape(key);
+        const desc = c.description
+          ? `<div class="ed-desc">${esc(rowInterp(txt(c.description), answers, rp))}</div>`
+          : "";
+
+        // Radio / select
+        if (c.type === "radio" || c.type === "select") {
+          const opts = getOptions(c, answers, rp);
+          if (opts.length) {
+            if (opts.length <= 6) {
+              const items = opts
+                .map(
+                  (o) => `<label class="ed-radio-item">
+                <input type="radio" name="ed_${safeKey}" value="${esc(o.value)}" ${String(val) === String(o.value) ? "checked" : ""}>
+                ${esc(o.label)}</label>`,
+                )
+                .join("");
+              return `<div class="ed-field"><div class="ed-label">${label}</div>${desc}<div class="ed-radio-group">${items}</div></div>`;
+            }
+            const optHtml =
+              `<option value="">— Pilih —</option>` +
+              opts
+                .map(
+                  (o) =>
+                    `<option value="${esc(o.value)}"${String(val) === String(o.value) ? " selected" : ""}>${esc(o.label)}</option>`,
+                )
+                .join("");
+            return `<div class="ed-field"><div class="ed-label">${label}</div>${desc}<select id="ed_${safeKey}" class="ed-select">${optHtml}</select></div>`;
+          }
+          if (c.optionsApi && c.optionsApi.url) {
+            return `<div class="ed-field"><div class="ed-label">${label}</div>${desc}<select id="ed_${safeKey}" class="ed-select ed-async" data-oa="${esc(JSON.stringify(c.optionsApi))}" data-cv="${esc(String(val ?? ""))}"><option value="">Memuat opsi…</option></select></div>`;
+          }
+          return `<div class="ed-field"><div class="ed-label">${label}</div>${desc}<input id="ed_${safeKey}" class="ed-input" value="${esc(val ?? "")}"></div>`;
+        }
+
+        // Checkbox / multiselect
+        if (c.type === "checkbox" || c.type === "multiselect") {
+          const selected = Array.isArray(val)
+            ? val.map(String)
+            : val
+              ? [String(val)]
+              : [];
+          const opts = getOptions(c, answers, rp);
+          if (opts.length) {
+            const items = opts
+              .map(
+                (o) => `<label class="ed-check-item">
+              <input type="checkbox" name="ed_${safeKey}" value="${esc(o.value)}" ${selected.includes(String(o.value)) ? "checked" : ""}>
+              ${esc(o.label)}</label>`,
+              )
+              .join("");
+            return `<div class="ed-field"><div class="ed-label">${label}</div>${desc}<div class="ed-check-group">${items}</div></div>`;
+          }
+          if (c.optionsApi && c.optionsApi.url) {
+            return `<div class="ed-field"><div class="ed-label">${label}</div>${desc}<div id="ed_${safeKey}" class="ed-check-group ed-async" data-oa="${esc(JSON.stringify(c.optionsApi))}" data-cv="${esc(JSON.stringify(selected))}" data-multi="1"><span style="color:var(--muted);font-size:12px">Memuat opsi…</span></div></div>`;
+          }
+        }
+
+        // Boolean
+        if (c.type === "boolean") {
+          const items = [
+            { value: "true", label: "Ya" },
+            { value: "false", label: "Tidak" },
+          ]
+            .map(
+              (o) => `<label class="ed-radio-item">
+              <input type="radio" name="ed_${safeKey}" value="${o.value}" ${String(val) === o.value ? "checked" : ""}>
+              ${o.label}</label>`,
+            )
+            .join("");
+          return `<div class="ed-field"><div class="ed-label">${label}</div>${desc}<div class="ed-radio-group">${items}</div></div>`;
+        }
+
+        // Textarea
+        if (c.type === "textarea" || c.type === "text_long")
+          return `<div class="ed-field"><div class="ed-label">${label}</div>${desc}<textarea id="ed_${safeKey}" class="ed-textarea">${esc(val ?? "")}</textarea></div>`;
+
+        // Calculated — read-only
+        if (c.type === "calculated") {
+          const d = val == null || val === "" ? "—" : esc(String(val));
+          return `<div class="ed-field"><div class="ed-label">${label} <span style="font-size:10px;color:var(--muted)">(dihitung otomatis)</span></div>${desc}<div class="rv-answer">${d}</div></div>`;
+        }
+
+        // Photo / File / Signature — read-only preview saat edit
+        if (c.type === "photo" || c.type === "file" || c.type === "signature") {
+          const src = getMediaSource(val);
+          if (!src)
+            return `<div class="ed-field"><div class="ed-label">${label}</div>${desc}<div class="rv-answer empty">—</div></div>`;
+          if (isImageSrc(src))
+            return `<div class="ed-field"><div class="ed-label">${label} <span style="font-size:10px;color:var(--muted)">(tidak dapat diubah di sini)</span></div>${desc}<div class="rv-photo-wrap"><img class="rv-photo-img" src="${esc(src)}" onclick="openPhotoModal(this.src)" title="Klik untuk perbesar"></div></div>`;
+          const mime = (src.match(/^data:([^;]+)/) || [])[1] || "file";
+          return `<div class="ed-field"><div class="ed-label">${label}</div>${desc}<div class="rv-answer"><a href="${esc(src)}" download="file" style="color:var(--accent)">Unduh file (${esc(mime)})</a></div></div>`;
+        }
+
+        // Number / Integer / Decimal / Currency / Float
+        if (
+          c.type === "number" ||
+          c.type === "integer" ||
+          c.type === "decimal" ||
+          c.type === "currency" ||
+          c.type === "float"
+        ) {
+          const step = c.type === "integer" ? "1" : c.step || "any";
+          const unit = c.unit
+            ? ` <span style="font-size:12px;color:var(--muted)">${esc(c.unit)}</span>`
+            : "";
+          return `<div class="ed-field"><div class="ed-label">${label}${unit}</div>${desc}<input id="ed_${safeKey}" type="number" step="${step}" class="ed-input" value="${esc(val ?? "")}"></div>`;
+        }
+
+        // Range / Rating
+        if (c.type === "range" || c.type === "rating") {
+          const mn = c.min || 0,
+            mx = c.max || (c.type === "rating" ? 5 : 10);
+          return `<div class="ed-field"><div class="ed-label">${label}</div>${desc}<div style="display:flex;align-items:center;gap:10px"><input id="ed_${safeKey}" type="range" min="${mn}" max="${mx}" step="${c.step || 1}" value="${esc(val ?? mn)}" oninput="this.nextElementSibling.textContent=this.value" style="flex:1"><span style="min-width:28px;font-weight:600">${esc(String(val ?? mn))}</span></div></div>`;
+        }
+
+        // Date
+        if (c.type === "date")
+          return `<div class="ed-field"><div class="ed-label">${label}</div>${desc}<input id="ed_${safeKey}" type="date" class="ed-input" value="${esc(val ?? "")}"></div>`;
+
+        // Time
+        if (c.type === "time")
+          return `<div class="ed-field"><div class="ed-label">${label}</div>${desc}<input id="ed_${safeKey}" type="time" class="ed-input" value="${esc(val ?? "")}"></div>`;
+
+        // Datetime
+        if (c.type === "datetime")
+          return `<div class="ed-field"><div class="ed-label">${label}</div>${desc}<input id="ed_${safeKey}" type="datetime-local" class="ed-input" value="${esc(val ?? "")}"></div>`;
+
+        // Geopoint — read-only koordinat + peta
+        if (c.type === "geopoint") {
+          const g = parseGeoPoint(val);
+          const d = g ? `${g.lat.toFixed(6)}, ${g.lng.toFixed(6)}` : "—";
+          const map = g
+            ? `<div class="geo-map" data-lat="${g.lat}" data-lng="${g.lng}"></div>`
+            : "";
+          return `<div class="ed-field"><div class="ed-label">${label} <span style="font-size:10px;color:var(--muted)">(koordinat, tidak dapat diubah di sini)</span></div>${desc}<div class="rv-answer">${d}</div>${map}</div>`;
+        }
+
+        // Barcode — read-only
+        if (c.type === "barcode") {
+          const d = val == null || val === "" ? "—" : esc(String(val));
+          return `<div class="ed-field"><div class="ed-label">${label} <span style="font-size:10px;color:var(--muted)">(barcode)</span></div>${desc}<div class="rv-answer">${d}</div></div>`;
+        }
+
+        // Default text
+        return `<div class="ed-field"><div class="ed-label">${label}</div>${desc}<input id="ed_${safeKey}" class="ed-input" value="${esc(val ?? "")}"></div>`;
+      }
+
       function renderRoster(r, answers, rp) {
         rp = rp || "";
         const count = getRosterCount(r, answers, rp);
@@ -1520,6 +2010,8 @@
             html += `<div class="rv-row"><div class="rv-row-num">${rowLbl(i, childRp)}</div>${renderNodes(r.components || [], answers, childRp, rowHidden)}</div>`;
           }
         }
+        if (EDIT_MODE)
+          html += `<div class="roster-edit-note">Data roster tidak dapat diubah melalui tampilan ini.</div>`;
         return html + `</div>`;
       }
 
