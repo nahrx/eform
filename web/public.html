@@ -215,6 +215,46 @@ textarea.pv-in{width:100%;resize:vertical;min-height:72px}
 .resp-badge-ok{background:#dcfce7;color:#15803d}
 .btn-xs{padding:4px 10px;font-size:12px;border:1px solid var(--line);background:#fff;border-radius:6px;cursor:pointer;font-weight:600;white-space:nowrap}
 
+/* ---- Lihat Jawaban (overlay lihat-saja jawaban terkirim) ---- */
+.pvview-overlay{position:fixed;inset:0;z-index:150;background:var(--surface);display:flex;flex-direction:column;overflow:hidden}
+.rv-block{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px 18px;margin-bottom:14px}
+.rv-block-title{font-weight:700;font-size:14px;margin-bottom:12px;color:var(--ink)}
+.rv-section{border:1.5px solid var(--line);border-radius:9px;padding:12px 14px;margin-bottom:12px;background:var(--panel-2)}
+.rv-section-title{font-weight:600;font-size:13px;color:var(--ink-soft);margin-bottom:10px}
+.rv-field{padding:8px 0;border-bottom:1px solid var(--line-2);display:flex;flex-direction:column;gap:3px}
+.rv-field:last-child{border-bottom:none;padding-bottom:0}
+.rv-label{font-size:12px;color:var(--muted);font-weight:500}
+.rv-answer{font-size:13.5px;font-weight:500;color:var(--ink);word-break:break-word}
+.rv-answer.empty{color:var(--muted);font-style:italic;font-weight:400}
+.rv-answer-box{background:var(--surface);border:1px solid var(--line);border-radius:7px;padding:8px 11px;font-size:13px;color:var(--ink);min-height:36px;word-break:break-word}
+.rv-photo-wrap{display:flex;flex-direction:column;gap:6px}
+.rv-photo-img{display:block;max-width:100%;max-height:420px;border-radius:8px;border:1px solid var(--line);background:#fff;object-fit:contain;box-shadow:0 1px 2px rgba(19,23,30,.06)}
+.rv-photo-link{font-size:12px;color:var(--accent-ink);text-decoration:none;font-weight:600;word-break:break-all}
+.rv-choice-list{display:flex;flex-direction:column;gap:5px;margin-top:2px}
+.rv-choice-item{display:flex;align-items:center;gap:8px;font-size:13px;padding:5px 10px;border-radius:6px}
+.rv-choice-item.selected{background:var(--accent-soft);color:var(--accent-ink);font-weight:600}
+.rv-choice-item.unsel{color:var(--muted)}
+.rv-choice-icon{width:16px;height:16px;border-radius:50%;border:2px solid;display:flex;align-items:center;justify-content:center;flex:none}
+.rv-choice-item.selected .rv-choice-icon{border-color:var(--accent);background:var(--accent)}
+.rv-choice-item.unsel .rv-choice-icon{border-color:var(--line)}
+.rv-choice-item.selected .rv-choice-icon::after{content:"";width:6px;height:6px;border-radius:50%;background:#fff}
+.rv-checkbox-icon{width:16px;height:16px;border-radius:4px;border:2px solid;display:flex;align-items:center;justify-content:center;flex:none}
+.rv-choice-item.selected .rv-checkbox-icon{border-color:var(--accent);background:var(--accent)}
+.rv-choice-item.unsel .rv-checkbox-icon{border-color:var(--line)}
+.rv-choice-item.selected .rv-checkbox-icon::after{content:"✓";font-size:10px;color:#fff;font-weight:700}
+.rv-roster{border:1.5px dashed var(--roster);border-radius:10px;padding:14px;margin-bottom:14px;background:#eefaf3}
+.rv-roster-title{font-weight:700;font-size:13.5px;color:var(--roster);margin-bottom:10px}
+.rv-row{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-bottom:8px}
+.rv-row:last-child{margin-bottom:0}
+.rv-row-num{font-family:var(--mono);font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:8px}
+.rv-empty{font-size:12.5px;color:var(--muted);font-style:italic}
+.rv-note{font-size:13px;line-height:1.6;color:var(--ink-soft);padding:8px 0;border-bottom:1px solid var(--line-2)}
+.rv-note:last-child{border-bottom:none}
+.rv-note p,.rv-note ul,.rv-note ol{margin:2px 0 6px}
+.rv-note ul,.rv-note ol{padding-left:20px}
+.rv-note code{background:var(--panel-2);padding:1px 4px;border-radius:3px;font-size:12px;font-family:var(--mono)}
+.rv-note blockquote{border-left:3px solid var(--line);margin:4px 0;padding-left:10px;color:var(--muted)}
+
 /* ---- init / password gate ---- */
 .init-wrap{display:flex;align-items:center;justify-content:center;height:100vh;background:var(--surface)}
 .init-msg{font-size:13px;color:var(--muted)}
@@ -763,6 +803,9 @@ function renderMyResponsesList(meta,responses){
     const badge=isDraft
       ?`<span class="resp-badge resp-badge-draft">Draf</span>`
       :`<span class="resp-badge resp-badge-ok">Terkirim</span>`;
+    // Jawaban yang sudah terkirim tetap bisa dilihat kapan saja, terlepas dari
+    // ALLOW (share ditutup) — hanya "Batalkan Submit" yang perlu share masih aktif.
+    const viewBtn=!isDraft?`<button class="btn btn-xs" onclick="viewSubmittedResponse('${esc(r.id)}')">Lihat Jawaban</button>`:"";
     const action=isDraft
       ?`<button class="btn btn-xs" onclick="editDraftResponseById('${esc(r.id)}')">Lanjutkan</button>`
       :`<button class="btn btn-xs" onclick="unsubmitResponseAPI('${r.id}')">Batalkan Submit</button>`;
@@ -770,6 +813,7 @@ function renderMyResponsesList(meta,responses){
       <div class="resp-item-left"><span class="resp-num">Respons ${responses.length-i}</span>${badge}</div>
       <div class="resp-item-right">
         <span class="resp-date">${isDraft?"Draf · "+fmt(r.submittedAt):fmt(r.submittedAt)}</span>
+        ${viewBtn}
         ${ALLOW?action:""}
       </div>
     </div>`;
@@ -810,6 +854,342 @@ function editDraftResponse(resp){
   clearDraft();saveDraft(); // sinkronkan ke localStorage juga
   render({title:txt(SCHEMA?.title)||"Kuesioner",schema:SCHEMA});
   goToPage(0);
+}
+
+/* ==================== Lihat Jawaban (mode lihat-saja untuk responden) ====================
+   Dipakai dari daftar respons (multi-response) supaya responden bisa melihat isi jawaban
+   yang sudah terkirim tanpa perlu Batalkan Submit dulu. Sengaja dibuat terpisah dari mesin
+   render form pengisian (yang terikat erat ke variabel global `answers` yang sedang aktif
+   diisi) — supaya tidak mengganggu draft yang sedang dikerjakan. Meniru pola rv-* yang
+   sudah dipakai di response-view.html/portal-response-view.html (read-only + skip-to). */
+let VIEW_RESP=null,VIEW_ANSWERS={},VIEW_PAGES=[],VIEW_VISITED=[],VIEW_CUR=0;
+const VIEW_CHOICE_TYPES=new Set(["select","multiselect","radio","checkbox"]);
+
+function viewRefResolve(name,rowPrefix,ans){
+  name=String(name).trim();
+  if(rowPrefix){const k=rowPrefix+name;if(k in ans)return coerceVal(ans[k]);}
+  return name in ans?coerceVal(ans[name]):undefined;
+}
+function viewEvalVisible(src,rowPrefix,ans){
+  if(!src)return true;
+  const v=Expr.evalSrc(src,name=>viewRefResolve(name,rowPrefix||"",ans));
+  return v===undefined?true:!!v;
+}
+function viewRowInterp(text,ans,rowPrefix){
+  if(!text)return text;
+  return String(text).replace(INTERP_RE,(_,a,b)=>{
+    const n=(a||b).trim();
+    if(n==="index"){const idx=indexFromScopePrefix(rowPrefix);return idx!=null?String(idx):"";}
+    const k=(rowPrefix||"")+n;
+    if(k in ans)return String(ans[k]);
+    if(n in ans)return String(ans[n]);
+    return "";
+  });
+}
+function viewNodeContainsName(node,target){if(node.name===target)return true;return (node.components||[]).some(c=>viewNodeContainsName(c,target));}
+function viewPageIndexOfTarget(target,pages){
+  if(!target||target==="__next"||target==="__prev")return null;
+  if(target==="__end")return pages.length-1;
+  for(let i=0;i<pages.length;i++){if(viewNodeContainsName(pages[i],target))return i;}
+  return null;
+}
+function viewFieldSkipTarget(f,ans,rp){
+  rp=rp||"";
+  for(const s of f.skips||[]){
+    if(!s.when||!s.to)continue;
+    if(viewEvalVisible(s.when,rp,ans))return s.to;
+  }
+  if(VIEW_CHOICE_TYPES.has(f.type)&&Array.isArray(f.options)){
+    const v=ans[rp+f.name];
+    const sel=Array.isArray(v)?v.map(String):[String(v)];
+    for(const o of f.options){if(o.skipTo&&sel.includes(String(o.value)))return o.skipTo;}
+  }
+  return null;
+}
+function viewFlatFields(node){
+  const fields=[];
+  (function walk(n){(n.components||[]).forEach(c=>{if(c.kind==="field")fields.push(c);else if(c.kind!=="roster")walk(c);});})(node);
+  return fields;
+}
+function viewComputePageSkipState(page,ans){
+  const hidden=new Set();
+  const fields=viewFlatFields(page);
+  let skipActive=false,skipTarget=null,crossPageTarget=null;
+  for(const f of fields){
+    if(skipActive){
+      if(f.name===skipTarget){skipActive=false;skipTarget=null;}
+      else{hidden.add(f.name);continue;}
+    }
+    const t=viewFieldSkipTarget(f,ans,"");
+    if(t&&t!=="__next"){
+      if(viewNodeContainsName(page,t)&&t!==f.name){skipActive=true;skipTarget=t;}
+      else{skipActive=true;skipTarget=null;crossPageTarget=t;}
+    }
+  }
+  return{hidden,crossPageTarget:skipActive?crossPageTarget:null};
+}
+function viewComputeRosterRowSkipState(roster,rowIdx,ans,parentRp){
+  const rp=rosterRowPrefix(roster,rowIdx,parentRp||"");
+  const allRowFields=viewFlatFields(roster);
+  const allNames=new Set(allRowFields.map(f=>f.name));
+  const hidden=new Set();
+  let skipActive=false,skipTarget=null;
+  for(const f of allRowFields){
+    if(skipActive){
+      if(skipTarget&&f.name===skipTarget){skipActive=false;skipTarget=null;}
+      else{hidden.add(f.name);continue;}
+    }
+    const t=viewFieldSkipTarget(f,ans,rp);
+    if(t==="__end"){skipActive=true;skipTarget=null;}
+    else if(t&&allNames.has(t)&&t!==f.name){skipActive=true;skipTarget=t;}
+  }
+  return hidden;
+}
+function viewComputeVisitedPages(pages,ans){
+  const visited=[];const guard=new Set();let idx=0;
+  while(idx>=0&&idx<pages.length&&!guard.has(idx)){
+    guard.add(idx);
+    if(!viewEvalVisible(pages[idx].visibleWhen,"",ans)){idx+=1;continue;}
+    visited.push(idx);
+    const{crossPageTarget}=viewComputePageSkipState(pages[idx],ans);
+    if(crossPageTarget){
+      const t=viewPageIndexOfTarget(crossPageTarget,pages);
+      if(t!=null&&t>idx){idx=t;continue;}
+    }
+    idx+=1;
+  }
+  return visited;
+}
+function viewGetRosterCount(r,ans,rowPrefix){
+  const from=String(r.countFrom||"").trim();
+  if(from){
+    const raw=(rowPrefix&&(rowPrefix+from) in ans)?ans[rowPrefix+from]:ans[from];
+    const cf=Math.floor(Number(raw));
+    if(!Number.isFinite(cf)||cf<0)return 0;
+    if(r.max!=null&&r.max!==""&&cf>Number(r.max))return Number(r.max);
+    return cf;
+  }
+  const stored=ans[rosterCountKey(r,rowPrefix)];
+  if(stored!=null){const n=Math.floor(Number(stored));return Number.isFinite(n)&&n>=0?n:0;}
+  let max=-1;
+  const prefix=rosterScopePrefix(r,rowPrefix);
+  for(const k of Object.keys(ans)){
+    if(k.startsWith(prefix)&&k!==rosterCountKey(r,rowPrefix)){
+      const m=k.slice(prefix.length).match(/^(\d+)#/);
+      if(m)max=Math.max(max,+m[1]);
+    }
+  }
+  return max+1;
+}
+function viewBuildApiUrl(urlTpl,ans,rp){
+  return urlTpl.replace(/\{([^}]+)\}/g,(_,k)=>encodeURIComponent((rp?(ans[rp+k]??ans[k]):ans[k])??''));
+}
+async function prefetchViewApiOptions(ans){
+  const jobs=new Map();
+  function collect(comps,rp){
+    (comps||[]).forEach(c=>{
+      if(c.kind==="block"||c.kind==="section")collect(c.components||[],rp);
+      else if(c.kind==="roster"){
+        const count=viewGetRosterCount(c,ans,rp);
+        for(let i=0;i<count;i++)collect(c.components||[],rosterRowPrefix(c,i,rp));
+      }else if(c.optionsApi&&c.optionsApi.url){
+        const url=viewBuildApiUrl(c.optionsApi.url,ans,rp);
+        if(url&&!apiCache[url])jobs.set(url,c.optionsApi);
+      }
+    });
+  }
+  (VIEW_PAGES||[]).forEach(pg=>collect(pg.components||[],""));
+  await Promise.all([...jobs.entries()].map(async([url,cfg])=>{
+    try{
+      const r=await fetch("/api/options-proxy?url="+encodeURIComponent(url));
+      const d=await r.json();
+      let arr=cfg.path?getPath(d,cfg.path):(Array.isArray(d)?d:(d.data||d.items||d.results||[]));
+      const vf=cfg.valueField||"code",lf=cfg.labelField||"label";
+      apiCache[url]=(arr||[]).map(it=>({value:it[vf],label:txt(it[lf])||String(it[vf])}));
+    }catch(e){}
+  }));
+}
+function getViewOptions(c,ans,rp){
+  const opts=[];
+  const refKey=c.optionsRef||c.optionsTable;
+  if(refKey&&SCHEMA){
+    const t=(SCHEMA.referenceData||{})[refKey];
+    if(t&&t.items)t.items.forEach(it=>opts.push({value:String(it.code),label:txt(it.label)}));
+  }
+  if(!opts.length&&c.options)
+    c.options.forEach(o=>opts.push({value:String(o.value),label:txt(o.label)||String(o.value)}));
+  if(!opts.length&&c.optionsApi&&c.optionsApi.url){
+    const url=viewBuildApiUrl(c.optionsApi.url,ans,rp);
+    const cached=apiCache[url];
+    if(cached)cached.forEach(o=>opts.push(o));
+  }
+  return opts;
+}
+function renderViewNodes(comps,ans,rp,hiddenNames){
+  return (comps||[]).map(c=>renderViewNode(c,ans,rp,hiddenNames)).join("");
+}
+function renderViewNode(c,ans,rp,hiddenNames){
+  if(!viewEvalVisible(c.visibleWhen,rp,ans))return"";
+  if(c.kind==="field"&&hiddenNames&&hiddenNames.has(c.name))return"";
+  if(c.kind==="block")
+    return `<div class="rv-block">${c.title?`<div class="rv-block-title">${esc(viewRowInterp(txt(c.title),ans,rp))}</div>`:""}${renderViewNodes(c.components||[],ans,rp,hiddenNames)}</div>`;
+  if(c.kind==="section")
+    return `<div class="rv-section">${c.title?`<div class="rv-section-title">${esc(viewRowInterp(txt(c.title),ans,rp))}</div>`:""}${renderViewNodes(c.components||[],ans,rp,hiddenNames)}</div>`;
+  if(c.kind==="roster")return renderViewRoster(c,ans,rp);
+  return renderViewField(c,ans,rp);
+}
+function renderViewField(c,ans,rp){
+  if(c.type==="hidden")return"";
+  if(c.type==="note")return c.html?`<div class="rv-note">${sanitizeHtml(txt(c.html))}</div>`:"";
+  if(c.type==="markdown")return c.markdown?`<div class="rv-note rv-md">${mdToHtml(txt(c.markdown))}</div>`:"";
+  const key=rp+c.name;
+  const val=ans[key];
+  const label=esc(viewRowInterp(txt(c.label)||c.name,ans,rp));
+  const desc=c.description?`<div style="font-size:12px;color:var(--muted);margin-bottom:2px">${esc(viewRowInterp(txt(c.description),ans,rp))}</div>`:"";
+
+  if(c.type==="radio"){
+    const opts=getViewOptions(c,ans,rp);
+    if(opts.length){
+      const items=opts.map(o=>{
+        const sel=String(val)===String(o.value);
+        return `<div class="rv-choice-item ${sel?"selected":"unsel"}"><span class="rv-choice-icon"></span>${esc(o.label)}</div>`;
+      }).join("");
+      return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-choice-list">${items||"—"}</div></div>`;
+    }
+    if(val!=null&&val!=="")return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer">${esc(String(val))}</div></div>`;
+  }
+  if(c.type==="select"){
+    const opts=getViewOptions(c,ans,rp);
+    const found=opts.find(o=>String(o.value)===String(val));
+    const display=found?found.label:(val!=null&&val!==""?String(val):null);
+    return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer${display==null?" empty":""}">${display!=null?esc(display):"—"}</div></div>`;
+  }
+  if(c.type==="checkbox"||c.type==="multiselect"){
+    const selected=Array.isArray(val)?val.map(String):(val?[String(val)]:[]);
+    const opts=getViewOptions(c,ans,rp);
+    if(opts.length){
+      const items=opts.map(o=>{
+        const sel=selected.includes(String(o.value));
+        return `<div class="rv-choice-item ${sel?"selected":"unsel"}"><span class="rv-checkbox-icon"></span>${esc(o.label)}</div>`;
+      }).join("");
+      return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-choice-list">${items}</div></div>`;
+    }
+    const display=selected.length?selected.join(", "):"—";
+    return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer-box">${esc(display)}</div></div>`;
+  }
+  if(c.type==="boolean"){
+    const items=[{value:"true",label:"Ya"},{value:"false",label:"Tidak"}].map(o=>{
+      const sel=String(val)===o.value;
+      return `<div class="rv-choice-item ${sel?"selected":"unsel"}"><span class="rv-choice-icon"></span>${o.label}</div>`;
+    }).join("");
+    return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-choice-list">${items}</div></div>`;
+  }
+  if(c.type==="geopoint"){
+    const g=parseGeoPoint(val);
+    const coordText=g?`${g.lat.toFixed(6)}, ${g.lng.toFixed(6)}`:"—";
+    const map=g?`<div class="geo-map" data-lat="${g.lat}" data-lng="${g.lng}"></div>`:"";
+    return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer${g?"":" empty"}">${esc(coordText)}</div>${map}</div>`;
+  }
+  if(c.type==="photo"||c.type==="image"||c.type==="signature"||(c.type==="file"&&isImageSrc(getMediaSource(val)))){
+    const src=getMediaSource(val);
+    if(!src)return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer-box"><span style="color:var(--muted);font-style:italic">—</span></div></div>`;
+    const alt=esc(viewRowInterp(txt(c.label)||c.name,ans,rp));
+    return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-photo-wrap"><a class="rv-photo-link" href="${esc(src)}" target="_blank" rel="noreferrer">Buka gambar</a><img class="rv-photo-img" src="${esc(src)}" alt="${alt}"></div></div>`;
+  }
+  if(c.type==="file"){
+    const src=getMediaSource(val);
+    if(!src)return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer empty">—</div></div>`;
+    const mime=(src.match(/^data:([^;]+)/)||[])[1]||"file";
+    return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer"><a href="${esc(src)}" download="file" style="color:var(--accent)">Unduh file (${esc(mime)})</a></div></div>`;
+  }
+  const display=val==null||val===""?null:String(val);
+  const isEmpty=display==null;
+  if(c.type==="textarea"||c.type==="text_long")
+    return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer-box">${isEmpty?`<span style="color:var(--muted);font-style:italic">—</span>`:esc(display)}</div></div>`;
+  return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer${isEmpty?" empty":""}">${isEmpty?"—":esc(display)}</div></div>`;
+}
+function renderViewRoster(r,ans,rp){
+  rp=rp||"";
+  const count=viewGetRosterCount(r,ans,rp);
+  const title=esc(viewRowInterp(txt(r.title)||r.name,ans,rp));
+  let html=`<div class="rv-roster"><div class="rv-roster-title">${title} <span style="font-weight:400;font-size:12px">(${count} baris)</span></div>`;
+  if(count<=0){html+=`<div class="rv-empty">Tidak ada data</div>`;}
+  else{
+    const rowLbl=(i,childRp)=>r.rowTitle?`${esc(viewRowInterp(txt(r.rowTitle),ans,childRp))} #${i+1}`:`Baris #${i+1}`;
+    for(let i=0;i<count;i++){
+      const childRp=rosterRowPrefix(r,i,rp);
+      const rowHidden=viewComputeRosterRowSkipState(r,i,ans,rp);
+      html+=`<div class="rv-row"><div class="rv-row-num">${rowLbl(i,childRp)}</div>${renderViewNodes(r.components||[],ans,childRp,rowHidden)}</div>`;
+    }
+  }
+  return html+`</div>`;
+}
+function renderViewFlatAnswers(ans){
+  const entries=Object.entries(ans).filter(([k])=>!k.includes("#"));
+  if(!entries.length)return `<div class="rv-block"><div class="rv-empty">Tidak ada data</div></div>`;
+  return `<div class="rv-block">`+entries.map(([k,v])=>
+    `<div class="rv-field"><div class="rv-label" style="font-family:var(--mono);font-size:11.5px">${esc(k)}</div><div class="rv-answer">${esc(Array.isArray(v)?v.join(", "):String(v??""))}</div></div>`
+  ).join("")+`</div>`;
+}
+
+async function viewSubmittedResponse(id){
+  const r=_responseMap[id];
+  if(!r)return;
+  VIEW_RESP=r;
+  VIEW_ANSWERS=parseAnswers(r.answers);
+  VIEW_PAGES=(SCHEMA&&SCHEMA.pages)||[];
+  openViewOverlay();
+  await prefetchViewApiOptions(VIEW_ANSWERS);
+  if(!document.getElementById("pvViewOverlay"))return; // ditutup sebelum prefetch selesai
+  VIEW_VISITED=viewComputeVisitedPages(VIEW_PAGES,VIEW_ANSWERS);
+  VIEW_CUR=VIEW_VISITED.length?VIEW_VISITED[0]:0;
+  renderViewPage();
+}
+function openViewOverlay(){
+  if(document.getElementById("pvViewOverlay"))return;
+  const ovl=document.createElement("div");
+  ovl.className="pvview-overlay";
+  ovl.id="pvViewOverlay";
+  ovl.innerHTML=`<div class="pv-bar">
+      <span class="pv-title">${esc(txt(SCHEMA?.title)||"Kuesioner")}</span>
+      <button class="btn" onclick="closeResponseViewer()">✕ Tutup</button>
+    </div>
+    <div class="pv-body" id="pvViewBody"><div style="padding:40px;text-align:center;color:var(--muted)">Memuat…</div></div>
+    <div class="pv-nav-area" id="pvViewFootArea" hidden><div class="pv-nav" id="pvViewFoot"></div></div>`;
+  document.body.appendChild(ovl);
+}
+function closeResponseViewer(){
+  document.getElementById("pvViewOverlay")?.remove();
+  VIEW_RESP=null;VIEW_ANSWERS={};VIEW_PAGES=[];VIEW_VISITED=[];VIEW_CUR=0;
+}
+function viewGoPage(idx){
+  VIEW_CUR=idx;
+  renderViewPage();
+}
+function renderViewPage(){
+  const body=document.getElementById("pvViewBody");
+  if(!body)return; // overlay sudah ditutup
+  const ans=VIEW_ANSWERS,pages=VIEW_PAGES,visited=VIEW_VISITED;
+  const visIdx=Math.max(0,visited.indexOf(VIEW_CUR));
+  let html="";
+  if(pages.length){
+    const p=pages[VIEW_CUR]||pages[0];
+    const hiddenNames=viewComputePageSkipState(p,ans).hidden;
+    html=`<div class="pv-page"><h2 class="pv-h2">${esc(viewRowInterp(txt(p.title)||p.name||"Halaman "+(VIEW_CUR+1),ans,""))}</h2><div class="pv-card">${renderViewNodes(p.components||[],ans,"",hiddenNames)}</div></div>`;
+  }else{
+    html=`<div class="pv-page">${renderViewFlatAnswers(ans)}</div>`;
+  }
+  body.innerHTML=html;
+  const footArea=document.getElementById("pvViewFootArea"),foot=document.getElementById("pvViewFoot");
+  if(visited.length>1){
+    footArea.hidden=false;
+    foot.innerHTML=`<button class="btn" ${visIdx===0?"disabled":""} onclick="viewGoPage(${visited[Math.max(0,visIdx-1)]})">← Sebelumnya</button>`+
+      `<span class="pv-prog">Halaman ${visIdx+1} / ${visited.length}</span>`+
+      `<button class="btn" ${visIdx>=visited.length-1?"disabled":""} onclick="viewGoPage(${visited[Math.min(visited.length-1,visIdx+1)]})">Selanjutnya →</button>`;
+  }else{
+    footArea.hidden=true;
+  }
+  body.scrollTop=0;
 }
 
 function pvDialog(msg,onConfirm,opts){
@@ -986,6 +1366,19 @@ function parseGeoPoint(val){
   if(!Number.isFinite(lat)||!Number.isFinite(lng))return null;
   if(lat<-90||lat>90||lng<-180||lng>180)return null;
   return{lat,lng};
+}
+// Dipakai renderViewField (mode Lihat Jawaban) untuk field foto/file/tanda tangan.
+function getMediaSource(val){
+  if(!val)return "";
+  if(Array.isArray(val))return getMediaSource(val[0]);
+  if(typeof val==="object")return getMediaSource(val.dataUrl||val.url||val.src||val.value||val.base64||"");
+  const s=String(val);
+  if(/^data:image\//i.test(s)||/^data:application\//i.test(s))return s;
+  if(/^https?:\/\//i.test(s)||s.startsWith("/")||s.startsWith("blob:"))return s;
+  return s.startsWith("base64,")?"data:image/*;base64,"+s.slice(7):"";
+}
+function isImageSrc(src){
+  return /^data:image\//i.test(src)||/\.(jpe?g|png|gif|webp|bmp|svg)(\?.*)?$/i.test(src);
 }
 function fieldHtml(c,rp,scopes){
   rp=rp||"";
