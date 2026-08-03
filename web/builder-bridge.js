@@ -111,8 +111,9 @@
         e.stopPropagation();
         dropdown.hidden = !dropdown.hidden;
       });
-      document.addEventListener("click", function () { dropdown.hidden = true; });
-      dropdown.addEventListener("click", function (e) { e.stopPropagation(); });
+      document.addEventListener("click", function (e) {
+        if (!dropdown.hidden && !dropdown.contains(e.target)) dropdown.hidden = true;
+      });
     }
   });
 })();

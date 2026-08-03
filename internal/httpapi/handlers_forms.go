@@ -269,6 +269,22 @@ func (s *Server) revokeShare(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"revoked": true})
 }
 
+func (s *Server) reactivateShare(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.ensureShareAccess(w, r, r.PathValue("id")); !ok {
+		return
+	}
+	err := s.st.ReactivateShare(r.Context(), r.PathValue("id"))
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "share tidak ditemukan")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal mengaktifkan share")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"reactivated": true})
+}
+
 func (s *Server) updateShare(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.ensureShareAccess(w, r, r.PathValue("id")); !ok {
 		return
@@ -595,6 +611,27 @@ func (s *Server) updateResponse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+}
+
+// suggestedFieldValues mengembalikan nilai unik yang benar-benar pernah terisi untuk satu
+// variabel — dipakai sebagai saran (datalist) saat mengisi nilai filter di dialog
+// tambah/kelola akses massal, khusus untuk variabel tanpa daftar pilihan tetap.
+func (s *Server) suggestedFieldValues(w http.ResponseWriter, r *http.Request) {
+	formID := r.PathValue("id")
+	if _, ok := s.ensureFormAccess(w, r, formID); !ok {
+		return
+	}
+	fieldName := r.PathValue("fieldName")
+	if fieldName == "" {
+		writeErr(w, http.StatusBadRequest, "nama variabel wajib diisi")
+		return
+	}
+	values, err := s.st.GetDistinctFieldValues(r.Context(), formID, fieldName)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"values": values})
 }
 
 func (s *Server) exportResponses(w http.ResponseWriter, r *http.Request) {

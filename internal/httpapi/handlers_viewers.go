@@ -145,6 +145,33 @@ func (s *Server) listFormViewerPermissions(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, map[string]any{"permissions": perms})
 }
 
+// exportViewerPermissionsCSV mengunduh daftar akses viewer satu kuesioner sebagai CSV
+// (untuk arsip/edit di Excel — bukan untuk diimpor balik langsung karena field_filters
+// bisa berisi lebih dari satu variabel).
+func (s *Server) exportViewerPermissionsCSV(w http.ResponseWriter, r *http.Request) {
+	formID := r.PathValue("id")
+	if _, ok := s.ensureFormAccess(w, r, formID); !ok {
+		return
+	}
+	perms, err := s.st.ListFormViewerPermissions(r.Context(), formID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		return
+	}
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", "attachment; filename=\"viewer-permissions-"+formID+".csv\"")
+	cw := csv.NewWriter(w)
+	_ = cw.Write([]string{"username", "respondent_access", "visible_fields", "field_filters"})
+	for _, p := range perms {
+		ff := make([]string, 0, len(p.FieldFilters))
+		for k, v := range p.FieldFilters {
+			ff = append(ff, k+"="+v)
+		}
+		_ = cw.Write([]string{p.ViewerUsername, p.RespondentAccess, strings.Join(p.VisibleFields, ";"), strings.Join(ff, ";")})
+	}
+	cw.Flush()
+}
+
 func (s *Server) getViewerPermission(w http.ResponseWriter, r *http.Request) {
 	p, err := s.st.GetViewerPermissionByID(r.Context(), r.PathValue("permId"))
 	if errors.Is(err, store.ErrNotFound) {
@@ -222,6 +249,143 @@ func (s *Server) deleteViewerPermission(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+/* ================================================================
+   SUPERADMIN — bulk assign/hapus permission viewer (banyak sekaligus)
+   ================================================================ */
+
+// bulkAssignViewerPermissions memberi/memperbarui akses viewer ke satu kuesioner
+// untuk banyak akun sekaligus (dibuat otomatis jika emailnya belum terdaftar).
+// Setiap baris independen — satu baris gagal tidak menggagalkan baris lain.
+func (s *Server) bulkAssignViewerPermissions(w http.ResponseWriter, r *http.Request) {
+	formID := r.PathValue("id")
+	if _, ok := s.ensureFormAccess(w, r, formID); !ok {
+		return
+	}
+	var in struct {
+		Items []struct {
+			Email            string            `json:"email"`
+			Note             string            `json:"note"`
+			RespondentAccess string            `json:"respondentAccess"`
+			VisibleFields    []string          `json:"visibleFields"`
+			FieldFilters     map[string]string `json:"fieldFilters"`
+		} `json:"items"`
+	}
+	if err := decodeJSON(r, &in); err != nil {
+		writeErr(w, http.StatusBadRequest, "format permintaan salah")
+		return
+	}
+	createdBy := userFrom(r.Context()).Subject
+	results := make([]map[string]any, len(in.Items))
+	for i, item := range in.Items {
+		res := map[string]any{"index": i}
+		email := strings.TrimSpace(strings.ToLower(item.Email))
+		res["email"] = email
+		if email == "" {
+			res["status"] = "error"
+			res["error"] = "email wajib diisi"
+			results[i] = res
+			continue
+		}
+		u, err := s.st.GetUserByUsername(r.Context(), email)
+		if errors.Is(err, store.ErrNotFound) {
+			b := make([]byte, 24)
+			if _, rerr := rand.Read(b); rerr != nil {
+				res["status"] = "error"
+				res["error"] = "gagal membuat password acak"
+				results[i] = res
+				continue
+			}
+			hash, herr := auth.HashPassword(base64.RawURLEncoding.EncodeToString(b))
+			if herr != nil {
+				res["status"] = "error"
+				res["error"] = "gagal memproses password"
+				results[i] = res
+				continue
+			}
+			u, err = s.st.CreateUser(r.Context(), email, email, hash, "viewer", strings.TrimSpace(item.Note))
+			if err != nil {
+				res["status"] = "error"
+				res["error"] = "gagal membuat akun viewer"
+				results[i] = res
+				continue
+			}
+		} else if err != nil {
+			res["status"] = "error"
+			res["error"] = "gagal memeriksa akun"
+			results[i] = res
+			continue
+		} else if u.Role != "viewer" {
+			res["status"] = "error"
+			res["error"] = "email terdaftar sebagai role lain (" + u.Role + ")"
+			results[i] = res
+			continue
+		}
+		res["viewerId"] = u.ID
+		respondentAccess := item.RespondentAccess
+		if respondentAccess != "all" && respondentAccess != "selected" {
+			respondentAccess = "all"
+		}
+		existing, err := s.st.GetViewerPermission(r.Context(), u.ID, formID)
+		if errors.Is(err, store.ErrNotFound) {
+			p, cerr := s.st.CreateViewerPermission(r.Context(), u.ID, formID, respondentAccess, item.VisibleFields, item.FieldFilters, &createdBy)
+			if cerr != nil {
+				res["status"] = "error"
+				res["error"] = "gagal membuat akses"
+				results[i] = res
+				continue
+			}
+			res["status"] = "created"
+			res["permissionId"] = p.ID
+		} else if err != nil {
+			res["status"] = "error"
+			res["error"] = "gagal memeriksa akses"
+			results[i] = res
+			continue
+		} else {
+			p, uerr := s.st.UpdateViewerPermission(r.Context(), existing.ID, respondentAccess, item.VisibleFields, item.FieldFilters)
+			if uerr != nil {
+				res["status"] = "error"
+				res["error"] = "gagal memperbarui akses"
+				results[i] = res
+				continue
+			}
+			res["status"] = "updated"
+			res["permissionId"] = p.ID
+		}
+		results[i] = res
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"results": results})
+}
+
+// bulkDeleteViewerPermissions menghapus banyak permission viewer sekaligus untuk satu kuesioner.
+func (s *Server) bulkDeleteViewerPermissions(w http.ResponseWriter, r *http.Request) {
+	formID := r.PathValue("id")
+	if _, ok := s.ensureFormAccess(w, r, formID); !ok {
+		return
+	}
+	var in struct {
+		PermissionIDs []string `json:"permissionIds"`
+	}
+	if err := decodeJSON(r, &in); err != nil {
+		writeErr(w, http.StatusBadRequest, "format permintaan salah")
+		return
+	}
+	results := make([]map[string]any, 0, len(in.PermissionIDs))
+	for _, id := range in.PermissionIDs {
+		perm, err := s.st.GetViewerPermissionByID(r.Context(), id)
+		if err != nil || perm.FormID != formID {
+			results = append(results, map[string]any{"id": id, "status": "error", "error": "permission tidak ditemukan"})
+			continue
+		}
+		if err := s.st.DeleteViewerPermission(r.Context(), id); err != nil {
+			results = append(results, map[string]any{"id": id, "status": "error", "error": "gagal menghapus"})
+			continue
+		}
+		results = append(results, map[string]any{"id": id, "status": "deleted"})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"results": results})
 }
 
 /* ================================================================

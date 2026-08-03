@@ -111,6 +111,16 @@
     "Teks panjang": "Long text",
     "Teks singkat": "Short text",
     "Titik GPS": "GPS point",
+    "Angka": "Number",
+    "Desimal": "Decimal",
+    "Terhitung": "Calculated",
+    "Tersembunyi": "Hidden",
+    "Ya/Tidak": "Yes/No",
+    "Tanggal": "Date",
+    "Jam": "Time",
+    "Tanggal+jam": "Date+time",
+    "Foto": "Photo",
+    "Berkas": "File",
     "Daftar baris di halaman utama; isi tiap baris di halaman terpisah.": "List rows on the main page; fill each row on a separate page.",
     "Input di halaman yang sama.": "Input on the same page.",
     "Seret Block ke halaman ini": "Drag a Block onto this page",
@@ -127,6 +137,125 @@
     "warning — boleh lanjut": "warning — can continue",
     "scan / ketik kode": "scan / type code",
     "(keterangan kosong)": "(empty label)",
+    "tanpa label": "no label",
+    "judul block (opsional)": "block title (optional)",
+    "judul section (opsional)": "section title (optional)",
+    "judul page (opsional)": "page title (optional)",
+    "judul roster (opsional)": "roster title (optional)",
+    "Pilihan": "Choices",
+    "Lainnya": "Other",
+    "Block → Section → field. Roster bisa di Block/Section. Section bisa di dalam Roster. Inline tampil di halaman ini; subhalaman muncul di panel Halaman.":
+      "Block → Section → field. Roster can be inside a Block/Section. Section can be inside a Roster. Inline shows on this page; subpage appears in the Pages panel.",
+    "Template baris roster": "Roster row template",
+    "buka →": "open →",
+
+    // ---- builder: panel properti — field/page/block/section/roster ----
+    "Nama (dataKey) ": "Name (dataKey) ",
+    "Nama (dataKey)": "Name (dataKey)",
+    "unik, kolom output": "unique, output column",
+    "otomatis & unik, bisa diubah": "automatic & unique, can be changed",
+    "unik": "unique",
+    "Tampil bila (visibleWhen)": "Visible when (visibleWhen)",
+    "Label pertanyaan": "Question label",
+    "Petunjuk (hint)": "Hint",
+    "Konten HTML": "HTML content",
+    "# Petunjuk Pengisian\n\nIsi sesuai **kondisi sebenarnya**. Lihat:\n- poin pertama\n- poin kedua\n\n> Catatan penting.":
+      "# Filling Instructions\n\nFill in according to **actual conditions**. See:\n- first point\n- second point\n\n> Important note.",
+    "Mendukung: # judul, **tebal**, *miring*, `kode`, list (- / 1.), > kutipan, [teks](url), --- garis.":
+      "Supports: # heading, **bold**, *italic*, `code`, list (- / 1.), > quote, [text](url), --- line.",
+    "Rumus (calculate)": "Formula (calculate)",
+    "Autofill — isi otomatis tapi bisa diedit": "Autofill — filled automatically but can be edited",
+    "Min": "Min",
+    "Maks": "Max",
+    "Satuan": "Unit",
+    "Dari": "From",
+    "Sampai": "To",
+    "Pola (regex)": "Pattern (regex)",
+    "Nilai awal (default)": "Default value",
+    "— tidak ada —": "— none —",
+    "Perilaku": "Behavior",
+    "Wajib diisi": "Required",
+    "Hanya baca": "Read-only",
+    "Izinkan catatan": "Allow remarks",
+    "Ditanyakan saat tambah baris": "Prompted when adding a row",
+    "Kondisi & alur": "Conditions & flow",
+    "Validasi": "Validation",
+    "+ Tambah aturan": "+ Add rule",
+    "Lompatan (skips)": "Skips",
+    "+ Tambah lompatan": "+ Add skip",
+    "pesan": "message",
+    "Duplikat": "Duplicate",
+    "Salin field yang disalin": "Copy the copied field",
+    "Salin block yang disalin": "Copy the copied block",
+    "Salin section yang disalin": "Copy the copied section",
+    "Salin page yang disalin": "Copy the copied page",
+    "Salin roster yang disalin": "Copy the copied roster",
+    "Salin tautan": "Copy link",
+    "Pilihan · sumber": "Choices · source",
+    "+ Tambah opsi": "+ Add option",
+    "Tabel sumber (variabel)": "Source table (field)",
+    "— pilih tabel —": "— select a table —",
+    "Belum ada tabel inline. Definisikan dulu di pengaturan instrumen → Reference data, lalu pilih di sini.":
+      "No inline tables yet. Define one first in instrument settings → Reference data, then select it here.",
+    "Filter berjenjang (field induk)": "Cascading filter (parent field)",
+    "URL API ": "API URL ",
+    "gunakan {dataKey} untuk substitusi nilai field": "use {dataKey} to substitute the field's value",
+    "Trigger dataKey ": "Trigger dataKey ",
+    "dataKey yang memicu fetch ulang & harus terisi dulu — pisah koma": "dataKey that triggers a refetch & must be filled first — comma-separated",
+    "Value field": "Value field",
+    "Label field": "Label field",
+    "Parent param ": "Parent param ",
+    "Path respons ": "Response path ",
+    "opsional": "optional",
+    "{dataKey} di URL diganti nilai field tersebut. Trigger dataKey memblokir fetch & mereset pilihan saat belum terisi. path bila array bersarang.":
+      "{dataKey} in the URL is replaced with that field's value. Trigger dataKey blocks the fetch & resets the choice until filled. path is for nested arrays.",
+    "Jenis roster": "Roster type",
+    "Subhalaman": "Subpage",
+    "Judul roster (opsional)": "Roster title (optional)",
+    "Judul baris roster ": "Roster row title ",
+    'mis. "Usaha" — dipakai di tombol & popup tambah baris': 'e.g. "Business" — used in the button & add-row popup',
+    "Min baris": "Min rows",
+    "Maks baris": "Max rows",
+    "Jumlah baris dari field (countFrom) ": "Row count from field (countFrom) ",
+    "Wajib ada penambahan baris (minimal 1 baris)": "At least one row must be added (minimum 1 row)",
+    "Label tiap baris (itemLabel)": "Per-row label (itemLabel)",
+    "Field tampil di daftar baris": "Fields shown in the row list",
+    "Tambah field ke roster dulu.": "Add a field to the roster first.",
+    "Untuk roster subhalaman: nilai field ini jadi ringkasan tiap baris di halaman utama.":
+      "For subpage rosters: this field's value becomes the summary for each row on the main page.",
+    "Nilai awal baris (auto isi field pertama)": "Default row value (auto-fills the first field)",
+    "Nilai ini otomatis diisi ke field pertama tiap baris yang dibuat dari Min baris. Tidak menimpa nilai yang sudah Anda ubah manual.":
+      "This value is auto-filled into the first field of each row created from Min rows. It won't overwrite values you've already edited manually.",
+    "Nilai awal baris": "Default row value",
+    "Isi Min baris dulu agar editor per baris muncul. Anda juga bisa isi cepat dalam format 1 baris = 1 nilai.":
+      "Fill in Min rows first so the per-row editor appears. You can also fill it quickly in a 1-line-per-value format.",
+    "Buka editor template roster →": "Open the roster template editor →",
+
+    // ---- builder: panel pengaturan instrumen (offline, reference data, navigasi) ----
+    "Tidak ada yang dipilih — pengaturan instrumen.": "Nothing selected — instrument settings.",
+    "ID instrumen": "Instrument ID",
+    "Versi": "Version",
+    "Akronim": "Acronym",
+    "Locales": "Locales",
+    "Locale utama": "Default locale",
+    "Navigasi": "Navigation",
+    "Wajib selesai sebelum lanjut": "Must be completed before continuing",
+    "Mode Offline (PWA)": "Offline Mode (PWA)",
+    "Aktifkan mode offline": "Enable offline mode",
+    "Kuesioner bisa di-install seperti aplikasi native di ponsel dan diisi tanpa internet — jawaban tersimpan di perangkat lalu terkirim otomatis saat online kembali. ":
+      "The form can be installed like a native app on a phone and filled out without internet — answers are stored on the device and sent automatically once back online. ",
+    "Hanya berlaku": "Only applies",
+    " untuk tautan share yang diatur sebagai ": " to share links set as ",
+    "multi-respons": "multi-response",
+    "Sumber lookup / Reference data (JSON)": "Lookup source / Reference data (JSON)",
+    "Tiap tabel bisa ": "Each table can be ",
+    "inline": "inline",
+    " (pakai ": " (using ",
+    ") atau ": ") or ",
+    "=key di respons; ": "=key in the response; ",
+    " atau ": " or ",
+    " untuk cascading; ": " for cascading; ",
+    " bila array bersarang. Rujuk dari field lewat ": " if it's a nested array. Reference it from a field using ",
 
     // ---- builder: dialog & aksi halaman/komponen ----
     "Hapus halaman": "Delete page",
@@ -161,6 +290,26 @@
 
     // ---- dashboard admin ----
     "eForm · Dashboard": "eForm · Dashboard",
+    "eForm · Kelola Kuesioner": "eForm · Manage Form",
+    "← Kembali ke Dashboard": "← Back to Dashboard",
+    "Kembali ke Dashboard": "Back to Dashboard",
+    "Ringkasan": "Overview",
+    "Buka di Halaman Lain": "Open on Another Page",
+    "Buka Builder ↗": "Open Builder ↗",
+    "Lihat Jawaban ↗": "View Responses ↗",
+    "Buka Builder": "Open Builder",
+    "Lihat Jawaban": "View Responses",
+    "Bagikan Kuesioner": "Share Form",
+    "+ Buat Tautan Share": "+ Create Share Link",
+    "Buat Tautan Share": "Create Share Link",
+    "Tautan share dibuat": "Share link created",
+    "Tautan disalin": "Link copied",
+    "Gagal menyalin": "Copy failed",
+    "Aktifkan Kembali": "Reactivate",
+    "Tautan diaktifkan kembali": "Link reactivated",
+    "Password": "Password",
+    "Hapus Kuesioner": "Delete Form",
+    "Memuat jumlah jawaban…": "Loading response count…",
     "+ Kuesioner baru": "+ New form",
     "User": "Users",
     "Daftar Kuesioner": "Form List",
@@ -201,6 +350,8 @@
     "Membuat…": "Creating…",
     "User berhasil dibuat.": "User created successfully.",
     "Belum ada tautan.": "No links yet.",
+    'Belum ada tautan share. Klik "+ Buat Tautan Share" untuk membuat yang pertama.':
+      'No share links yet. Click "+ Create Share Link" to make the first one.',
     "Belum ada viewer.": "No viewers yet.",
     "Email wajib diisi.": "Email is required.",
     "Menambahkan…": "Adding…",
@@ -263,6 +414,47 @@
       "Check the fields the viewer may see. If all are checked, all fields are visible.",
     "Akses Editor": "Editor Access",
     "Akses Editor · ": "Editor Access · ",
+    "⚡ Tambah/Kelola Massal": "⚡ Bulk Add/Manage",
+    "Tambah/Kelola Massal · Viewer · ": "Bulk Add/Manage · Viewer · ",
+    "Tambah/Kelola Massal · Editor · ": "Bulk Add/Manage · Editor · ",
+    "Tempel daftar (email, catatan, nilai filter — per baris)": "Paste list (email, note, filter value — one per line)",
+    "Pisahkan kolom dengan tab, koma, atau titik koma (bisa langsung tempel dari Excel). Baris header otomatis dilewati.":
+      "Separate columns with tab, comma, or semicolon (you can paste directly from Excel). A header row is skipped automatically.",
+    "Urai": "Parse",
+    "+ Baris kosong": "+ Empty row",
+    "Variabel pembeda per orang:": "Field that varies per person:",
+    "Pengaturan bersama untuk semua baris": "Shared settings for all rows",
+    "Responden tertentu saja (atur belakangan per orang)": "Selected respondents only (configure later per person)",
+    "Nilai Filter": "Filter Value",
+    "Pratinjau": "Preview",
+    "Terapkan": "Apply",
+    "Menerapkan…": "Applying…",
+    'Belum ada baris. Tempel daftar di atas lalu klik "Urai".': 'No rows yet. Paste a list above, then click "Parse".',
+    "Belum ada baris": "No rows yet",
+    "Tidak ada baris yang bisa diurai": "No rows could be parsed",
+    "Buka dialog Akses Viewer dulu": "Open the Viewer Access dialog first",
+    "Buka dialog Akses Editor dulu": "Open the Editor Access dialog first",
+    "Masih ada baris bermasalah.": "Some rows still have problems.",
+    " Perbaiki dulu sebelum menerapkan.": " Fix them before applying.",
+    "Email wajib diisi": "Email is required",
+    "Format email tidak valid": "Invalid email format",
+    "Email duplikat pada baris ini": "Duplicate email in this batch",
+    "Siap menerapkan ": "Ready to apply ",
+    " baris ke kuesioner ini. Akun baru akan dibuat otomatis untuk email yang belum terdaftar sebagai viewer.":
+      " row(s) to this form. New accounts will be created automatically for emails not yet registered as a viewer.",
+    " baris ke kuesioner ini. Akun baru akan dibuat otomatis untuk email yang belum terdaftar sebagai editor.":
+      " row(s) to this form. New accounts will be created automatically for emails not yet registered as an editor.",
+    "Daftar Viewer yang Sudah Ditambahkan": "Viewers Already Added",
+    "Daftar Editor yang Sudah Ditambahkan": "Editors Already Added",
+    "Kelola Terpilih": "Manage Selected",
+    "Hapus Terpilih": "Delete Selected",
+    "⬇ CSV": "⬇ CSV",
+    "Atau salin dari kuesioner lain:": "Or copy from another form:",
+    "— pilih kuesioner —": "— select a form —",
+    "Salin": "Copy",
+    "Pilih kuesioner sumber dulu": "Select a source form first",
+    "Kuesioner sumber belum punya viewer": "The source form has no viewers yet",
+    "Kuesioner sumber belum punya editor": "The source form has no editors yet",
     "Pilih editor yang boleh mengelola kuesioner ini.": "Choose which editors may manage this form.",
     "Akun Editor": "Editor Accounts",
     "Tambah Editor ke Kuesioner Ini": "Add Editor to This Form",
@@ -323,6 +515,33 @@
     'Cabut akses "': 'Revoke access "',
     '" dari kuesioner ini?': '" from this form?',
     "Jawaban (": "Responses (",
+    "Kelola Terpilih (": "Manage Selected (",
+    "Hapus Terpilih (": "Delete Selected (",
+    "Gagal menyalin: ": "Copy failed: ",
+    "Gagal unduh: ": "Download failed: ",
+    "Hapus akses ": "Revoke access for ",
+    " viewer terpilih dari kuesioner ini?": " selected viewer(s) from this form?",
+    "Cabut akses ": "Revoke access for ",
+    " editor terpilih dari kuesioner ini?": " selected editor(s) from this form?",
+    " akses viewer dihapus": " viewer access(es) removed",
+    " akses editor dicabut": " editor access(es) revoked",
+    " berhasil, ": " succeeded, ",
+    " gagal — perbaiki baris merah lalu terapkan lagi": " failed — fix the red rows and apply again",
+    " berhasil diterapkan": " applied successfully",
+    " belum ada petugas (": " have no one assigned yet (",
+    " diisi >1 petugas (": " are assigned to more than one person (",
+    "— pilih —": "— select —",
+    " baris": " row(s)",
+    " sudah diterapkan": " already applied",
+    "Diperbarui ": "Updated ",
+    " jawaban": " responses",
+    "× dibuka": "× opened",
+    // ---- builder: panel properti (teks interpolasi, dibatasi ke #paneProps) ----
+    "Baris ": "Row ",
+    "Contoh: ": "Example: ",
+    "nilai bisa dipanggil di label dengan ": "the value can be referenced in the label with ",
+    'otomatis generate baris; kosongkan untuk pakai tombol "': 'auto-generates rows; leave blank to use the "',
+    '" dengan popup': '" button with a popup',
   };
   const FRAGMENT_KEYS = Object.keys(DICT_FRAGMENTS).sort((a, b) => b.length - a.length);
 
@@ -342,7 +561,7 @@
 
   // Elemen "sistem" yang isinya selalu pesan buatan aplikasi (bukan konten
   // kuesioner buatan pengguna) — aman untuk fallback substring-replace.
-  const FRAGMENT_SAFE_SEL = "#paneJson, #ebb-toast, .ebb-toast, #healthTxt, .pv-modal-sub, #adminToast, #confirmMsg, .acts";
+  const FRAGMENT_SAFE_SEL = "#paneJson, #ebb-toast, .ebb-toast, #healthTxt, .pv-modal-sub, #adminToast, #confirmMsg, .acts, #bvSummary, #beSummary, #vpManageSelBtn, #vpDeleteSelBtn, #epManageSelBtn, #epDeleteSelBtn, #ovUpdated, #ovResponses, .share-meta, #paneProps";
 
   function currentLang() {
     return (window.CURRENT_LANG || localStorage.getItem("eform_lang") || "id").toLowerCase() === "en" ? "en" : "id";
@@ -393,7 +612,10 @@
         const key = "__i18nOrig_" + attr;
         const orig = node[key] != null ? node[key] : node.getAttribute(attr);
         node[key] = orig;
-        const translated = translateText(orig);
+        let translated = translateText(orig);
+        if (translated === orig && node.closest && node.closest(FRAGMENT_SAFE_SEL)) {
+          translated = fragmentSubstitute(orig);
+        }
         if (node.getAttribute(attr) !== translated) node.setAttribute(attr, translated);
       }
     }
@@ -489,6 +711,11 @@
     });
   }
 
+  // Jadi true begitu pengguna klik tombol bahasa secara manual — dipakai supaya
+  // respons syncLangFromServer() yang terlambat datang (mis. race dengan PATCH
+  // yang belum selesai) tidak menimpa balik pilihan yang baru saja dibuat.
+  var userChangedLang = false;
+
   function persistLangToServer(lang) {
     var token = localStorage.getItem("eform_token");
     if (!token) return;
@@ -504,6 +731,7 @@
       var btn = e.target.closest && e.target.closest("[data-lang-btn]");
       if (!btn) return;
       var lang = btn.getAttribute("data-lang-btn") === "en" ? "en" : "id";
+      userChangedLang = true;
       window.setUILang(lang);
       markActiveLangBtns();
       persistLangToServer(lang);
@@ -520,6 +748,7 @@
     fetch("/api/auth/me", { headers: { "Authorization": "Bearer " + token } })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (me) {
+        if (userChangedLang) return; // pilihan manual terjadi selagi fetch ini berjalan — jangan ditimpa
         if (me && (me.preferredLanguage === "en" || me.preferredLanguage === "id")) {
           window.setUILang(me.preferredLanguage);
           markActiveLangBtns();

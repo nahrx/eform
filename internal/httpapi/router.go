@@ -35,6 +35,7 @@ func (s *Server) Routes() http.Handler {
 	mux.Handle("GET /api/forms/{id}/shares", s.authMW(s.listShares))
 	mux.Handle("PATCH /api/shares/{id}", s.authMW(s.requireRole(s.updateShare, "superadmin", "admin")))
 	mux.Handle("DELETE /api/shares/{id}", s.authMW(s.requireRole(s.revokeShare, "superadmin", "admin")))
+	mux.Handle("POST /api/shares/{id}/reactivate", s.authMW(s.requireRole(s.reactivateShare, "superadmin", "admin")))
 	mux.Handle("DELETE /api/shares/{id}/permanent", s.authMW(s.requireRole(s.deleteSharePermanent, "superadmin", "admin")))
 	mux.Handle("GET /api/shares/{id}/allowed-emails", s.authMW(s.listAllowedEmails))
 	mux.Handle("POST /api/shares/{id}/allowed-emails", s.authMW(s.requireRole(s.addAllowedEmail, "superadmin", "admin")))
@@ -46,6 +47,7 @@ func (s *Server) Routes() http.Handler {
 	mux.Handle("PATCH /api/forms/{id}/responses/{responseId}", s.authMW(s.requireRole(s.updateResponse, "superadmin", "admin")))
 	mux.Handle("DELETE /api/forms/{id}/responses/{responseId}", s.authMW(s.requireRole(s.deleteResponse, "superadmin", "admin")))
 	mux.Handle("GET /api/forms/{id}/responses.csv", s.authMW(s.exportResponses))
+	mux.Handle("GET /api/forms/{id}/fields/{fieldName}/suggested-values", s.authMW(s.requireRole(s.suggestedFieldValues, "superadmin", "admin")))
 
 	// --- users (khusus superadmin) ---
 	mux.Handle("POST /api/users", s.authMW(s.requireRole(s.createUser, "superadmin")))
@@ -68,6 +70,9 @@ func (s *Server) Routes() http.Handler {
 	// --- viewer permissions per form (superadmin) ---
 	mux.Handle("POST /api/forms/{id}/viewer-permissions", s.authMW(s.requireRole(s.createViewerPermission, "superadmin", "admin")))
 	mux.Handle("GET /api/forms/{id}/viewer-permissions", s.authMW(s.requireRole(s.listFormViewerPermissions, "superadmin", "admin")))
+	mux.Handle("POST /api/forms/{id}/viewer-permissions/bulk", s.authMW(s.requireRole(s.bulkAssignViewerPermissions, "superadmin", "admin")))
+	mux.Handle("DELETE /api/forms/{id}/viewer-permissions/bulk", s.authMW(s.requireRole(s.bulkDeleteViewerPermissions, "superadmin", "admin")))
+	mux.Handle("GET /api/forms/{id}/viewer-permissions.csv", s.authMW(s.requireRole(s.exportViewerPermissionsCSV, "superadmin", "admin")))
 	mux.Handle("GET /api/viewer-permissions/{permId}", s.authMW(s.requireRole(s.getViewerPermission, "superadmin", "admin")))
 	mux.Handle("PUT /api/viewer-permissions/{permId}", s.authMW(s.requireRole(s.updateViewerPermission, "superadmin", "admin")))
 	mux.Handle("DELETE /api/viewer-permissions/{permId}", s.authMW(s.requireRole(s.deleteViewerPermission, "superadmin", "admin")))
@@ -75,6 +80,9 @@ func (s *Server) Routes() http.Handler {
 	// --- editor permissions per form (superadmin) ---
 	mux.Handle("POST /api/forms/{id}/editor-permissions", s.authMW(s.requireRole(s.createEditorPermission, "superadmin", "admin")))
 	mux.Handle("GET /api/forms/{id}/editor-permissions", s.authMW(s.requireRole(s.listFormEditorPermissions, "superadmin", "admin")))
+	mux.Handle("POST /api/forms/{id}/editor-permissions/bulk", s.authMW(s.requireRole(s.bulkAssignEditorPermissions, "superadmin", "admin")))
+	mux.Handle("DELETE /api/forms/{id}/editor-permissions/bulk", s.authMW(s.requireRole(s.bulkDeleteEditorPermissions, "superadmin", "admin")))
+	mux.Handle("GET /api/forms/{id}/editor-permissions.csv", s.authMW(s.requireRole(s.exportEditorPermissionsCSV, "superadmin", "admin")))
 	mux.Handle("GET /api/editor-permissions/{permId}", s.authMW(s.requireRole(s.getEditorPermission, "superadmin", "admin")))
 	mux.Handle("PUT /api/editor-permissions/{permId}", s.authMW(s.requireRole(s.updateEditorPermission, "superadmin", "admin")))
 	mux.Handle("DELETE /api/editor-permissions/{permId}", s.authMW(s.requireRole(s.deleteEditorPermission, "superadmin", "admin")))
@@ -132,6 +140,7 @@ func (s *Server) Routes() http.Handler {
 	// --- halaman ---
 	mux.HandleFunc("GET /login", s.page("login.html"))
 	mux.HandleFunc("GET /admin", s.page("admin.html"))
+	mux.HandleFunc("GET /manage", s.page("manage.html")) // halaman pengelolaan satu kuesioner (builder/share/akses)
 	mux.HandleFunc("GET /builder", s.page("builder.html"))
 	mux.HandleFunc("GET /f/{token}", s.page("public.html"))                          // halaman isi kuesioner publik
 	mux.HandleFunc("GET /responses", s.page("responses.html"))                       // halaman daftar jawaban
@@ -146,8 +155,10 @@ func (s *Server) Routes() http.Handler {
 	for _, f := range []string{
 		"login.css", "login.js",
 		"admin.css", "admin.js",
+		"manage.css", "manage.js",
 		"builder.css", "builder.js", "builder-bridge.js",
 		"searchable-select.js", "geo-map.js",
+		"i18n.js",
 	} {
 		mux.HandleFunc("GET /"+f, s.page(f))
 	}

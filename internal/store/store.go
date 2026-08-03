@@ -480,6 +480,18 @@ func (s *Store) RevokeShare(ctx context.Context, id string) error {
 	return nil
 }
 
+// ReactivateShare mengaktifkan kembali share yang sebelumnya dicabut.
+func (s *Store) ReactivateShare(ctx context.Context, id string) error {
+	ct, err := s.pool.Exec(ctx, `UPDATE form_shares SET is_active=true WHERE id=$1`, id)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // UpdateShare memperbarui konfigurasi share yang masih aktif.
 // updatePassword=true  â†’ password_hash diubah ke passwordHash (nil berarti hapus password).
 // updateExpiry=true    â†’ expires_at diubah ke expiresAt (nil berarti hapus expiry).
@@ -688,6 +700,34 @@ func (s *Store) GetFormAnswerColumns(ctx context.Context, formID string) ([]stri
 		cols = append(cols, col)
 	}
 	return cols, rows.Err()
+}
+
+// GetDistinctFieldValues mengembalikan nilai unik yang benar-benar pernah terisi untuk satu
+// variabel di satu form (dipakai sebagai saran nilai filter saat tambah/kelola akses massal).
+// Nama field dilewatkan sebagai parameter biasa ke operator jsonb ->> sehingga aman dari injeksi.
+func (s *Store) GetDistinctFieldValues(ctx context.Context, formID, fieldName string) ([]string, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT DISTINCT val FROM (
+			SELECT answers->>$2 AS val FROM form_responses WHERE form_id=$1
+			UNION
+			SELECT answers->>$2 AS val FROM response_drafts WHERE form_id=$1
+		) sub
+		WHERE val IS NOT NULL AND val != ''
+		ORDER BY 1
+		LIMIT 200`, formID, fieldName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var vals []string
+	for rows.Next() {
+		var v string
+		if err := rows.Scan(&v); err != nil {
+			return nil, err
+		}
+		vals = append(vals, v)
+	}
+	return vals, rows.Err()
 }
 
 // ForEachResponseByForm memanggil fn untuk setiap respons tanpa batasan jumlah (streaming).
