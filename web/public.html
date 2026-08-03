@@ -189,6 +189,8 @@ textarea.pv-in{width:100%;resize:vertical;min-height:72px}
 .btn.primary:disabled{opacity:.6;cursor:default}
 .btn.ghost{border-color:transparent;background:transparent;color:var(--ink-soft)}
 .btn.ghost:hover{background:var(--panel-2)}
+.btn.danger{border-color:#fca5a5;color:#b91c1c;background:#fff5f5}
+.btn.danger:hover{background:#fee2e2;border-color:#f87171}
 
 /* ---- login gate ---- */
 .gate-wrap{display:flex;align-items:center;justify-content:center;height:100vh;background:var(--surface)}
@@ -206,6 +208,9 @@ textarea.pv-in{width:100%;resize:vertical;min-height:72px}
 .resp-list{text-align:left;margin:12px 0;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
 .resp-item{display:flex;align-items:center;flex-wrap:wrap;row-gap:8px;column-gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);font-size:13px}
 .resp-item:last-child{border-bottom:none}
+.resp-item-clickable{cursor:pointer;transition:background .12s}
+.resp-item-clickable:hover,.resp-item-clickable:focus-visible{background:var(--panel-2)}
+.resp-item-clickable:focus-visible{outline:2px solid var(--accent-soft);outline-offset:-2px}
 .resp-item-left{display:flex;align-items:center;flex-wrap:wrap;row-gap:6px;gap:7px;flex:1 1 auto;min-width:0}
 .resp-item-right{display:flex;align-items:center;flex-wrap:wrap;row-gap:6px;gap:10px;flex:0 0 auto;margin-left:auto}
 .resp-num{font-weight:600;white-space:nowrap}
@@ -805,15 +810,15 @@ function renderMyResponsesList(meta,responses){
       :`<span class="resp-badge resp-badge-ok">Terkirim</span>`;
     // Jawaban yang sudah terkirim tetap bisa dilihat kapan saja, terlepas dari
     // ALLOW (share ditutup) — hanya "Batalkan Submit" yang perlu share masih aktif.
-    const viewBtn=!isDraft?`<button class="btn btn-xs" onclick="viewSubmittedResponse('${esc(r.id)}')">Lihat Jawaban</button>`:"";
+    // Klik langsung pada container-nya (bukan tombol terpisah) untuk membuka "Lihat Jawaban".
     const action=isDraft
       ?`<button class="btn btn-xs" onclick="editDraftResponseById('${esc(r.id)}')">Lanjutkan</button>`
-      :`<button class="btn btn-xs" onclick="unsubmitResponseAPI('${r.id}')">Batalkan Submit</button>`;
-    return `<div class="resp-item">
+      :`<button class="btn btn-xs" onclick="event.stopPropagation();unsubmitResponseAPI('${r.id}')">Batalkan Submit</button>`;
+    const rowAttrs=isDraft?"":` onclick="viewSubmittedResponse('${esc(r.id)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();viewSubmittedResponse('${esc(r.id)}')}" role="button" tabindex="0"`;
+    return `<div class="resp-item${isDraft?"":" resp-item-clickable"}"${rowAttrs}>
       <div class="resp-item-left"><span class="resp-num">Respons ${responses.length-i}</span>${badge}</div>
       <div class="resp-item-right">
         <span class="resp-date">${isDraft?"Draf · "+fmt(r.submittedAt):fmt(r.submittedAt)}</span>
-        ${viewBtn}
         ${ALLOW?action:""}
       </div>
     </div>`;
@@ -1145,23 +1150,48 @@ async function viewSubmittedResponse(id){
   VIEW_CUR=VIEW_VISITED.length?VIEW_VISITED[0]:0;
   renderViewPage();
 }
+let VIEW_HISTORY_PUSHED=false;
 function openViewOverlay(){
   if(document.getElementById("pvViewOverlay"))return;
+  // Batalkan Submit tetap butuh share masih aktif (ALLOW) — sama seperti di daftar respons.
+  const unsubmitBtn=ALLOW&&VIEW_RESP?`<button class="btn danger" onclick="unsubmitResponseAPI('${esc(VIEW_RESP.id)}')">Batalkan Submit</button>`:"";
   const ovl=document.createElement("div");
   ovl.className="pvview-overlay";
   ovl.id="pvViewOverlay";
   ovl.innerHTML=`<div class="pv-bar">
       <span class="pv-title">${esc(txt(SCHEMA?.title)||"Kuesioner")}</span>
+      ${unsubmitBtn}
       <button class="btn" onclick="closeResponseViewer()">✕ Tutup</button>
     </div>
     <div class="pv-body" id="pvViewBody"><div style="padding:40px;text-align:center;color:var(--muted)">Memuat…</div></div>
     <div class="pv-nav-area" id="pvViewFootArea" hidden><div class="pv-nav" id="pvViewFoot"></div></div>`;
   document.body.appendChild(ovl);
+  // Dorong satu entri history supaya tombol back HP (Android) menutup overlay ini
+  // dulu (via popstate di bawah), bukan langsung keluar dari halaman kuesioner.
+  history.pushState({pvView:true},"",location.href);
+  VIEW_HISTORY_PUSHED=true;
 }
 function closeResponseViewer(){
-  document.getElementById("pvViewOverlay")?.remove();
+  const ovl=document.getElementById("pvViewOverlay");
+  if(!ovl)return;
+  ovl.remove();
   VIEW_RESP=null;VIEW_ANSWERS={};VIEW_PAGES=[];VIEW_VISITED=[];VIEW_CUR=0;
+  if(VIEW_HISTORY_PUSHED){
+    VIEW_HISTORY_PUSHED=false;
+    history.back(); // konsumsi entri yang didorong saat overlay dibuka, supaya tidak "nyangkut" di history
+  }
 }
+// Tombol back HP (Android)/browser: kalau overlay masih terbuka, tutup saja alih-alih
+// pindah keluar dari halaman kuesioner. Tidak perlu history.back() lagi di sini karena
+// popstate ini SUDAH konsekuensi dari navigasi back yang terjadi.
+window.addEventListener("popstate",()=>{
+  const ovl=document.getElementById("pvViewOverlay");
+  if(ovl){
+    ovl.remove();
+    VIEW_RESP=null;VIEW_ANSWERS={};VIEW_PAGES=[];VIEW_VISITED=[];VIEW_CUR=0;
+    VIEW_HISTORY_PUSHED=false;
+  }
+});
 function viewGoPage(idx){
   VIEW_CUR=idx;
   renderViewPage();
@@ -1219,6 +1249,7 @@ async function unsubmitResponseAPI(responseId){
           {method:"POST",headers:pubHeaders({})});
         const d=await r.json();
         if(!r.ok)throw new Error(d.error||"Gagal membatalkan pengiriman");
+        closeResponseViewer(); // tutup overlay "Lihat Jawaban" kalau sedang terbuka — statusnya sudah berubah jadi draf
         if(MULTI_RESPONSE){
           const resps=await fetchMyResponses();
           renderMyResponsesList({title:txt(SCHEMA?.title)||"Kuesioner"},resps);

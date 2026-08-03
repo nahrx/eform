@@ -156,9 +156,9 @@ func (s *Store) GetUserByUsername(ctx context.Context, username string) (*models
 	u := &models.User{}
 	var em *string
 	err := s.pool.QueryRow(ctx,
-		`SELECT id,username,email,password_hash,role,is_active,created_at,updated_at
+		`SELECT id,username,email,password_hash,role,is_active,preferred_language,created_at,updated_at
 		 FROM users WHERE username=$1`, username,
-	).Scan(&u.ID, &u.Username, &em, &u.PasswordHash, &u.Role, &u.IsActive, &u.CreatedAt, &u.UpdatedAt)
+	).Scan(&u.ID, &u.Username, &em, &u.PasswordHash, &u.Role, &u.IsActive, &u.PreferredLanguage, &u.CreatedAt, &u.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -175,8 +175,8 @@ func (s *Store) GetUser(ctx context.Context, id string) (*models.User, error) {
 	u := &models.User{}
 	var em *string
 	err := s.pool.QueryRow(ctx,
-		`SELECT id,username,email,role,is_active,created_at,updated_at FROM users WHERE id=$1`, id,
-	).Scan(&u.ID, &u.Username, &em, &u.Role, &u.IsActive, &u.CreatedAt, &u.UpdatedAt)
+		`SELECT id,username,email,role,is_active,preferred_language,created_at,updated_at FROM users WHERE id=$1`, id,
+	).Scan(&u.ID, &u.Username, &em, &u.Role, &u.IsActive, &u.PreferredLanguage, &u.CreatedAt, &u.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -1110,6 +1110,20 @@ func (s *Store) UpdateUserNote(ctx context.Context, id, note string) error {
 	ct, err := s.pool.Exec(ctx,
 		`UPDATE users SET note=$1, updated_at=now() WHERE id=$2`,
 		note, id)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// UpdateUserLanguage menyimpan preferensi bahasa UI (builder/dashboard) milik akun sendiri.
+func (s *Store) UpdateUserLanguage(ctx context.Context, id, lang string) error {
+	ct, err := s.pool.Exec(ctx,
+		`UPDATE users SET preferred_language=$1, updated_at=now() WHERE id=$2`,
+		lang, id)
 	if err != nil {
 		return err
 	}

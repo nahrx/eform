@@ -6,15 +6,16 @@ import (
 )
 
 type User struct {
-	ID           string    `json:"id"`
-	Username     string    `json:"username"`
-	Email        string    `json:"email,omitempty"`
-	PasswordHash string    `json:"-"`
-	Note         string    `json:"note,omitempty"`
-	Role         string    `json:"role"`
-	IsActive     bool      `json:"isActive"`
-	CreatedAt    time.Time `json:"createdAt"`
-	UpdatedAt    time.Time `json:"updatedAt"`
+	ID                string    `json:"id"`
+	Username          string    `json:"username"`
+	Email             string    `json:"email,omitempty"`
+	PasswordHash      string    `json:"-"`
+	Note              string    `json:"note,omitempty"`
+	Role              string    `json:"role"`
+	IsActive          bool      `json:"isActive"`
+	PreferredLanguage string    `json:"preferredLanguage"` // 'id' | 'en' — bahasa UI builder/dashboard
+	CreatedAt         time.Time `json:"createdAt"`
+	UpdatedAt         time.Time `json:"updatedAt"`
 }
 
 type Form struct {

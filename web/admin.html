@@ -9,9 +9,31 @@
 <body>
 <header>
   <h1>eForm · Dashboard</h1>
-  <span class="who" id="who"></span>
   <button class="btn primary" id="btnNewForm" onclick="location.href='/builder'">+ Kuesioner baru</button>
-  <button class="btn" id="logout">Keluar</button>
+  <div class="user-menu" id="userMenu">
+    <button class="user-btn" id="userBtn">
+      <span class="user-avatar" id="userAvatar">?</span>
+      <span class="user-name" id="userName">…</span>
+      <span class="user-role" id="userRole"></span>
+      <span class="user-caret">▾</span>
+    </button>
+    <div class="user-dropdown" id="userDropdown" hidden>
+      <div class="udd-info">
+        <span class="udd-name" id="uddName"></span>
+        <span class="udd-role" id="uddRole"></span>
+      </div>
+      <div class="udd-sep"></div>
+      <div class="udd-lang">
+        <span class="udd-lang-label">Bahasa</span>
+        <div class="udd-lang-seg">
+          <button type="button" class="udd-lang-opt" data-lang-btn="id">ID</button>
+          <button type="button" class="udd-lang-opt" data-lang-btn="en">EN</button>
+        </div>
+      </div>
+      <div class="udd-sep"></div>
+      <button class="udd-item danger" id="logout">Keluar</button>
+    </div>
+  </div>
 </header>
 <main>
   <div class="tabbar" id="tabbar">
@@ -333,6 +355,7 @@
   </div>
 </dialog>
 
+<script src="/i18n.js"></script>
 <script src="/admin.js"></script>
 </body>
 </html>

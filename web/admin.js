@@ -44,10 +44,25 @@ let ACTIVE_USER_SUBTAB="viewer";
     const me=await api("/api/auth/me");
     MY_ROLE=me.role||"admin";
     MY_ID=me.id||"";
-    $("#who").textContent=me.username+" · "+me.role;
+    const uname=me.username||"",urole=me.role||"";
+    const av=$("#userAvatar");if(av)av.textContent=uname.charAt(0).toUpperCase()||"?";
+    const un=$("#userName");if(un)un.textContent=uname;
+    const ur=$("#userRole");if(ur)ur.textContent=urole;
+    const dn=$("#uddName");if(dn)dn.textContent=uname;
+    const dr=$("#uddRole");if(dr)dr.textContent=urole;
     setupAdminMenu();
   }catch(e){}
   load();
+})();
+
+(function(){
+  const userBtn=document.getElementById("userBtn");
+  const dropdown=document.getElementById("userDropdown");
+  if(userBtn&&dropdown){
+    userBtn.addEventListener("click",e=>{e.stopPropagation();dropdown.hidden=!dropdown.hidden;});
+    document.addEventListener("click",()=>{dropdown.hidden=true;});
+    dropdown.addEventListener("click",e=>e.stopPropagation());
+  }
 })();
 
 function setupAdminMenu(){

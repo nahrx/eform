@@ -43,9 +43,34 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 	c := userFrom(r.Context())
+	lang := "id"
+	if u, err := s.st.GetUser(r.Context(), c.Subject); err == nil {
+		lang = u.PreferredLanguage
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"id": c.Subject, "username": c.Username, "role": c.Role,
+		"id": c.Subject, "username": c.Username, "role": c.Role, "preferredLanguage": lang,
 	})
+}
+
+// updateMyLanguage mengganti preferensi bahasa UI (builder/dashboard) akun yang sedang login.
+func (s *Server) updateMyLanguage(w http.ResponseWriter, r *http.Request) {
+	c := userFrom(r.Context())
+	var in struct {
+		Language string `json:"language"`
+	}
+	if err := decodeJSON(r, &in); err != nil {
+		writeErr(w, http.StatusBadRequest, "format permintaan salah")
+		return
+	}
+	if in.Language != "id" && in.Language != "en" {
+		writeErr(w, http.StatusBadRequest, "bahasa tidak didukung")
+		return
+	}
+	if err := s.st.UpdateUserLanguage(r.Context(), c.Subject, in.Language); err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal menyimpan preferensi bahasa")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"preferredLanguage": in.Language})
 }
 
 func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {

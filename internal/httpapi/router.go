@@ -19,6 +19,7 @@ func (s *Server) Routes() http.Handler {
 	// --- auth ---
 	mux.HandleFunc("POST /api/auth/login", s.login)
 	mux.Handle("GET /api/auth/me", s.authMW(s.me))
+	mux.Handle("PATCH /api/auth/me/language", s.authMW(s.updateMyLanguage))
 
 	// --- forms (perlu login) ---
 	mux.Handle("GET /api/forms", s.authMW(s.listForms))
