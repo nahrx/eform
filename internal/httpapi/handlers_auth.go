@@ -24,7 +24,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "username dan password wajib diisi")
 		return
 	}
-	if !loginRL.allow(r) {
+	if !loginRL.allowRequest(r) {
 		writeErr(w, http.StatusTooManyRequests, "terlalu banyak percobaan login, coba lagi dalam 1 menit")
 		return
 	}

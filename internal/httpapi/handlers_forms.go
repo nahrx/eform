@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -652,31 +653,96 @@ func (s *Server) exportResponses(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", "attachment; filename=\"responses-"+formID+".csv\"")
 	cw := csv.NewWriter(w)
-	header := append([]string{"id", "respondent_id", "nama", "email", "status", "waktu_kirim"}, cols...)
-	_ = cw.Write(header)
+	_ = cw.Write(append(csvBaseHeader(true), cols...))
 	// 3. Stream setiap baris langsung ke CSV tanpa buffering di memori
 	_ = s.st.ForEachResponseByForm(r.Context(), formID, func(rr models.Response) error {
-		writeCSVRow(cw, rr, cols)
+		writeCSVRow(cw, rr, cols, true)
 		return nil
 	})
 }
 
+// parseResponseFilter membaca filter & sort daftar jawaban dari query string.
+// Konvensinya: f_<field> (ILIKE), fe_<field> (sama persis), fea_<field> (salah satu dari
+// daftar), plus filter rentang yang ditangani applyRangeFilter.
+// Dipakai bersama oleh daftar jawaban admin, viewer, editor, dan API key.
+func parseResponseFilter(q url.Values) store.ResponseFilter {
+	f := store.ResponseFilter{
+		Status:  q.Get("status"),
+		ShareID: q.Get("shareId"),
+		Search:  strings.TrimSpace(q.Get("search")),
+		SortBy:  q.Get("sortBy"),
+		SortDir: q.Get("sortDir"),
+	}
+	// Tiap jenis filter dibatasi 10 entri supaya query string tidak bisa dipakai
+	// menyusun WHERE raksasa.
+	const maxPerKind = 10
+	for key, vals := range q {
+		if len(vals) == 0 {
+			continue
+		}
+		val := strings.TrimSpace(vals[0])
+		if val == "" {
+			continue
+		}
+		switch {
+		case applyRangeFilter(&f, key, val):
+			// sudah ditangani
+		case strings.HasPrefix(key, "fea_"):
+			if f.FieldAnyFilters == nil {
+				f.FieldAnyFilters = make(map[string][]string)
+			}
+			if len(f.FieldAnyFilters) < maxPerKind {
+				f.FieldAnyFilters[strings.TrimPrefix(key, "fea_")] = splitFilterValues(val)
+			}
+		case strings.HasPrefix(key, "fe_"):
+			if f.FieldExactFilters == nil {
+				f.FieldExactFilters = make(map[string]string)
+			}
+			if len(f.FieldExactFilters) < maxPerKind {
+				f.FieldExactFilters[strings.TrimPrefix(key, "fe_")] = val
+			}
+		case strings.HasPrefix(key, "f_"):
+			if f.FieldFilters == nil {
+				f.FieldFilters = make(map[string]string)
+			}
+			if len(f.FieldFilters) < maxPerKind {
+				f.FieldFilters[strings.TrimPrefix(key, "f_")] = val
+			}
+		}
+	}
+	return f
+}
+
+// csvBaseHeader adalah kolom tetap sebelum kolom jawaban. includeRespondent=false
+// dipakai jalur API key yang tidak boleh membocorkan identitas responden.
+func csvBaseHeader(includeRespondent bool) []string {
+	if includeRespondent {
+		return []string{"id", "respondent_id", "nama", "email", "status", "waktu_kirim"}
+	}
+	return []string{"id", "status", "waktu_kirim"}
+}
+
 // writeCSVRow menulis satu baris respons ke csv.Writer sesuai daftar kolom jawaban yang diberikan.
-// Dipakai bersama oleh ekspor CSV admin, viewer, dan editor.
-func writeCSVRow(cw *csv.Writer, rr models.Response, cols []string) {
+// Dipakai bersama oleh ekspor CSV admin, viewer, editor, dan API key.
+func writeCSVRow(cw *csv.Writer, rr models.Response, cols []string, includeRespondent bool) {
 	a := map[string]any{}
 	_ = json.Unmarshal(rr.Answers, &a)
-	m := map[string]any{}
-	_ = json.Unmarshal(rr.Meta, &m)
-	respondentID := ""
-	if rr.RespondentID != nil {
-		respondentID = *rr.RespondentID
-	}
 	waktu := ""
 	if !rr.SubmittedAt.IsZero() {
 		waktu = rr.SubmittedAt.Format(time.RFC3339)
 	}
-	row := []string{rr.ID, respondentID, toStr(m["name"]), toStr(m["email"]), rr.Status, waktu}
+	var row []string
+	if includeRespondent {
+		m := map[string]any{}
+		_ = json.Unmarshal(rr.Meta, &m)
+		respondentID := ""
+		if rr.RespondentID != nil {
+			respondentID = *rr.RespondentID
+		}
+		row = []string{rr.ID, respondentID, toStr(m["name"]), toStr(m["email"]), rr.Status, waktu}
+	} else {
+		row = []string{rr.ID, rr.Status, waktu}
+	}
 	for _, c := range cols {
 		v := a[c]
 		if sv, ok := v.(string); ok && len(sv) > 200 && (strings.HasPrefix(sv, "data:image") || strings.HasPrefix(sv, "data:application")) {

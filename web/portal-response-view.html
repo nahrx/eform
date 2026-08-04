@@ -168,7 +168,7 @@ const TOKEN=localStorage.getItem("eform_token");
 if(!TOKEN){document.getElementById("content").innerHTML='<p style="padding:40px;text-align:center;color:#b91c1c">Sesi habis. Silakan login ulang.</p>';}
 
 const qp=new URLSearchParams(location.search);
-const FORM_ID=qp.get("form"), RESP_ID=qp.get("resp");
+const FORM_ID=qp.get("form"), RESP_ID=qp.get("resp"), LINK_TYPE=qp.get("type");
 if(!FORM_ID||!RESP_ID){document.getElementById("content").innerHTML='<p style="padding:40px;text-align:center;color:#b91c1c">Parameter tidak lengkap.</p>';}
 
 const H={"Authorization":"Bearer "+TOKEN,"Content-Type":"application/json"};
@@ -238,7 +238,11 @@ async function api(path,opts){
 async function init(){
   try{
     const me=await api("/api/auth/me");
-    MY_ROLE=me.role;
+    // Tipe akses untuk RESPONS INI ditentukan oleh query param `type` yang dikirim halaman
+    // pemanggil (viewer-responses.html/editor-responses.html sudah tahu persis tipenya) — bukan
+    // dari role global akun, karena satu akun sekarang bisa jadi viewer di satu kuesioner dan
+    // editor di kuesioner lain. `me.role` cuma fallback untuk tautan lama tanpa `type`.
+    MY_ROLE=(LINK_TYPE==="viewer"||LINK_TYPE==="editor")?LINK_TYPE:me.role;
 
     let formUrl, respUrl;
     if(MY_ROLE==="viewer"){

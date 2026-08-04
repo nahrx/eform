@@ -12,3 +12,36 @@
   .ov-stats{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:20px}
   .ov-stat{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);background:var(--surface);border:1px solid var(--line-2);padding:6px 12px;border-radius:999px}
   .ov-stat svg{opacity:.65;flex:none}
+
+  /* Bagian API */
+  .ak-box{border:1px solid var(--line);border-radius:var(--radius);padding:12px;margin-top:12px}
+  .ak-box-h{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:8px}
+  .ak-warn{background:#fffbeb;border:1px solid #fde68a;color:#92400e;border-radius:var(--radius-sm);padding:10px 12px;font-size:12.5px;line-height:1.5;margin-bottom:12px}
+  .ak-key-row{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-sm);padding:10px 12px}
+  .ak-key{flex:1;min-width:0;font-family:ui-monospace,monospace;font-size:12.5px;word-break:break-all;color:var(--ink)}
+  .api-pre{background:#0f172a;color:#e2e8f0;border-radius:var(--radius-sm);padding:12px 14px;font-family:ui-monospace,monospace;font-size:11.5px;line-height:1.6;overflow-x:auto;white-space:pre;margin:0}
+  .api-doc{margin-top:20px;border-top:1px solid var(--line);padding-top:16px}
+  .api-doc-h{font-size:13px;font-weight:700;margin-bottom:6px}
+
+  /* Layar HP: sidebar (yang di admin.css sudah jadi strip horizontal) diatur
+     ulang jadi tiga baris — tombol kembali + judul, tab bagian, lalu tautan
+     ke halaman lain. */
+  @media (max-width: 860px){
+    .mg-back{flex:none;margin:0;padding:7px 11px;font-size:12.5px;border:1px solid var(--line);background:#fff}
+    .mg-title{flex:1;min-width:0;padding:0;margin:0;border-bottom:none;font-size:13px}
+    .app-sidebar-title:not(.mg-title){display:none}
+    .mg-ext{font-size:12.5px;padding:6px 11px;color:var(--muted)}
+    .mg-ext svg:last-child{margin-left:2px}
+  }
+
+  @media (max-width: 600px){
+    .ov-stats{gap:8px;margin-bottom:16px}
+    .ov-stat{font-size:12px;padding:5px 10px}
+    #sec-overview .acts .btn{flex:1;justify-content:center}
+    /* Baris "responden yang diizinkan" & filter di dalam dialog. */
+    #uaFilterList,#vpdFilterList,#epdFilterList,#akFilterList{display:flex;flex-wrap:wrap;gap:6px}
+    .ak-box{padding:10px}
+    .ak-key-row{flex-wrap:wrap}
+    .ak-key-row .btn{width:100%;justify-content:center}
+    .api-pre{font-size:10.5px;padding:10px}
+  }

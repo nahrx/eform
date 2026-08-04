@@ -6,7 +6,6 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -16,69 +15,6 @@ import (
 	"github.com/bpskaltim/eform-backend/internal/store"
 )
 
-/* ================================================================
-   SUPERADMIN — kelola akun editor
-   ================================================================ */
-
-func (s *Server) createEditor(w http.ResponseWriter, r *http.Request) {
-	var in struct {
-		Email string `json:"email"`
-		Note  string `json:"note"`
-	}
-	if err := decodeJSON(r, &in); err != nil {
-		writeErr(w, http.StatusBadRequest, "format permintaan salah")
-		return
-	}
-	in.Email = strings.TrimSpace(strings.ToLower(in.Email))
-	in.Note = strings.TrimSpace(in.Note)
-	if in.Email == "" {
-		writeErr(w, http.StatusBadRequest, "email wajib diisi")
-		return
-	}
-
-	// Editor login via Google — username = email, password acak (tidak dipakai untuk login)
-	b := make([]byte, 24)
-	if _, err := rand.Read(b); err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal membuat password acak")
-		return
-	}
-	randomPwd := base64.RawURLEncoding.EncodeToString(b)
-	hash, err := auth.HashPassword(randomPwd)
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal memproses password")
-		return
-	}
-
-	u, err := s.st.CreateUser(r.Context(), in.Email, in.Email, hash, "editor", in.Note)
-	if err != nil {
-		writeErr(w, http.StatusConflict, "email mungkin sudah terdaftar")
-		return
-	}
-	writeJSON(w, http.StatusCreated, u)
-}
-
-func (s *Server) listEditors(w http.ResponseWriter, r *http.Request) {
-	editors, err := s.st.ListEditors(r.Context())
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"editors": editors})
-}
-
-func (s *Server) deleteEditor(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if err := s.st.DeleteUserByRole(r.Context(), id, "editor"); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeErr(w, http.StatusNotFound, "editor tidak ditemukan")
-			return
-		}
-		writeErr(w, http.StatusInternalServerError, "gagal menghapus")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
-}
-
 // createEditorPermission memberikan akses editor ke satu kuesioner (khusus superadmin).
 func (s *Server) createEditorPermission(w http.ResponseWriter, r *http.Request) {
 	formID := r.PathValue("id")
@@ -87,8 +23,9 @@ func (s *Server) createEditorPermission(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var in struct {
-		EditorID     string            `json:"editorId"`
-		FieldFilters map[string]string `json:"fieldFilters"`
+		EditorID         string            `json:"editorId"`
+		RespondentAccess string            `json:"respondentAccess"`
+		FieldFilters     map[string]string `json:"fieldFilters"`
 	}
 	if err := decodeJSON(r, &in); err != nil {
 		writeErr(w, http.StatusBadRequest, "format permintaan salah")
@@ -98,9 +35,12 @@ func (s *Server) createEditorPermission(w http.ResponseWriter, r *http.Request) 
 		writeErr(w, http.StatusBadRequest, "editorId wajib diisi")
 		return
 	}
+	if in.RespondentAccess != "all" && in.RespondentAccess != "selected" {
+		in.RespondentAccess = "all"
+	}
 
 	createdBy := userFrom(r.Context()).Subject
-	p, err := s.st.CreateEditorPermission(r.Context(), in.EditorID, formID, in.FieldFilters, &createdBy)
+	p, err := s.st.CreateEditorPermission(r.Context(), in.EditorID, formID, in.RespondentAccess, in.FieldFilters, &createdBy)
 	if err != nil {
 		writeErr(w, http.StatusConflict, "editor mungkin sudah memiliki akses ke kuesioner ini")
 		return
@@ -136,13 +76,13 @@ func (s *Server) exportEditorPermissionsCSV(w http.ResponseWriter, r *http.Reque
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", "attachment; filename=\"editor-permissions-"+formID+".csv\"")
 	cw := csv.NewWriter(w)
-	_ = cw.Write([]string{"editor_name", "field_filters"})
+	_ = cw.Write([]string{"editor_name", "respondent_access", "field_filters"})
 	for _, p := range perms {
 		ff := make([]string, 0, len(p.FieldFilters))
 		for k, v := range p.FieldFilters {
 			ff = append(ff, k+"="+v)
 		}
-		_ = cw.Write([]string{p.EditorName, strings.Join(ff, ";")})
+		_ = cw.Write([]string{p.EditorName, p.RespondentAccess, strings.Join(ff, ";")})
 	}
 	cw.Flush()
 }
@@ -179,13 +119,17 @@ func (s *Server) updateEditorPermission(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	var in struct {
-		FieldFilters map[string]string `json:"fieldFilters"`
+		RespondentAccess string            `json:"respondentAccess"`
+		FieldFilters     map[string]string `json:"fieldFilters"`
 	}
 	if err := decodeJSON(r, &in); err != nil {
 		writeErr(w, http.StatusBadRequest, "format permintaan salah")
 		return
 	}
-	p, err := s.st.UpdateEditorPermission(r.Context(), r.PathValue("permId"), in.FieldFilters)
+	if in.RespondentAccess != "all" && in.RespondentAccess != "selected" {
+		in.RespondentAccess = "all"
+	}
+	p, err := s.st.UpdateEditorPermission(r.Context(), r.PathValue("permId"), in.RespondentAccess, in.FieldFilters)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeErr(w, http.StatusNotFound, "permission tidak ditemukan")
@@ -195,6 +139,98 @@ func (s *Server) updateEditorPermission(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	writeJSON(w, http.StatusOK, p)
+}
+
+// listEditorAllowedRespondents mengembalikan semua responden yang diizinkan untuk satu permission editor.
+func (s *Server) listEditorAllowedRespondents(w http.ResponseWriter, r *http.Request) {
+	perm, err := s.st.GetEditorPermissionByID(r.Context(), r.PathValue("permId"))
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "permission tidak ditemukan")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		return
+	}
+	if _, ok := s.ensureFormAccess(w, r, perm.FormID); !ok {
+		return
+	}
+
+	items, err := s.st.ListEditorAllowedRespondents(r.Context(), r.PathValue("permId"))
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"respondents": items})
+}
+
+// addEditorAllowedRespondent menambahkan satu responden ke daftar yang diizinkan untuk editor.
+func (s *Server) addEditorAllowedRespondent(w http.ResponseWriter, r *http.Request) {
+	perm, err := s.st.GetEditorPermissionByID(r.Context(), r.PathValue("permId"))
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "permission tidak ditemukan")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		return
+	}
+	if _, ok := s.ensureFormAccess(w, r, perm.FormID); !ok {
+		return
+	}
+
+	var in struct {
+		RespondentID string `json:"respondentId"`
+	}
+	if err := decodeJSON(r, &in); err != nil {
+		writeErr(w, http.StatusBadRequest, "format permintaan salah")
+		return
+	}
+	if in.RespondentID == "" {
+		writeErr(w, http.StatusBadRequest, "respondentId wajib diisi")
+		return
+	}
+	item, err := s.st.AddEditorAllowedRespondent(r.Context(), r.PathValue("permId"), in.RespondentID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal menambahkan")
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+// removeEditorAllowedRespondent menghapus satu responden dari daftar yang diizinkan untuk editor.
+func (s *Server) removeEditorAllowedRespondent(w http.ResponseWriter, r *http.Request) {
+	item, err := s.st.GetEditorAllowedRespondentByID(r.Context(), r.PathValue("id"))
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "data tidak ditemukan")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		return
+	}
+	perm, err := s.st.GetEditorPermissionByID(r.Context(), item.PermissionID)
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "permission tidak ditemukan")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		return
+	}
+	if _, ok := s.ensureFormAccess(w, r, perm.FormID); !ok {
+		return
+	}
+
+	if err := s.st.RemoveEditorAllowedRespondent(r.Context(), r.PathValue("id")); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "data tidak ditemukan")
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, "gagal menghapus")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
 // bulkAssignEditorPermissions memberi/memperbarui akses editor ke satu kuesioner
@@ -207,9 +243,10 @@ func (s *Server) bulkAssignEditorPermissions(w http.ResponseWriter, r *http.Requ
 	}
 	var in struct {
 		Items []struct {
-			Email        string            `json:"email"`
-			Note         string            `json:"note"`
-			FieldFilters map[string]string `json:"fieldFilters"`
+			Email            string            `json:"email"`
+			Note             string            `json:"note"`
+			RespondentAccess string            `json:"respondentAccess"`
+			FieldFilters     map[string]string `json:"fieldFilters"`
 		} `json:"items"`
 	}
 	if err := decodeJSON(r, &in); err != nil {
@@ -256,16 +293,20 @@ func (s *Server) bulkAssignEditorPermissions(w http.ResponseWriter, r *http.Requ
 			res["error"] = "gagal memeriksa akun"
 			results[i] = res
 			continue
-		} else if u.Role != "editor" {
+		} else if u.Role == "superadmin" || u.Role == "admin" {
 			res["status"] = "error"
-			res["error"] = "email terdaftar sebagai role lain (" + u.Role + ")"
+			res["error"] = "email terdaftar sebagai akun admin"
 			results[i] = res
 			continue
 		}
 		res["editorId"] = u.ID
+		respondentAccess := item.RespondentAccess
+		if respondentAccess != "all" && respondentAccess != "selected" {
+			respondentAccess = "all"
+		}
 		existing, err := s.st.GetEditorPermissionByEditorAndForm(r.Context(), u.ID, formID)
 		if errors.Is(err, store.ErrNotFound) {
-			p, cerr := s.st.CreateEditorPermission(r.Context(), u.ID, formID, item.FieldFilters, &createdBy)
+			p, cerr := s.st.CreateEditorPermission(r.Context(), u.ID, formID, respondentAccess, item.FieldFilters, &createdBy)
 			if cerr != nil {
 				res["status"] = "error"
 				res["error"] = "gagal membuat akses"
@@ -280,7 +321,7 @@ func (s *Server) bulkAssignEditorPermissions(w http.ResponseWriter, r *http.Requ
 			results[i] = res
 			continue
 		} else {
-			p, uerr := s.st.UpdateEditorPermission(r.Context(), existing.ID, item.FieldFilters)
+			p, uerr := s.st.UpdateEditorPermission(r.Context(), existing.ID, respondentAccess, item.FieldFilters)
 			if uerr != nil {
 				res["status"] = "error"
 				res["error"] = "gagal memperbarui akses"
@@ -350,6 +391,56 @@ func (s *Server) deleteEditorPermission(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
+// convertEditorToViewer mengubah satu permission editor menjadi viewer untuk akun & kuesioner yang
+// sama — membawa respondentAccess, fieldFilters, dan daftar responden terpilih ke permission baru
+// (visibleFields dikosongkan = semua variabel terlihat, karena editor tidak punya konsep itu), lalu
+// menghapus permission editor yang lama. Role akun (users.role) tidak diubah.
+func (s *Server) convertEditorToViewer(w http.ResponseWriter, r *http.Request) {
+	old, err := s.st.GetEditorPermissionByID(r.Context(), r.PathValue("permId"))
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "permission tidak ditemukan")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		return
+	}
+	if _, ok := s.ensureFormAccess(w, r, old.FormID); !ok {
+		return
+	}
+	if _, err := s.st.GetViewerPermission(r.Context(), old.EditorID, old.FormID); err == nil {
+		writeErr(w, http.StatusConflict, "akun ini sudah memiliki akses viewer ke kuesioner ini")
+		return
+	} else if !errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusInternalServerError, "gagal memeriksa akses")
+		return
+	}
+
+	allowed, err := s.st.ListEditorAllowedRespondents(r.Context(), old.ID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		return
+	}
+
+	createdBy := userFrom(r.Context()).Subject
+	newPerm, err := s.st.CreateViewerPermission(r.Context(), old.EditorID, old.FormID, old.RespondentAccess, nil, old.FieldFilters, &createdBy)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal membuat akses viewer")
+		return
+	}
+	for _, a := range allowed {
+		if _, err := s.st.AddViewerAllowedRespondent(r.Context(), newPerm.ID, a.RespondentID); err != nil {
+			writeErr(w, http.StatusInternalServerError, "gagal menyalin daftar responden")
+			return
+		}
+	}
+	if err := s.st.DeleteEditorPermission(r.Context(), old.ID); err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal menghapus akses editor lama")
+		return
+	}
+	writeJSON(w, http.StatusOK, newPerm)
+}
+
 // editorMyForms mengembalikan form yang ditugaskan ke editor login.
 func (s *Server) editorMyForms(w http.ResponseWriter, r *http.Request) {
 	editorID := userFrom(r.Context()).Subject
@@ -390,68 +481,23 @@ func (s *Server) editorGetForm(w http.ResponseWriter, r *http.Request) {
 func (s *Server) editorListResponses(w http.ResponseWriter, r *http.Request) {
 	editorID := userFrom(r.Context()).Subject
 	formID := r.PathValue("id")
-	perm, err := s.st.GetEditorPermissionByEditorAndForm(r.Context(), editorID, formID)
-	if errors.Is(err, store.ErrNotFound) {
+	if _, err := s.st.GetEditorPermissionByEditorAndForm(r.Context(), editorID, formID); errors.Is(err, store.ErrNotFound) {
 		writeErr(w, http.StatusForbidden, "tidak memiliki akses ke kuesioner ini")
 		return
-	}
-	if err != nil {
+	} else if err != nil {
 		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
 		return
 	}
 	q := r.URL.Query()
 	limit, _ := strconv.Atoi(q.Get("limit"))
 	offset, _ := strconv.Atoi(q.Get("offset"))
-	f := store.ResponseFilter{
-		Status:  q.Get("status"),
-		ShareID: q.Get("shareId"),
-		Search:  strings.TrimSpace(q.Get("search")),
-		SortBy:  q.Get("sortBy"),
-		SortDir: q.Get("sortDir"),
-	}
-	for key, vals := range q {
-		if len(vals) == 0 || strings.TrimSpace(vals[0]) == "" {
-			continue
-		}
-		val := strings.TrimSpace(vals[0])
-		if applyRangeFilter(&f, key, val) {
-			// sudah ditangani
-		} else if strings.HasPrefix(key, "fea_") {
-			if f.FieldAnyFilters == nil {
-				f.FieldAnyFilters = make(map[string][]string)
-			}
-			if len(f.FieldAnyFilters) < 10 {
-				f.FieldAnyFilters[key[4:]] = splitFilterValues(val)
-			}
-		} else if strings.HasPrefix(key, "fe_") {
-			if f.FieldExactFilters == nil {
-				f.FieldExactFilters = make(map[string]string)
-			}
-			if len(f.FieldExactFilters) < 10 {
-				f.FieldExactFilters[key[3:]] = val
-			}
-		} else if strings.HasPrefix(key, "f_") {
-			if f.FieldFilters == nil {
-				f.FieldFilters = make(map[string]string)
-			}
-			if len(f.FieldFilters) < 10 {
-				f.FieldFilters[key[2:]] = val
-			}
-		}
-	}
-	// Terapkan field_filters permission editor sebagai filter wajib (tidak bisa di-override user)
-	for k, v := range perm.FieldFilters {
-		if f.FieldExactFilters == nil {
-			f.FieldExactFilters = make(map[string]string)
-		}
-		f.FieldExactFilters[k] = v
-	}
-	resp, err := s.st.ListAllResponsesByForm(r.Context(), formID, f, limit, offset)
+	f := parseResponseFilter(q)
+	resp, err := s.st.ListEditorResponses(r.Context(), editorID, formID, f, limit, offset)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
 		return
 	}
-	count, _ := s.st.CountAllResponsesByForm(r.Context(), formID, f)
+	count, _ := s.st.CountEditorResponses(r.Context(), editorID, formID, f)
 	writeJSON(w, http.StatusOK, map[string]any{"responses": resp, "total": count})
 }
 
@@ -476,10 +522,9 @@ func (s *Server) editorExportResponses(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", "attachment; filename=\"responses-"+formID+".csv\"")
 	cw := csv.NewWriter(w)
-	header := append([]string{"id", "respondent_id", "nama", "email", "status", "waktu_kirim"}, cols...)
-	_ = cw.Write(header)
+	_ = cw.Write(append(csvBaseHeader(true), cols...))
 	_ = s.st.ForEachEditorResponse(r.Context(), editorID, formID, func(rr models.Response) error {
-		writeCSVRow(cw, rr, cols)
+		writeCSVRow(cw, rr, cols, true)
 		return nil
 	})
 }
@@ -502,18 +547,19 @@ func (s *Server) editorGetResponse(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// editorUpdateResponse memperbarui jawaban satu respons oleh editor.
+// editorUpdateResponse memperbarui jawaban satu respons oleh editor. Akses dicek terhadap
+// respons yang SUDAH TERSIMPAN (respondentAccess + fieldFilters), bukan terhadap payload dari
+// klien — payload bisa dipalsukan untuk melewati fieldFilters kalau dicek terhadap dirinya sendiri.
 func (s *Server) editorUpdateResponse(w http.ResponseWriter, r *http.Request) {
 	editorID := userFrom(r.Context()).Subject
 	formID := r.PathValue("id")
 	responseID := r.PathValue("responseId")
 
-	perm, err := s.st.GetEditorPermissionByEditorAndForm(r.Context(), editorID, formID)
-	if errors.Is(err, store.ErrNotFound) {
-		writeErr(w, http.StatusForbidden, "tidak memiliki akses ke kuesioner ini")
-		return
-	}
-	if err != nil {
+	if _, err := s.st.GetEditorResponseByID(r.Context(), editorID, formID, responseID); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "respons tidak ditemukan atau akses tidak diizinkan")
+			return
+		}
 		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
 		return
 	}
@@ -533,19 +579,6 @@ func (s *Server) editorUpdateResponse(w http.ResponseWriter, r *http.Request) {
 	if in.Status != "draft" && in.Status != "submitted" {
 		writeErr(w, http.StatusBadRequest, "status tidak valid")
 		return
-	}
-	if len(perm.FieldFilters) > 0 {
-		var m map[string]any
-		if err := json.Unmarshal(in.Answers, &m); err != nil {
-			writeErr(w, http.StatusBadRequest, "format jawaban tidak valid")
-			return
-		}
-		for field, required := range perm.FieldFilters {
-			if v, ok := m[field]; !ok || fmt.Sprint(v) != required {
-				writeErr(w, http.StatusForbidden, "jawaban tidak sesuai dengan izin edit yang diberikan")
-				return
-			}
-		}
 	}
 	if err := s.st.UpdateResponseAnswers(r.Context(), formID, responseID, in.Answers); err != nil {
 		if errors.Is(err, store.ErrNotFound) {

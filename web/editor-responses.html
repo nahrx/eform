@@ -137,8 +137,11 @@ async function api(path,opts){
 
 async function init(){
   try{
+    // viewer maupun editor boleh membuka halaman ini (satu akun bisa jadi editor di satu
+    // kuesioner dan viewer di kuesioner lain); otorisasi untuk kuesioner INI ditentukan oleh
+    // panggilan /api/editor/forms/{id} di bawah, bukan role global akun.
     const me=await api("/api/auth/me");
-    if(me.role!=="editor"){location.replace("/viewer-portal");return;}
+    if(me.role!=="editor"&&me.role!=="viewer"){location.replace("/viewer-portal");return;}
 
     const form=await api("/api/editor/forms/"+FORM_ID);
     SCHEMA=form.schema;
@@ -478,7 +481,7 @@ function renderTable(){
       <td class="td-who">${who}</td>
       <td class="td-time">${waktu}</td>
       ${extraVals}
-      <td style="white-space:nowrap"><a class="btn-sm" href="/portal-response-view?form=${encodeURIComponent(FORM_ID)}&resp=${encodeURIComponent(resp.id)}" target="_blank">Lihat</a></td>
+      <td style="white-space:nowrap"><a class="btn-sm" href="/portal-response-view?form=${encodeURIComponent(FORM_ID)}&resp=${encodeURIComponent(resp.id)}&type=editor" target="_blank">Lihat</a></td>
     </tr>`;
   });
 

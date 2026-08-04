@@ -134,12 +134,10 @@ func (s *Server) googleCallback(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusInternalServerError, "gagal menerbitkan token")
 			return
 		}
+		// Selalu ke /viewer-portal — halaman ini sudah menampilkan gabungan kuesioner
+		// viewer & editor akun ini, terlepas dari role global akunnya.
 		nextPage := "/viewer-portal"
-		typeParam := "viewer"
-		if user.Role == "editor" {
-			nextPage = "/admin"
-			typeParam = "editor"
-		}
+		typeParam := user.Role
 		// Simpan ke localStorage via done page — gunakan fragment (#) agar token tidak masuk server log
 		doneURL := "/auth/google/done#" + url.Values{
 			"token": {jwtToken},

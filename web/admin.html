@@ -9,7 +9,7 @@
 <body>
 <header>
   <h1>eForm · Dashboard</h1>
-  <button class="btn primary" id="btnNewForm" onclick="location.href='/builder'">+ Kuesioner baru</button>
+  <button class="btn primary" id="btnNewForm" onclick="location.href='/builder'" title="Kuesioner baru">+ <span class="btn-label">Kuesioner baru</span></button>
   <div class="user-menu" id="userMenu">
     <button class="user-btn" id="userBtn">
       <span class="user-avatar" id="userAvatar">?</span>
@@ -55,21 +55,17 @@
 
       <section id="formsSection">
         <div class="bar"><h2>Daftar Kuesioner</h2><button class="btn" id="refresh">↻ Muat ulang</button></div>
-        <table id="tbl"><thead><tr><th>Judul</th><th>Status</th><th>Diperbarui</th><th id="thAnswers">Jawaban</th></tr></thead>
-        <tbody id="rows"><tr><td colspan="4" class="empty">Memuat…</td></tr></tbody></table>
+        <div class="table-scroll">
+        <table id="tbl" class="cards"><thead><tr><th>Judul</th><th>Status</th><th>Diperbarui</th><th id="thAnswers">Jawaban</th><th></th></tr></thead>
+        <tbody id="rows"><tr><td colspan="5" class="empty">Memuat…</td></tr></tbody></table>
+        </div>
       </section>
 
       <section id="usersSection" hidden>
         <div class="bar"><h2>Manajemen User</h2><button class="btn" id="refreshUsers" type="button">↻ Muat ulang</button></div>
 
-        <div class="tabbar" id="userSubtabbar" style="margin-bottom:16px">
-          <button class="btn tab" id="subtabAdminBtn" type="button" hidden>Admin</button>
-          <button class="btn tab" id="subtabViewerBtn" type="button">Viewer</button>
-          <button class="btn tab" id="subtabEditorBtn" type="button">Editor</button>
-        </div>
-
         <!-- Sub-section: Admin & Superadmin -->
-        <div id="adminSubSection" hidden>
+        <div id="adminSubSection">
           <div class="user-card">
             <div class="user-card-title">Buat User Admin</div>
             <div class="user-grid">
@@ -86,55 +82,22 @@
             </div>
             <div class="muted" id="userMsg"></div>
           </div>
-          <table>
+          <div class="table-scroll">
+          <table class="cards">
             <thead><tr><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Dibuat</th><th></th></tr></thead>
             <tbody id="userRows"><tr><td colspan="6" class="empty">Memuat…</td></tr></tbody>
           </table>
-        </div>
-
-        <!-- Sub-section: Viewer -->
-        <div id="viewerSubSection" hidden>
-          <div class="user-card">
-            <div class="user-card-title">Tambah Akun Viewer</div>
-            <div class="muted" style="font-size:12px;margin-bottom:10px">Viewer login dengan akun Google. Username otomatis menggunakan email yang didaftarkan.</div>
-            <div class="user-grid">
-              <input id="vtEmail" type="email" placeholder="Email Google viewer" autocomplete="off" style="grid-column:1/3">
-              <input id="vtNote" placeholder="Nama / Catatan (opsional)" style="grid-column:1/3">
-            </div>
-            <div class="user-actions">
-              <button class="btn primary" id="btnCreateViewerTab" type="button">+ Tambah Viewer</button>
-            </div>
-            <div class="muted" id="viewerTabMsg"></div>
           </div>
-          <table>
-            <thead><tr><th>Email</th><th>Catatan</th><th>Status</th><th>Dibuat</th><th></th></tr></thead>
-            <tbody id="viewerTabRows"><tr><td colspan="5" class="empty">Memuat…</td></tr></tbody>
-          </table>
-        </div>
-
-        <!-- Sub-section: Editor -->
-        <div id="editorSubSection" hidden>
-          <div class="user-card">
-            <div class="user-card-title">Tambah Akun Editor</div>
-            <div class="muted" style="font-size:12px;margin-bottom:10px">Editor login dengan akun Google. Username otomatis menggunakan email yang didaftarkan.</div>
-            <div class="user-grid">
-              <input id="etEmail" type="email" placeholder="Email Google editor" autocomplete="off" style="grid-column:1/3">
-              <input id="etNote" placeholder="Nama / Catatan (opsional)" style="grid-column:1/3">
-            </div>
-            <div class="user-actions">
-              <button class="btn primary" id="btnCreateEditorTab" type="button">+ Tambah Editor</button>
-            </div>
-            <div class="muted" id="editorTabMsg"></div>
-          </div>
-          <table>
-            <thead><tr><th>Email</th><th>Catatan</th><th>Status</th><th>Dibuat</th><th></th></tr></thead>
-            <tbody id="editorTabRows"><tr><td colspan="5" class="empty">Memuat…</td></tr></tbody>
-          </table>
         </div>
       </section>
 
     </div>
   </main>
+</div>
+
+<div class="row-menu" id="rowMenu" hidden>
+  <button class="udd-item" type="button" onclick="openBuilderFromMenu()">Buka Builder</button>
+  <button class="udd-item" type="button" onclick="openResponsesFromMenu()">Lihat Jawaban</button>
 </div>
 
 <dialog id="confirmDlg" style="border:none;border-radius:12px;padding:28px 24px;max-width:380px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.2)">
@@ -146,6 +109,7 @@
 </dialog>
 
 <script src="/i18n.js"></script>
+<script src="/responsive-tables.js"></script>
 <script src="/admin.js"></script>
 </body>
 </html>

@@ -2,6 +2,8 @@ package httpapi
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"log"
 	"net"
 	"net/http"
@@ -10,12 +12,14 @@ import (
 	"time"
 
 	"github.com/bpskaltim/eform-backend/internal/auth"
+	"github.com/bpskaltim/eform-backend/internal/models"
 )
 
 type ctxKey string
 
 const userKey ctxKey = "user"
 const respondentKey ctxKey = "respondent"
+const apiKeyCtxKey ctxKey = "apiKey"
 
 func userFrom(ctx context.Context) *auth.Claims {
 	c, _ := ctx.Value(userKey).(*auth.Claims)
@@ -143,6 +147,144 @@ func (s *Server) respondentMW(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+/* ---------------- autentikasi API key (/api/v1) ---------------- */
+
+const apiKeyPrefix = "eform_"
+
+// hashAPIKey menghasilkan SHA-256 hex dari key yang dikirim klien.
+//
+// Sengaja berbeda dari password (bcrypt lewat auth.HashPassword). Bcrypt dibuat lambat
+// untuk melawan tebakan pada rahasia berentropi rendah buatan manusia; API key di sini
+// adalah 32 byte dari crypto/rand, jadi menebaknya mustahil dan biaya bcrypt hanya jadi
+// beban di setiap permintaan. SHA-256 juga memungkinkan lookup O(1) lewat index key_hash.
+func hashAPIKey(key string) string {
+	sum := sha256.Sum256([]byte(key))
+	return hex.EncodeToString(sum[:])
+}
+
+// apiKeyFromContext mengambil API key yang sudah terverifikasi dari context.
+func apiKeyFromContext(ctx context.Context) *models.FormAPIKey {
+	k, _ := ctx.Value(apiKeyCtxKey).(*models.FormAPIKey)
+	return k
+}
+
+// ipAllowed mencocokkan IP pemanggil dengan daftar izin. Entri boleh berupa satu IP
+// ("103.10.1.5") atau CIDR ("103.10.1.0/24"). Daftar kosong berarti semua IP boleh.
+func ipAllowed(ip string, allowed []string) bool {
+	if len(allowed) == 0 {
+		return true
+	}
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return false
+	}
+	for _, entry := range allowed {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		if strings.Contains(entry, "/") {
+			if _, netw, err := net.ParseCIDR(entry); err == nil && netw.Contains(parsed) {
+				return true
+			}
+			continue
+		}
+		if other := net.ParseIP(entry); other != nil && other.Equal(parsed) {
+			return true
+		}
+	}
+	return false
+}
+
+// apiKeyMW memverifikasi API key untuk endpoint /api/v1 dan menerapkan seluruh
+// pembatasannya: aktif, belum kedaluwarsa, IP diizinkan, dan kuota per menit.
+//
+// Semua penolakan memakai pesan generik supaya tidak bocor apakah suatu key ada.
+// Setiap permintaan — termasuk yang ditolak — dicatat ke api_access_logs.
+func (s *Server) apiKeyMW(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ip := clientIP(r)
+		raw := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		raw = strings.TrimSpace(raw)
+
+		// Prefix key dicatat apa adanya untuk audit; kalau formatnya salah, catat kosong.
+		logPrefix := ""
+		if strings.HasPrefix(raw, apiKeyPrefix) && len(raw) >= len(apiKeyPrefix)+10 {
+			logPrefix = raw[len(apiKeyPrefix) : len(apiKeyPrefix)+10]
+		}
+		deny := func(status int, msg string) {
+			s.logAPIAccess(r, nil, logPrefix, ip, status, 0, msg)
+			writeErr(w, status, msg)
+		}
+
+		if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") || !strings.HasPrefix(raw, apiKeyPrefix) {
+			deny(http.StatusUnauthorized, "API key tidak valid")
+			return
+		}
+		key, err := s.st.GetAPIKeyByHash(r.Context(), hashAPIKey(raw))
+		if err != nil {
+			deny(http.StatusUnauthorized, "API key tidak valid")
+			return
+		}
+		if !key.IsActive {
+			s.logAPIAccess(r, key, key.KeyPrefix, ip, http.StatusUnauthorized, 0, "key nonaktif")
+			writeErr(w, http.StatusUnauthorized, "API key tidak valid")
+			return
+		}
+		if key.ExpiresAt != nil && time.Now().After(*key.ExpiresAt) {
+			s.logAPIAccess(r, key, key.KeyPrefix, ip, http.StatusUnauthorized, 0, "key kedaluwarsa")
+			writeErr(w, http.StatusUnauthorized, "API key tidak valid")
+			return
+		}
+		if !ipAllowed(ip, key.AllowedIPs) {
+			s.logAPIAccess(r, key, key.KeyPrefix, ip, http.StatusForbidden, 0, "IP tidak diizinkan")
+			writeErr(w, http.StatusForbidden, "akses dari alamat IP ini tidak diizinkan")
+			return
+		}
+		quota := key.RateLimitPerMin
+		if quota <= 0 {
+			quota = 60
+		}
+		if !apiKeyRL.allow("api:"+key.ID, quota) {
+			w.Header().Set("Retry-After", "60")
+			s.logAPIAccess(r, key, key.KeyPrefix, ip, http.StatusTooManyRequests, 0, "kuota per menit terlampaui")
+			writeErr(w, http.StatusTooManyRequests, "terlalu banyak permintaan, coba lagi dalam 1 menit")
+			return
+		}
+
+		go func(id, ip string) {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = s.st.TouchAPIKey(ctx, id, ip)
+		}(key.ID, ip)
+
+		next(w, r.WithContext(context.WithValue(r.Context(), apiKeyCtxKey, key)))
+	}
+}
+
+// logAPIAccess menulis satu baris audit. Gagal mencatat tidak boleh menggagalkan
+// permintaan, jadi errornya cuma di-log ke stdout.
+func (s *Server) logAPIAccess(r *http.Request, key *models.FormAPIKey, prefix, ip string, status, rowCount int, errMsg string) {
+	l := &models.APIAccessLog{
+		KeyPrefix: prefix,
+		IP:        ip,
+		Path:      r.URL.Path,
+		Query:     r.URL.RawQuery,
+		Status:    status,
+		RowCount:  rowCount,
+		Error:     errMsg,
+	}
+	if key != nil {
+		l.APIKeyID = &key.ID
+		l.FormID = &key.FormID
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := s.st.InsertAPIAccessLog(ctx, l); err != nil {
+		log.Printf("[api-audit] gagal mencatat akses %s: %v", r.URL.Path, err)
+	}
+}
+
 // requireRole membatasi akses ke salah satu role yang diizinkan.
 func (s *Server) requireRole(next http.HandlerFunc, roles ...string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -161,55 +303,72 @@ func (s *Server) requireRole(next http.HandlerFunc, roles ...string) http.Handle
 	}
 }
 
-// loginLimiter membatasi percobaan login per IP (max 10 per menit).
-type loginLimiter struct {
+// slidingWindowLimiter membatasi jumlah kejadian per kunci dalam jendela satu menit.
+// Kuncinya bebas: IP untuk percobaan login, "api:<keyID>" untuk pemakaian API key.
+type slidingWindowLimiter struct {
 	mu       sync.Mutex
 	attempts map[string][]time.Time
 }
 
-var loginRL = &loginLimiter{attempts: make(map[string][]time.Time)}
-
-func init() {
+func newSlidingWindowLimiter() *slidingWindowLimiter {
+	l := &slidingWindowLimiter{attempts: make(map[string][]time.Time)}
 	go func() {
 		for range time.Tick(5 * time.Minute) {
-			loginRL.mu.Lock()
-			cutoff := time.Now().Add(-time.Minute)
-			for ip, ts := range loginRL.attempts {
-				var valid []time.Time
-				for _, t := range ts {
-					if t.After(cutoff) {
-						valid = append(valid, t)
-					}
-				}
-				if len(valid) == 0 {
-					delete(loginRL.attempts, ip)
-				} else {
-					loginRL.attempts[ip] = valid
-				}
-			}
-			loginRL.mu.Unlock()
+			l.sweep()
 		}
 	}()
+	return l
 }
 
-func (l *loginLimiter) allow(r *http.Request) bool {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		host = r.RemoteAddr
+func (l *slidingWindowLimiter) sweep() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	cutoff := time.Now().Add(-time.Minute)
+	for k, ts := range l.attempts {
+		var valid []time.Time
+		for _, t := range ts {
+			if t.After(cutoff) {
+				valid = append(valid, t)
+			}
+		}
+		if len(valid) == 0 {
+			delete(l.attempts, k)
+		} else {
+			l.attempts[k] = valid
+		}
 	}
+}
+
+// allow mencatat satu kejadian untuk key dan mengembalikan false bila kuota per menit
+// sudah terlampaui.
+func (l *slidingWindowLimiter) allow(key string, max int) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	cutoff := time.Now().Add(-time.Minute)
 	var valid []time.Time
-	for _, t := range l.attempts[host] {
+	for _, t := range l.attempts[key] {
 		if t.After(cutoff) {
 			valid = append(valid, t)
 		}
 	}
-	if len(valid) >= 10 {
-		l.attempts[host] = valid
+	if len(valid) >= max {
+		l.attempts[key] = valid
 		return false
 	}
-	l.attempts[host] = append(valid, time.Now())
+	l.attempts[key] = append(valid, time.Now())
 	return true
+}
+
+// loginRL membatasi percobaan login per IP (max 10 per menit).
+var loginRL = newSlidingWindowLimiter()
+
+// apiKeyRL membatasi pemakaian tiap API key; kuotanya per key (rate_limit_per_min).
+var apiKeyRL = newSlidingWindowLimiter()
+
+func (l *slidingWindowLimiter) allowRequest(r *http.Request) bool {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	return l.allow(host, 10)
 }

@@ -15,89 +15,6 @@ import (
 )
 
 /* ================================================================
-   SUPERADMIN — kelola akun viewer
-   ================================================================ */
-
-func (s *Server) createViewer(w http.ResponseWriter, r *http.Request) {
-	var in struct {
-		Email string `json:"email"`
-		Note  string `json:"note"`
-	}
-	if err := decodeJSON(r, &in); err != nil {
-		writeErr(w, http.StatusBadRequest, "format permintaan salah")
-		return
-	}
-	in.Email = strings.TrimSpace(strings.ToLower(in.Email))
-	in.Note = strings.TrimSpace(in.Note)
-	if in.Email == "" {
-		writeErr(w, http.StatusBadRequest, "email wajib diisi")
-		return
-	}
-	// Viewer login via Google — username = email, password acak (tidak dipakai untuk login)
-	b := make([]byte, 24)
-	if _, err := rand.Read(b); err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal membuat password acak")
-		return
-	}
-	randomPwd := base64.RawURLEncoding.EncodeToString(b)
-	hash, err := auth.HashPassword(randomPwd)
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal memproses password")
-		return
-	}
-	u, err := s.st.CreateUser(r.Context(), in.Email, in.Email, hash, "viewer", in.Note)
-	if err != nil {
-		writeErr(w, http.StatusConflict, "email mungkin sudah terdaftar")
-		return
-	}
-	writeJSON(w, http.StatusCreated, u)
-}
-
-func (s *Server) listViewers(w http.ResponseWriter, r *http.Request) {
-	viewers, err := s.st.ListViewers(r.Context())
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"viewers": viewers})
-}
-
-func (s *Server) patchNoteWithRole(role string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
-		var in struct {
-			Note string `json:"note"`
-		}
-		if err := decodeJSON(r, &in); err != nil {
-			writeErr(w, http.StatusBadRequest, "format permintaan salah")
-			return
-		}
-		if err := s.st.UpdateUserNoteByRole(r.Context(), id, strings.TrimSpace(in.Note), role); err != nil {
-			if errors.Is(err, store.ErrNotFound) {
-				writeErr(w, http.StatusNotFound, role+" tidak ditemukan")
-				return
-			}
-			writeErr(w, http.StatusInternalServerError, "gagal memperbarui")
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
-	}
-}
-
-func (s *Server) deleteViewer(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if err := s.st.DeleteUserByRole(r.Context(), id, "viewer"); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeErr(w, http.StatusNotFound, "viewer tidak ditemukan")
-			return
-		}
-		writeErr(w, http.StatusInternalServerError, "gagal menghapus")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
-}
-
-/* ================================================================
    SUPERADMIN — kelola permission viewer per kuesioner
    ================================================================ */
 
@@ -251,6 +168,56 @@ func (s *Server) deleteViewerPermission(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
+// convertViewerToEditor mengubah satu permission viewer menjadi editor untuk akun & kuesioner yang
+// sama — membawa respondentAccess, fieldFilters, dan daftar responden terpilih ke permission baru,
+// lalu menghapus permission viewer yang lama. Role akun (users.role) tidak diubah — role bukan lagi
+// gerbang eksklusif, hanya label default; kapabilitas sebenarnya ditentukan oleh tabel permission ini.
+func (s *Server) convertViewerToEditor(w http.ResponseWriter, r *http.Request) {
+	old, err := s.st.GetViewerPermissionByID(r.Context(), r.PathValue("permId"))
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "permission tidak ditemukan")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		return
+	}
+	if _, ok := s.ensureFormAccess(w, r, old.FormID); !ok {
+		return
+	}
+	if _, err := s.st.GetEditorPermissionByEditorAndForm(r.Context(), old.ViewerID, old.FormID); err == nil {
+		writeErr(w, http.StatusConflict, "akun ini sudah memiliki akses editor ke kuesioner ini")
+		return
+	} else if !errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusInternalServerError, "gagal memeriksa akses")
+		return
+	}
+
+	allowed, err := s.st.ListViewerAllowedRespondents(r.Context(), old.ID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		return
+	}
+
+	createdBy := userFrom(r.Context()).Subject
+	newPerm, err := s.st.CreateEditorPermission(r.Context(), old.ViewerID, old.FormID, old.RespondentAccess, old.FieldFilters, &createdBy)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal membuat akses editor")
+		return
+	}
+	for _, a := range allowed {
+		if _, err := s.st.AddEditorAllowedRespondent(r.Context(), newPerm.ID, a.RespondentID); err != nil {
+			writeErr(w, http.StatusInternalServerError, "gagal menyalin daftar responden")
+			return
+		}
+	}
+	if err := s.st.DeleteViewerPermission(r.Context(), old.ID); err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal menghapus akses viewer lama")
+		return
+	}
+	writeJSON(w, http.StatusOK, newPerm)
+}
+
 /* ================================================================
    SUPERADMIN — bulk assign/hapus permission viewer (banyak sekaligus)
    ================================================================ */
@@ -316,9 +283,9 @@ func (s *Server) bulkAssignViewerPermissions(w http.ResponseWriter, r *http.Requ
 			res["error"] = "gagal memeriksa akun"
 			results[i] = res
 			continue
-		} else if u.Role != "viewer" {
+		} else if u.Role == "superadmin" || u.Role == "admin" {
 			res["status"] = "error"
-			res["error"] = "email terdaftar sebagai role lain (" + u.Role + ")"
+			res["error"] = "email terdaftar sebagai akun admin"
 			results[i] = res
 			continue
 		}
@@ -568,32 +535,7 @@ func (s *Server) viewerListResponses(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	limit, _ := strconv.Atoi(q.Get("limit"))
 	offset, _ := strconv.Atoi(q.Get("offset"))
-	f := store.ResponseFilter{
-		Status:  q.Get("status"),
-		Search:  strings.TrimSpace(q.Get("search")),
-		SortBy:  q.Get("sortBy"),
-		SortDir: q.Get("sortDir"),
-	}
-	for key, vals := range q {
-		if len(vals) > 0 && vals[0] != "" && applyRangeFilter(&f, key, vals[0]) {
-			// sudah ditangani
-		} else if strings.HasPrefix(key, "fea_") && len(vals) > 0 && vals[0] != "" {
-			if f.FieldAnyFilters == nil {
-				f.FieldAnyFilters = make(map[string][]string)
-			}
-			f.FieldAnyFilters[strings.TrimPrefix(key, "fea_")] = splitFilterValues(vals[0])
-		} else if strings.HasPrefix(key, "f_") && len(vals) > 0 && vals[0] != "" {
-			if f.FieldFilters == nil {
-				f.FieldFilters = make(map[string]string)
-			}
-			f.FieldFilters[strings.TrimPrefix(key, "f_")] = vals[0]
-		} else if strings.HasPrefix(key, "fe_") && len(vals) > 0 && vals[0] != "" {
-			if f.FieldExactFilters == nil {
-				f.FieldExactFilters = make(map[string]string)
-			}
-			f.FieldExactFilters[strings.TrimPrefix(key, "fe_")] = vals[0]
-		}
-	}
+	f := parseResponseFilter(q)
 
 	resp, err := s.st.ListViewerResponses(r.Context(), viewerID, formID, f, limit, offset)
 	if err != nil {
@@ -641,10 +583,9 @@ func (s *Server) viewerExportResponses(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", "attachment; filename=\"responses-"+formID+".csv\"")
 	cw := csv.NewWriter(w)
-	header := append([]string{"id", "respondent_id", "nama", "email", "status", "waktu_kirim"}, cols...)
-	_ = cw.Write(header)
+	_ = cw.Write(append(csvBaseHeader(true), cols...))
 	_ = s.st.ForEachViewerResponse(r.Context(), viewerID, formID, func(rr models.Response) error {
-		writeCSVRow(cw, rr, cols)
+		writeCSVRow(cw, rr, cols, true)
 		return nil
 	})
 }

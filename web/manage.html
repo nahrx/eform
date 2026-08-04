@@ -52,13 +52,13 @@
         <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="15" cy="4" r="2"/><circle cx="5" cy="10" r="2"/><circle cx="15" cy="16" r="2"/><line x1="6.7" y1="9" x2="13.3" y2="5"/><line x1="6.7" y1="11" x2="13.3" y2="15"/></svg>
         Bagikan
       </button>
-      <button class="app-nav-item" id="nav-viewer" type="button" onclick="switchSection('viewer')">
-        <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 10 Q10 2 18.5 10 Q10 18 1.5 10 Z"/><circle cx="10" cy="10" r="2.3"/></svg>
-        Akses Viewer
+      <button class="app-nav-item" id="nav-user" type="button" onclick="switchSection('user')">
+        <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="6.5" r="3"/><path d="M3.5 17c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/></svg>
+        User
       </button>
-      <button class="app-nav-item" id="nav-editor" type="button" onclick="switchSection('editor')">
-        <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3.5 16.5 7 6.5 17 2.5 17.5 3 13.5Z"/><line x1="11.5" y1="5" x2="15" y2="8.5"/></svg>
-        Akses Editor
+      <button class="app-nav-item" id="nav-api" type="button" onclick="switchSection('api')">
+        <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.5" cy="10" r="3.5"/><line x1="10" y1="10" x2="17" y2="10"/><line x1="14" y1="10" x2="14" y2="13"/><line x1="16.5" y1="10" x2="16.5" y2="12"/></svg>
+        API
       </button>
     </nav>
     <div class="app-sidebar-title">Buka di Halaman Lain</div>
@@ -108,134 +108,112 @@
         <div id="shareList"></div>
       </section>
 
-      <section id="sec-viewer" hidden>
-        <div class="bar"><h2>Akses Viewer</h2></div>
+      <section id="sec-user" hidden>
+        <div class="bar">
+          <h2>User</h2>
+          <button class="btn primary" type="button" onclick="openUserAddDlg()">+ Tambah User</button>
+        </div>
         <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
-          Pilih viewer yang boleh melihat jawaban kuesioner ini dan konfigurasi batasan aksesnya.
+          Viewer bisa melihat jawaban kuesioner ini, editor bisa mengelola &amp; mengedit jawabannya. Akun dibuat otomatis saat ditambahkan bila belum terdaftar.
         </div>
 
-        <div class="user-card">
-          <div style="font-size:12px;font-weight:600;margin-bottom:4px">Akun Viewer</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:8px">
-            Viewer login memakai akun Google — masukkan email Google-nya. Username otomatis menggunakan email.
-          </div>
-          <div class="row" style="gap:8px;flex-wrap:wrap">
-            <input id="vEmail" type="email" placeholder="Email Google viewer" style="flex:2;min-width:150px">
-            <input id="vNote" placeholder="Catatan (opsional)" style="flex:1;min-width:130px">
-            <button class="btn primary" onclick="createViewer()">+ Buat Viewer</button>
-          </div>
-          <div id="viewerList" style="margin-top:10px">Memuat…</div>
+        <div style="font-size:12px;font-weight:600;margin-bottom:6px">Daftar User Kuesioner Ini</div>
+        <div class="table-scroll">
+        <table class="cards">
+          <thead><tr><th>Email</th><th>Status</th><th>Akses Responden</th><th>Akses Variabel</th><th></th></tr></thead>
+          <tbody id="userPermList"><tr><td colspan="5" class="empty">Memuat…</td></tr></tbody>
+        </table>
         </div>
-
-        <div class="user-card">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-            <div style="font-size:12px;font-weight:600">Tambah Viewer ke Kuesioner Ini</div>
-            <button class="btn" style="font-size:11px;padding:3px 9px" onclick="openBulkViewer()">⚡ Tambah/Kelola Massal</button>
-          </div>
-          <div class="row" style="gap:8px;flex-wrap:wrap;align-items:flex-start">
-            <select id="vpViewerSel" style="flex:1;min-width:140px;font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:6px">
-              <option value="">— pilih viewer —</option>
-            </select>
-            <div style="flex:1;min-width:160px">
-              <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Akses responden</div>
-              <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:4px">
-                <input type="radio" name="vpRA" value="all" checked> Semua responden
-              </label>
-              <label style="display:flex;align-items:center;gap:6px;font-size:12px">
-                <input type="radio" name="vpRA" value="selected"> Responden tertentu saja
-              </label>
-            </div>
-          </div>
-          <div style="margin-top:10px">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-              <div style="font-size:11px;font-weight:600;color:var(--muted)">Filter Variabel yang Dapat Dilihat</div>
-              <div style="display:flex;gap:6px">
-                <button class="btn" style="font-size:10px;padding:2px 7px" onclick="vpCheckAll(true)">Semua</button>
-                <button class="btn" style="font-size:10px;padding:2px 7px" onclick="vpCheckAll(false)">Tidak Ada</button>
-              </div>
-            </div>
-            <div style="font-size:11px;color:var(--muted);margin-bottom:5px">Centang variabel yang boleh dilihat. Jika semua dicentang, semua variabel terlihat.</div>
-            <div id="vpAddFieldList" style="max-height:160px;overflow-y:auto;border:1px solid var(--line-2);border-radius:6px;padding:6px;background:var(--surface)">
-              <span style="font-size:12px;color:var(--muted)">Memuat variabel…</span>
-            </div>
-          </div>
-          <div style="margin-top:10px">
-            <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:4px">Batasan Filter Variabel <span style="font-weight:400">(opsional)</span></div>
-            <div style="font-size:11px;color:var(--muted);margin-bottom:5px">Hanya tampilkan data yang nilai variabelnya sesuai nilai yang ditentukan.</div>
-            <div id="vpAddFilterList" style="margin-bottom:6px;min-height:20px"></div>
-            <div style="display:flex;gap:6px;flex-wrap:wrap">
-              <select id="vpAddFilterField" style="flex:1;min-width:120px;font-size:12px;padding:4px 6px;border:1px solid var(--line);border-radius:5px">
-                <option value="">— variabel —</option>
-              </select>
-              <input id="vpAddFilterValue" placeholder="Nilai" style="flex:1;min-width:90px;font-size:12px;padding:4px 6px;border:1px solid var(--line);border-radius:5px">
-              <button class="btn" style="font-size:11px;padding:3px 8px" onclick="addVpAddFilter()">+ Tambah</button>
-            </div>
-          </div>
-          <div style="margin-top:10px;text-align:right">
-            <button class="btn primary" onclick="addViewerPermission()">Tambahkan</button>
-          </div>
-        </div>
-
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-          <div style="font-size:12px;font-weight:600">Daftar Viewer yang Sudah Ditambahkan</div>
-          <div style="display:flex;gap:6px">
-            <button class="btn" style="font-size:11px;padding:3px 9px" type="button" onclick="bulkVpManageSelected()" id="vpManageSelBtn" disabled>Kelola Terpilih</button>
-            <button class="btn danger" style="font-size:11px;padding:3px 9px" type="button" onclick="bulkVpDeleteSelected()" id="vpDeleteSelBtn" disabled>Hapus Terpilih</button>
-            <button class="btn" style="font-size:11px;padding:3px 9px" type="button" onclick="downloadViewerPermsCsv()">⬇ CSV</button>
-          </div>
-        </div>
-        <div id="vpPermList">Memuat…</div>
       </section>
 
-      <section id="sec-editor" hidden>
-        <div class="bar"><h2>Akses Editor</h2></div>
-        <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
-          Pilih editor yang boleh mengelola kuesioner ini.
+      <section id="sec-api" hidden>
+        <div class="bar">
+          <h2>API</h2>
+          <button class="btn primary" type="button" onclick="openApiKeyDlg()">+ Buat API Key</button>
         </div>
+        <!-- Teks panjang sengaja ditulis satu baris: i18n.js mencocokkan node teks utuh
+             (hanya spasi di ujung yang di-trim), jadi kalimat yang dipecah antar-baris
+             tidak akan ketemu di kamus. -->
+        <div style="font-size:12px;color:var(--muted);margin-bottom:10px">API key dipakai sistem lain untuk menarik jawaban kuesioner ini lewat endpoint read-only. Karena jawaban bisa bersifat rahasia, batasi tiap key seketat mungkin: pilih variabel yang boleh terbaca, batasi barisnya, kunci ke alamat IP tertentu, dan beri masa berlaku.</div>
+        <div id="apiKeyList"></div>
 
-        <div class="user-card">
-          <div style="font-size:12px;font-weight:600;margin-bottom:4px">Akun Editor</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:8px">
-            Editor login dengan akun Google. Username otomatis menggunakan email.
-          </div>
-          <div class="row" style="gap:8px;flex-wrap:wrap">
-            <input id="eEmail" type="email" placeholder="Email Google editor" style="flex:2;min-width:150px">
-            <input id="eNote" placeholder="Catatan (opsional)" style="flex:1;min-width:130px">
-            <button class="btn primary" type="button" onclick="createEditor()">+ Buat Editor</button>
-          </div>
-          <div id="editorList" style="margin-top:10px">Memuat…</div>
+        <div class="api-doc" id="apiDoc" hidden>
+          <div class="api-doc-h">Cara memakai</div>
+          <div class="muted" style="font-size:12px;margin-bottom:8px">Kirim key lewat header Authorization. Semua endpoint hanya bisa membaca.</div>
+          <pre class="api-pre" id="apiDocPre"></pre>
         </div>
-
-        <div class="user-card">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-            <div style="font-size:12px;font-weight:600">Tambah Editor ke Kuesioner Ini</div>
-            <button class="btn" style="font-size:11px;padding:3px 9px" type="button" onclick="openBulkEditor()">⚡ Tambah/Kelola Massal</button>
-          </div>
-          <div class="row" style="gap:8px;flex-wrap:wrap;align-items:flex-start">
-            <select id="epEditorSel" style="flex:1;min-width:160px;font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:6px">
-              <option value="">— pilih editor —</option>
-            </select>
-            <button class="btn primary" type="button" onclick="addEditorPermission()">Tambahkan</button>
-          </div>
-        </div>
-
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-          <div style="font-size:12px;font-weight:600">Daftar Editor yang Sudah Ditambahkan</div>
-          <div style="display:flex;gap:6px">
-            <button class="btn" style="font-size:11px;padding:3px 9px" type="button" onclick="bulkEpManageSelected()" id="epManageSelBtn" disabled>Kelola Terpilih</button>
-            <button class="btn danger" style="font-size:11px;padding:3px 9px" type="button" onclick="bulkEpDeleteSelected()" id="epDeleteSelBtn" disabled>Hapus Terpilih</button>
-            <button class="btn" style="font-size:11px;padding:3px 9px" type="button" onclick="downloadEditorPermsCsv()">⬇ CSV</button>
-          </div>
-        </div>
-        <div id="epPermList">Memuat…</div>
       </section>
 
     </div>
   </main>
 </div>
 
+<!-- Dialog tambah satu user (viewer/editor) -->
+<dialog id="userAddDlg" class="sheet" style="max-width:460px">
+  <div class="dlg-h" style="justify-content:space-between">
+    <span>Tambah User</span>
+    <button class="btn" onclick="userAddDlg.close()">✕</button>
+  </div>
+  <div class="dlg-b" style="max-height:75vh;overflow-y:auto">
+    <div class="row" style="gap:16px;margin-bottom:12px">
+      <label class="muted"><input type="radio" name="uaRole" value="viewer" checked onchange="uaRoleChanged()"> Viewer</label>
+      <label class="muted"><input type="radio" name="uaRole" value="editor" onchange="uaRoleChanged()"> Editor</label>
+    </div>
+    <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:4px">Email</div>
+    <div class="row" style="margin-bottom:10px"><input id="uaEmail" type="email" placeholder="email@contoh.com" autocomplete="off" style="flex:1"></div>
+    <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:4px">Catatan</div>
+    <div class="row"><input id="uaNote" placeholder="Catatan (opsional)" style="flex:1"></div>
+
+    <div style="margin-top:12px;border:1px solid var(--line);border-radius:var(--radius);padding:10px">
+      <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px">Akses Responden</div>
+      <div class="row" style="gap:16px;margin-bottom:4px">
+        <label class="muted"><input type="radio" name="uaRA" value="all" checked onchange="toggleUaRespondentSection(false)"> Semua responden</label>
+        <label class="muted"><input type="radio" name="uaRA" value="selected" onchange="toggleUaRespondentSection(true)"> Responden tertentu saja</label>
+      </div>
+      <div id="uaRespondentSection" style="display:none;border:1px solid var(--line);border-radius:6px;padding:10px;margin-top:8px">
+        <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px">Responden yang diizinkan</div>
+        <div id="uaRespondentList" style="margin-bottom:8px;max-height:150px;overflow-y:auto"></div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Tambah dari responden yang sudah mengisi:</div>
+        <select id="uaRespondentPicker" style="width:100%;font-size:12px;padding:5px 8px;border:1px solid var(--line);border-radius:6px">
+          <option value="">— pilih responden —</option>
+        </select>
+        <button class="btn" type="button" style="margin-top:6px;font-size:12px" onclick="addUaRespondent()">+ Tambah</button>
+      </div>
+    </div>
+
+    <div id="uaFieldListSection" style="margin-top:10px;border:1px solid var(--line);border-radius:var(--radius);padding:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <div style="font-size:11px;font-weight:600;color:var(--muted)">Variabel yang Dapat Dilihat</div>
+        <div style="display:flex;gap:6px">
+          <button class="btn" type="button" style="font-size:10px;padding:2px 7px" onclick="uaCheckAll(true)">Semua</button>
+          <button class="btn" type="button" style="font-size:10px;padding:2px 7px" onclick="uaCheckAll(false)">Tidak Ada</button>
+        </div>
+      </div>
+      <div id="uaFieldList" style="max-height:150px;overflow-y:auto;border:1px solid var(--line-2);border-radius:6px;padding:6px;background:var(--surface)"></div>
+    </div>
+
+    <div style="margin-top:10px;border:1px solid var(--line);border-radius:var(--radius);padding:10px">
+      <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px">Batasan Filter Variabel</div>
+      <div id="uaFilterList" style="margin-bottom:6px;min-height:20px"></div>
+      <div class="row" style="gap:6px;flex-wrap:wrap">
+        <select id="uaFilterField" style="flex:1;min-width:120px;font-size:12px;padding:5px 8px;border:1px solid var(--line);border-radius:6px">
+          <option value="">— variabel —</option>
+        </select>
+        <input id="uaFilterValue" placeholder="Nilai" style="flex:1;min-width:90px;font-size:12px;padding:5px 8px;border:1px solid var(--line);border-radius:6px">
+        <button class="btn" type="button" style="font-size:11px;padding:3px 8px" onclick="addUaFilter()">+ Tambah</button>
+      </div>
+    </div>
+
+    <div class="muted" style="font-size:11px;margin-top:8px">Akun akan dibuat otomatis bila emailnya belum terdaftar.</div>
+    <div class="dlg-actions" style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn" type="button" onclick="userAddDlg.close()">Batal</button>
+      <button class="btn primary" type="button" id="uaSaveBtn" onclick="submitUserAdd()">Tambah</button>
+    </div>
+  </div>
+</dialog>
+
 <!-- Dialog buat tautan share baru -->
-<dialog id="shareCreateDlg" style="max-width:560px">
+<dialog id="shareCreateDlg" class="sheet" style="max-width:560px">
   <div class="dlg-h" style="justify-content:space-between">
     <span>Buat Tautan Share</span>
     <button class="btn" onclick="shareCreateDlg.close()">✕</button>
@@ -259,7 +237,7 @@
       <div id="newEmailList" style="margin-top:8px"></div>
     </div>
     <div class="row"><input id="sharePw" type="password" placeholder="Password (opsional)" style="flex:1"></div>
-    <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
+    <div class="dlg-actions" style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
       <button class="btn" type="button" onclick="shareCreateDlg.close()">Batal</button>
       <button class="btn primary" id="makeShare">Buat tautan share</button>
     </div>
@@ -267,7 +245,7 @@
 </dialog>
 
 <!-- Dialog konfigurasi detail satu permission viewer (field visibility + respondents) -->
-<dialog id="vpDetailDlg">
+<dialog id="vpDetailDlg" class="sheet">
   <div class="dlg-h" style="justify-content:space-between">
     <span>Konfigurasi Akses · <span id="vpdViewerName"></span></span>
     <button class="btn" onclick="vpDetailDlg.close()">✕</button>
@@ -311,93 +289,39 @@
       </div>
     </div>
 
-    <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
-      <button class="btn" onclick="vpDetailDlg.close()">Batal</button>
-      <button class="btn primary" onclick="savePermDetail()">Simpan</button>
-    </div>
-  </div>
-</dialog>
-
-<!-- Dialog tambah/kelola massal viewer -->
-<dialog id="bulkViewerDlg" style="max-width:820px">
-  <div class="dlg-h" style="justify-content:space-between">
-    <span>Tambah/Kelola Massal · Viewer</span>
-    <button class="btn" onclick="bulkViewerDlg.close()">✕</button>
-  </div>
-  <div class="dlg-b">
-    <div class="row" style="gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px">
-      <label style="font-size:12px;color:var(--muted)">Atau salin dari kuesioner lain:</label>
-      <select id="bvCopyFormSel" style="flex:1;min-width:160px;font-size:12px;padding:5px 8px;border:1px solid var(--line);border-radius:6px">
-        <option value="">— pilih kuesioner —</option>
-      </select>
-      <button class="btn" type="button" onclick="bulkVpCopyFromForm()">Salin</button>
-    </div>
-    <div style="font-size:12px;font-weight:600;margin-bottom:6px">Tempel daftar (email, catatan, nilai filter — per baris)</div>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Pisahkan kolom dengan tab, koma, atau titik koma (bisa langsung tempel dari Excel). Baris header otomatis dilewati.</div>
-    <textarea id="bvPaste" rows="4" style="width:100%;font-family:ui-monospace,monospace;font-size:12px;padding:8px;border:1px solid var(--line);border-radius:8px" placeholder="budi@gmail.com, Kec. Samarinda Ilir, Samarinda Ilir&#10;sari@gmail.com, Kec. Sungai Kunjang, Sungai Kunjang"></textarea>
-    <div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center">
-      <button class="btn primary" type="button" onclick="bulkVpParse()">Urai</button>
-      <button class="btn" type="button" onclick="bulkVpAddRow()">+ Baris kosong</button>
-      <div style="flex:1"></div>
-      <label style="font-size:12px;color:var(--muted)">Variabel pembeda per orang:</label>
-      <select id="bvFilterField" style="font-size:12px;padding:5px 8px;border:1px solid var(--line);border-radius:6px" onchange="bulkVpFilterFieldChanged()">
-        <option value="">— tidak ada —</option>
-      </select>
-      <datalist id="bvSuggest"></datalist>
-    </div>
-
-    <div style="margin-top:12px;border:1px solid var(--line);border-radius:var(--radius);padding:12px">
-      <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:8px">Pengaturan bersama untuk semua baris</div>
-      <div class="row" style="gap:16px;margin-bottom:8px">
-        <label class="muted"><input type="radio" name="bvRA" value="all" checked> Semua responden</label>
-        <label class="muted"><input type="radio" name="bvRA" value="selected"> Responden tertentu saja (atur belakangan per orang)</label>
+    <div class="dlg-actions" style="margin-top:14px;display:flex;gap:8px;justify-content:space-between;align-items:center">
+      <button class="btn" type="button" onclick="convertVpToEditor()">Ubah jadi Editor</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn" onclick="vpDetailDlg.close()">Batal</button>
+        <button class="btn primary" onclick="savePermDetail()">Simpan</button>
       </div>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-        <div style="font-size:11px;font-weight:600;color:var(--muted)">Variabel yang Dapat Dilihat</div>
-        <div style="display:flex;gap:6px">
-          <button class="btn" style="font-size:10px;padding:2px 7px" type="button" onclick="bulkVpCheckAll(true)">Semua</button>
-          <button class="btn" style="font-size:10px;padding:2px 7px" type="button" onclick="bulkVpCheckAll(false)">Tidak Ada</button>
-        </div>
-      </div>
-      <div id="bvFieldList" style="max-height:120px;overflow-y:auto;border:1px solid var(--line-2);border-radius:6px;padding:6px;background:var(--surface)">
-        <span style="font-size:12px;color:var(--muted)">Memuat variabel…</span>
-      </div>
-    </div>
-
-    <div style="margin-top:12px">
-      <div id="bvSummary" style="font-size:12px;color:var(--muted);margin-bottom:6px"></div>
-      <div style="overflow-x:auto">
-        <table style="width:100%;border-collapse:collapse;font-size:12.5px">
-          <thead><tr style="background:var(--surface)">
-            <th style="text-align:left;padding:5px 6px;border-bottom:1px solid var(--line)">Email</th>
-            <th style="text-align:left;padding:5px 6px;border-bottom:1px solid var(--line)">Catatan</th>
-            <th style="text-align:left;padding:5px 6px;border-bottom:1px solid var(--line)">Nilai Filter</th>
-            <th style="text-align:left;padding:5px 6px;border-bottom:1px solid var(--line)">Status</th>
-            <th style="padding:5px 6px;border-bottom:1px solid var(--line)"></th>
-          </tr></thead>
-          <tbody id="bvRows"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <div id="bvPreviewBox" style="display:none;margin-top:10px;font-size:12px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px"></div>
-
-    <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
-      <button class="btn" type="button" onclick="bulkViewerDlg.close()">Tutup</button>
-      <button class="btn" type="button" id="bvPreviewBtn" onclick="bulkVpPreview()">Pratinjau</button>
-      <button class="btn primary" type="button" id="bvApplyBtn" onclick="bulkVpApply()" disabled>Terapkan</button>
     </div>
   </div>
 </dialog>
 
 <!-- Dialog konfigurasi detail permission editor (field_filters) -->
-<dialog id="epDetailDlg">
+<dialog id="epDetailDlg" class="sheet">
   <div class="dlg-h" style="justify-content:space-between">
     <span>Konfigurasi Editor · <span id="epdEditorName"></span></span>
     <button class="btn" onclick="epDetailDlg.close()">✕</button>
   </div>
   <div class="dlg-b">
-    <div style="font-size:12px;font-weight:600;margin-bottom:6px">Batasan Filter Variabel</div>
+    <div style="font-size:12px;font-weight:600;margin-bottom:6px">Akses Responden</div>
+    <div class="row" style="gap:16px;margin-bottom:4px">
+      <label class="muted"><input type="radio" name="epdRA" value="all"> Semua responden</label>
+      <label class="muted"><input type="radio" name="epdRA" value="selected"> Responden tertentu saja</label>
+    </div>
+    <div id="epdRespondentSection" style="display:none;border:1px solid var(--line);border-radius:6px;padding:10px;margin:8px 0">
+      <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px">Responden yang diizinkan</div>
+      <div id="epdRespondentList" style="margin-bottom:8px;max-height:150px;overflow-y:auto"></div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Tambah dari responden yang sudah mengisi:</div>
+      <select id="epdRespondentPicker" style="width:100%;font-size:12px;padding:5px 8px;border:1px solid var(--line);border-radius:6px">
+        <option value="">— pilih responden —</option>
+      </select>
+      <button class="btn" style="margin-top:6px;font-size:12px" onclick="addAllowedEditorRespondent()">+ Tambah</button>
+    </div>
+
+    <div style="font-size:12px;font-weight:600;margin:12px 0 6px">Batasan Filter Variabel</div>
     <div style="font-size:11px;color:var(--muted);margin-bottom:8px">
       Batasi data yang dapat dilihat dan diedit editor ini hanya pada data yang nilai variabelnya sesuai.
     </div>
@@ -409,63 +333,129 @@
       <input id="epdFilterValue" placeholder="Nilai" style="flex:1;min-width:90px;font-size:12px;padding:4px 6px;border:1px solid var(--line);border-radius:5px">
       <button class="btn" style="font-size:11px;padding:3px 8px" onclick="addEpdFilter()">+ Tambah</button>
     </div>
-    <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
-      <button class="btn" onclick="epDetailDlg.close()">Batal</button>
-      <button class="btn primary" onclick="saveEpDetail()">Simpan</button>
+    <div class="dlg-actions" style="margin-top:14px;display:flex;gap:8px;justify-content:space-between;align-items:center">
+      <button class="btn" type="button" onclick="convertEpToViewer()">Ubah jadi Viewer</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn" onclick="epDetailDlg.close()">Batal</button>
+        <button class="btn primary" onclick="saveEpDetail()">Simpan</button>
+      </div>
     </div>
   </div>
 </dialog>
 
-<!-- Dialog tambah/kelola massal editor -->
-<dialog id="bulkEditorDlg" style="max-width:820px">
+<!-- Dialog buat/ubah API key -->
+<dialog id="apiKeyDlg" class="sheet" style="max-width:560px">
   <div class="dlg-h" style="justify-content:space-between">
-    <span>Tambah/Kelola Massal · Editor</span>
-    <button class="btn" onclick="bulkEditorDlg.close()">✕</button>
+    <span id="akDlgTitle">Buat API Key</span>
+    <button class="btn" onclick="apiKeyDlg.close()">✕</button>
   </div>
   <div class="dlg-b">
-    <div class="row" style="gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px">
-      <label style="font-size:12px;color:var(--muted)">Atau salin dari kuesioner lain:</label>
-      <select id="beCopyFormSel" style="flex:1;min-width:160px;font-size:12px;padding:5px 8px;border:1px solid var(--line);border-radius:6px">
-        <option value="">— pilih kuesioner —</option>
-      </select>
-      <button class="btn" type="button" onclick="bulkEpCopyFromForm()">Salin</button>
-    </div>
-    <div style="font-size:12px;font-weight:600;margin-bottom:6px">Tempel daftar (email, catatan, nilai filter — per baris)</div>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Pisahkan kolom dengan tab, koma, atau titik koma (bisa langsung tempel dari Excel). Baris header otomatis dilewati.</div>
-    <textarea id="bePaste" rows="4" style="width:100%;font-family:ui-monospace,monospace;font-size:12px;padding:8px;border:1px solid var(--line);border-radius:8px" placeholder="budi@gmail.com, Kec. Samarinda Ilir, Samarinda Ilir&#10;sari@gmail.com, Kec. Sungai Kunjang, Sungai Kunjang"></textarea>
-    <div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center">
-      <button class="btn primary" type="button" onclick="bulkEpParse()">Urai</button>
-      <button class="btn" type="button" onclick="bulkEpAddRow()">+ Baris kosong</button>
-      <div style="flex:1"></div>
-      <label style="font-size:12px;color:var(--muted)">Variabel pembeda per orang:</label>
-      <select id="beFilterField" style="font-size:12px;padding:5px 8px;border:1px solid var(--line);border-radius:6px" onchange="bulkEpFilterFieldChanged()">
-        <option value="">— tidak ada —</option>
-      </select>
-      <datalist id="beSuggest"></datalist>
+    <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:4px">Label</div>
+    <div class="row" style="margin-bottom:10px"><input id="akLabel" placeholder="mis. 'Dashboard Statistik'" autocomplete="off" style="flex:1"></div>
+
+    <div class="ak-box">
+      <div class="ak-box-h">Cakupan Data</div>
+      <div class="row" style="gap:16px;margin-bottom:4px">
+        <label class="muted"><input type="radio" name="akRA" value="all" checked onchange="toggleAkRespondentSection(false)"> Semua responden</label>
+        <label class="muted"><input type="radio" name="akRA" value="selected" onchange="toggleAkRespondentSection(true)"> Responden tertentu saja</label>
+      </div>
+      <div id="akRespondentSection" style="display:none;border:1px solid var(--line);border-radius:6px;padding:10px;margin-top:8px">
+        <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px">Responden yang diizinkan</div>
+        <div id="akRespondentList" style="margin-bottom:8px;max-height:150px;overflow-y:auto"></div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Tambah dari responden yang sudah mengisi:</div>
+        <select id="akRespondentPicker" style="width:100%;font-size:12px;padding:5px 8px;border:1px solid var(--line);border-radius:6px">
+          <option value="">— pilih responden —</option>
+        </select>
+        <button class="btn" type="button" style="margin-top:6px;font-size:12px" onclick="addAkRespondent()">+ Tambah</button>
+      </div>
+      <label class="muted" style="display:flex;align-items:center;gap:8px;margin-top:10px">
+        <input type="checkbox" id="akIncludeRespondent"> Sertakan identitas responden (nama, email, IP)
+      </label>
+      <div class="muted" style="font-size:11px;margin-top:2px">Biarkan mati bila penerima data cukup butuh jawabannya saja.</div>
     </div>
 
-    <div style="margin-top:12px">
-      <div id="beSummary" style="font-size:12px;color:var(--muted);margin-bottom:6px"></div>
-      <div style="overflow-x:auto">
-        <table style="width:100%;border-collapse:collapse;font-size:12.5px">
-          <thead><tr style="background:var(--surface)">
-            <th style="text-align:left;padding:5px 6px;border-bottom:1px solid var(--line)">Email</th>
-            <th style="text-align:left;padding:5px 6px;border-bottom:1px solid var(--line)">Catatan</th>
-            <th style="text-align:left;padding:5px 6px;border-bottom:1px solid var(--line)">Nilai Filter</th>
-            <th style="text-align:left;padding:5px 6px;border-bottom:1px solid var(--line)">Status</th>
-            <th style="padding:5px 6px;border-bottom:1px solid var(--line)"></th>
-          </tr></thead>
-          <tbody id="beRows"></tbody>
-        </table>
+    <div class="ak-box">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <div class="ak-box-h" style="margin:0">Variabel yang Dapat Dibaca</div>
+        <div style="display:flex;gap:6px">
+          <button class="btn" type="button" style="font-size:10px;padding:2px 7px" onclick="akCheckAll(true)">Semua</button>
+          <button class="btn" type="button" style="font-size:10px;padding:2px 7px" onclick="akCheckAll(false)">Tidak Ada</button>
+        </div>
+      </div>
+      <div id="akFieldList" style="max-height:150px;overflow-y:auto;border:1px solid var(--line-2);border-radius:6px;padding:6px;background:var(--surface)"></div>
+    </div>
+
+    <div class="ak-box">
+      <div class="ak-box-h">Batasan Filter Variabel</div>
+      <div id="akFilterList" style="margin-bottom:6px;min-height:20px"></div>
+      <div class="row" style="gap:6px;flex-wrap:wrap">
+        <select id="akFilterField" style="flex:1;min-width:120px;font-size:12px;padding:5px 8px;border:1px solid var(--line);border-radius:6px">
+          <option value="">— variabel —</option>
+        </select>
+        <input id="akFilterValue" placeholder="Nilai" style="flex:1;min-width:90px;font-size:12px;padding:5px 8px;border:1px solid var(--line);border-radius:6px">
+        <button class="btn" type="button" style="font-size:11px;padding:3px 8px" onclick="addAkFilter()">+ Tambah</button>
       </div>
     </div>
 
-    <div id="bePreviewBox" style="display:none;margin-top:10px;font-size:12px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px"></div>
+    <div class="ak-box">
+      <div class="ak-box-h">Keamanan</div>
+      <div class="edit-row"><span class="edit-lbl">Alamat IP</span>
+        <input id="akAllowedIps" placeholder="103.10.1.5, 103.10.2.0/24 — kosong = semua IP" style="flex:1">
+      </div>
+      <div class="muted" style="font-size:11px;margin:2px 0 8px">⚠️ Bila aplikasi berjalan di belakang reverse proxy, semua permintaan terlihat berasal dari IP proxy sehingga pembatasan ini tidak berpengaruh.</div>
+      <div class="edit-row"><span class="edit-lbl">Kedaluwarsa</span>
+        <input id="akExpiresAt" type="datetime-local" style="flex:1">
+        <span class="muted" style="font-size:11px">Kosong = tanpa batas</span>
+      </div>
+      <div class="edit-row"><span class="edit-lbl">Kuota</span>
+        <input id="akRateLimit" type="number" min="1" max="6000" value="60" style="width:110px">
+        <span class="muted" style="font-size:11px">permintaan per menit</span>
+      </div>
+      <label class="muted" id="akActiveRow" style="display:none;align-items:center;gap:8px;margin-top:6px">
+        <input type="checkbox" id="akIsActive" checked> Key aktif
+      </label>
+    </div>
 
-    <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
-      <button class="btn" type="button" onclick="bulkEditorDlg.close()">Tutup</button>
-      <button class="btn" type="button" id="bePreviewBtn" onclick="bulkEpPreview()">Pratinjau</button>
-      <button class="btn primary" type="button" id="beApplyBtn" onclick="bulkEpApply()" disabled>Terapkan</button>
+    <div class="dlg-actions" style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn" type="button" onclick="apiKeyDlg.close()">Batal</button>
+      <button class="btn primary" type="button" id="akSaveBtn" onclick="submitApiKey()">Buat API Key</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- Panel key sekali tampil: setelah ini key hanya bisa dirotasi, tidak bisa dilihat lagi -->
+<dialog id="apiKeyRevealDlg" class="sheet" style="max-width:560px">
+  <div class="dlg-h" style="justify-content:space-between">
+    <span>API Key Baru</span>
+    <button class="btn" onclick="apiKeyRevealDlg.close()">✕</button>
+  </div>
+  <div class="dlg-b">
+    <div class="ak-warn">Salin sekarang — key ini tidak akan ditampilkan lagi. Kalau hilang, buat key baru atau rotasi key ini. Perlakukan seperti password: jangan kirim lewat chat atau email biasa.</div>
+    <div class="ak-key-row">
+      <code class="ak-key" id="akRevealKey"></code>
+      <button class="btn" type="button" onclick="copyApiKey()">Salin</button>
+    </div>
+    <div style="font-size:11px;font-weight:600;color:var(--muted);margin:14px 0 4px">Contoh pemakaian</div>
+    <pre class="api-pre" id="akRevealCurl"></pre>
+    <div class="dlg-actions" style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn primary" type="button" onclick="apiKeyRevealDlg.close()">Sudah disalin</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- Dialog audit log satu key -->
+<dialog id="apiLogDlg" class="sheet" style="max-width:720px">
+  <div class="dlg-h" style="justify-content:space-between">
+    <span>Log Akses · <span id="alKeyLabel"></span></span>
+    <button class="btn" onclick="apiLogDlg.close()">✕</button>
+  </div>
+  <div class="dlg-b">
+    <div class="muted" style="font-size:12px;margin-bottom:10px">Semua panggilan tercatat, termasuk yang ditolak. 100 terbaru ditampilkan.</div>
+    <div class="table-scroll">
+    <table class="cards">
+      <thead><tr><th>Waktu</th><th>IP</th><th>Endpoint</th><th>Status</th><th>Baris</th></tr></thead>
+      <tbody id="apiLogRows"><tr><td colspan="5" class="empty">Memuat…</td></tr></tbody>
+    </table>
     </div>
   </div>
 </dialog>
@@ -479,6 +469,7 @@
 </dialog>
 
 <script src="/i18n.js"></script>
+<script src="/responsive-tables.js"></script>
 <script src="/manage.js"></script>
 </body>
 </html>

@@ -99,15 +99,12 @@ function initPortal(){
   (async()=>{
     try{
       const me=await api("/api/auth/me");
-      if(me.role==="viewer"){
-        document.getElementById("who").textContent=me.username+" · Viewer";
-        await loadForms(api,"viewer");
-      }else if(me.role==="editor"){
-        document.getElementById("who").textContent=me.username+" · Editor";
-        await loadForms(api,"editor");
-      }else{
+      if(me.role!=="viewer"&&me.role!=="editor"){
         location.replace("/admin");
+        return;
       }
+      document.getElementById("who").textContent=me.username;
+      await loadForms(api);
     }catch(e){
       document.getElementById("content").innerHTML=`<div class="empty">Gagal memuat: ${esc(e.message)}</div>`;
     }
@@ -119,23 +116,29 @@ function initPortal(){
   });
 }
 
-async function loadForms(api, role){
+async function loadForms(api){
   const el=document.getElementById("content");
   try{
-    const endpoint=role==="editor"?"/api/editor/my-forms":"/api/viewer/my-forms";
-    const data=await api(endpoint);
-    const forms=data.forms||[];
+    const[viewerData,editorData]=await Promise.all([
+      api("/api/viewer/my-forms").catch(()=>({forms:[]})),
+      api("/api/editor/my-forms").catch(()=>({forms:[]})),
+    ]);
+    const forms=[
+      ...(viewerData.forms||[]).map(f=>({...f,_type:"viewer"})),
+      ...(editorData.forms||[]).map(f=>({...f,_type:"editor"})),
+    ];
     if(!forms.length){
       el.innerHTML='<div class="empty">Belum ada kuesioner yang dapat diakses.<br>Hubungi administrator untuk mendapatkan akses.</div>';
       return;
     }
-    const isViewer=role==="viewer";
     el.innerHTML=`<div class="grid">${forms.map(f=>{
+      const isViewer=f._type==="viewer";
       const respPage=isViewer?`/viewer-responses?id=${esc(f.formId||f.id)}`:`/editor-responses?id=${esc(f.id||f.formId)}`;
       return`<div class="card">
         <div class="card-title">${esc(f.formTitle||f.title)}</div>
         <div class="card-meta">
           ${isViewer?`<span>
+            <span class="badge">Viewer</span>
             <span class="badge">${f.respondentAccess==="all"?"Semua Responden":"Responden Terpilih"}</span>
           </span>
           ${f.visibleFields&&f.visibleFields.length

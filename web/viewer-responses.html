@@ -127,9 +127,11 @@ async function api(path,opts={}){
 
 async function init(){
   try{
-    // Cek role
+    // Cek role — viewer maupun editor boleh membuka halaman ini (satu akun bisa jadi viewer di
+    // satu kuesioner dan editor di kuesioner lain); otorisasi untuk kuesioner INI ditentukan oleh
+    // panggilan /api/viewer/forms/{id}/permission di bawah, bukan role global akun.
     const me=await api("/api/auth/me");
-    if(me.role!=="viewer")location.replace("/admin");
+    if(me.role!=="viewer"&&me.role!=="editor"){location.replace("/admin");return;}
 
     // Muat permission dan schema secara paralel
     const [perm,form]=await Promise.all([
@@ -551,7 +553,7 @@ function renderTable(){
       <td class="td-who">${who}</td>
       <td class="td-time">${waktu}</td>
       ${extraVals}
-      <td style="white-space:nowrap"><a class="btn-sm" href="/portal-response-view?form=${encodeURIComponent(FORM_ID)}&resp=${encodeURIComponent(resp.id)}" target="_blank">Lihat</a></td>
+      <td style="white-space:nowrap"><a class="btn-sm" href="/portal-response-view?form=${encodeURIComponent(FORM_ID)}&resp=${encodeURIComponent(resp.id)}&type=viewer" target="_blank">Lihat</a></td>
     </tr>`;
   });
 

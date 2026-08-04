@@ -121,12 +121,79 @@ type ViewerAllowedRespondent struct {
 
 // EditorFormPermission menyimpan hak kelola seorang editor ke satu kuesioner.
 type EditorFormPermission struct {
-	ID           string            `json:"id"`
-	EditorID     string            `json:"editorId"`
-	FormID       string            `json:"formId"`
-	FieldFilters map[string]string `json:"fieldFilters"` // fieldName → nilai wajib (exact match)
-	CreatedBy    *string           `json:"createdBy,omitempty"`
-	CreatedAt    time.Time         `json:"createdAt"`
-	EditorName   string            `json:"editorName,omitempty"`
-	FormTitle    string            `json:"formTitle,omitempty"`
+	ID               string            `json:"id"`
+	EditorID         string            `json:"editorId"`
+	FormID           string            `json:"formId"`
+	RespondentAccess string            `json:"respondentAccess"` // 'all' | 'selected'
+	FieldFilters     map[string]string `json:"fieldFilters"`     // fieldName → nilai wajib (exact match)
+	CreatedBy        *string           `json:"createdBy,omitempty"`
+	CreatedAt        time.Time         `json:"createdAt"`
+	EditorName       string            `json:"editorName,omitempty"`
+	FormTitle        string            `json:"formTitle,omitempty"`
+	AllowedCount     int               `json:"allowedCount,omitempty"`
+}
+
+// EditorAllowedRespondent adalah satu responden yang diizinkan dalam mode 'selected'.
+type EditorAllowedRespondent struct {
+	ID           string    `json:"id"`
+	PermissionID string    `json:"permissionId"`
+	RespondentID string    `json:"respondentId"`
+	Email        string    `json:"email,omitempty"`
+	Name         string    `json:"name,omitempty"`
+	CreatedAt    time.Time `json:"createdAt"`
+}
+
+// FormAPIKey adalah kredensial yang dipakai sistem eksternal untuk menarik jawaban
+// satu kuesioner lewat /api/v1. Cakupan datanya mengikuti model ViewerFormPermission.
+//
+// Key aslinya tidak pernah disimpan: yang ada di DB hanya SHA-256 hex-nya (KeyHash,
+// tidak diserialisasi) dan KeyPrefix untuk identifikasi. Key plaintext hanya
+// dikembalikan sekali oleh handler pembuatan/rotasi.
+type FormAPIKey struct {
+	ID                string            `json:"id"`
+	FormID            string            `json:"formId"`
+	Label             string            `json:"label"`
+	KeyPrefix         string            `json:"keyPrefix"`
+	RespondentAccess  string            `json:"respondentAccess"` // 'all' | 'selected'
+	VisibleFields     []string          `json:"visibleFields"`    // nil = semua variabel
+	FieldFilters      map[string]string `json:"fieldFilters"`     // fieldName → nilai wajib (exact match)
+	IncludeRespondent bool              `json:"includeRespondent"`
+	AllowedIPs        []string          `json:"allowedIps"` // kosong = semua IP; isi = IP atau CIDR
+	RateLimitPerMin   int               `json:"rateLimitPerMin"`
+	IsActive          bool              `json:"isActive"`
+	ExpiresAt         *time.Time        `json:"expiresAt,omitempty"`
+	LastUsedAt        *time.Time        `json:"lastUsedAt,omitempty"`
+	LastUsedIP        string            `json:"lastUsedIp,omitempty"`
+	RequestCount      int64             `json:"requestCount"`
+	CreatedBy         *string           `json:"createdBy,omitempty"`
+	CreatedAt         time.Time         `json:"createdAt"`
+	// Diisi saat listing (join)
+	AllowedCount int `json:"allowedCount,omitempty"`
+	// internal saja, tidak diserialisasi
+	KeyHash string `json:"-"`
+}
+
+// APIKeyAllowedRespondent adalah satu responden yang diizinkan dalam mode 'selected'.
+type APIKeyAllowedRespondent struct {
+	ID           string    `json:"id"`
+	PermissionID string    `json:"permissionId"`
+	RespondentID string    `json:"respondentId"`
+	Email        string    `json:"email,omitempty"`
+	Name         string    `json:"name,omitempty"`
+	CreatedAt    time.Time `json:"createdAt"`
+}
+
+// APIAccessLog mencatat satu panggilan ke /api/v1, termasuk yang ditolak.
+type APIAccessLog struct {
+	ID        string    `json:"id"`
+	APIKeyID  *string   `json:"apiKeyId,omitempty"`
+	KeyPrefix string    `json:"keyPrefix"`
+	FormID    *string   `json:"formId,omitempty"`
+	IP        string    `json:"ip"`
+	Path      string    `json:"path"`
+	Query     string    `json:"query,omitempty"`
+	Status    int       `json:"status"`
+	RowCount  int       `json:"rowCount"`
+	Error     string    `json:"error,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
 }

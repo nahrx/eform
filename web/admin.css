@@ -1,7 +1,7 @@
   :root{--accent:#0e7490;--accent-soft:#e0f2fe;--accent-ink:#0c4a6e;--ink:#0f172a;--line:#e5e9f0;--muted:#64748b;--ok:#15803d;--bg:#f8fafc}
   *{box-sizing:border-box} body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased}
   header{background:#fff;border-bottom:1px solid var(--line);padding:13px 24px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:5}
-  header h1{font-size:16px;font-weight:700;margin:0;flex:1;letter-spacing:-.01em} .who{font-size:13px;color:var(--muted)}
+  header h1{font-size:16px;font-weight:700;margin:0;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:-.01em} .who{font-size:13px;color:var(--muted)}
   .user-menu{position:relative;flex:none}
   .user-btn{display:flex;align-items:center;gap:7px;border:1px solid var(--line);background:#fff;color:var(--ink);padding:5px 9px 5px 6px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;transition:.12s}
   .user-btn:hover{background:var(--surface);border-color:#c6cdd6}
@@ -35,7 +35,7 @@
   .btn:active{transform:translateY(0);box-shadow:none}
   .btn:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
   main{max-width:1000px;margin:22px auto;padding:0 18px}
-  .bar{display:flex;align-items:center;gap:10px;margin-bottom:18px} .bar h2{font-size:16px;font-weight:700;margin:0;flex:1;letter-spacing:-.01em}
+  .bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:18px} .bar h2{font-size:16px;font-weight:700;margin:0;flex:1;letter-spacing:-.01em}
   .tabbar{display:flex;gap:6px;margin-bottom:14px}
   .tab{background:#fff}
   .tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
@@ -43,6 +43,8 @@
   .user-card-title{font-size:13.5px;font-weight:700;margin-bottom:12px}
   .user-grid{display:grid;grid-template-columns:2fr 2fr 2fr 1.2fr;gap:8px}
   .user-actions{margin-top:10px;display:flex;justify-content:flex-end}
+  .table-scroll{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .table-scroll>table{min-width:560px}
   table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-sm)}
   th,td{text-align:left;padding:13px 16px;font-size:13.5px;border-bottom:1px solid var(--line-2);vertical-align:middle}
   th{background:#fafbfc;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700}
@@ -54,11 +56,15 @@
   .tag.published{background:#ecfdf5;color:var(--ok)} .tag.draft{background:#fffbeb;color:#a16207} .tag.archived{background:#f1f5f9;color:#64748b}
   .acts{display:flex;gap:6px;flex-wrap:wrap}
   .acts .btn{padding:5px 9px;font-size:12px}
+  .row-menu-btn{border:1px solid transparent;background:transparent;color:var(--muted);width:28px;height:28px;border-radius:8px;font-size:16px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
+  .row-menu-btn:hover{background:var(--surface);border-color:var(--line);color:var(--ink)}
+  .row-menu{position:fixed;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-md);min-width:170px;z-index:300;padding:6px}
+  .row-menu[hidden]{display:none}
   .empty{padding:40px;text-align:center;color:var(--muted)}
   dialog{border:none;border-radius:var(--radius-lg);padding:0;max-width:520px;width:92%;box-shadow:0 24px 60px -12px rgba(15,23,42,.28)}
   dialog::backdrop{background:rgba(15,23,42,.35)}
   .dlg-h{padding:16px 20px;border-bottom:1px solid var(--line);font-weight:700;display:flex;align-items:center}
-  .dlg-b{padding:18px 20px} .dlg-f{padding:14px 20px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px}
+  .dlg-b{padding:18px 20px;max-height:70vh;overflow-y:auto} .dlg-f{padding:14px 20px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px}
   .share{border:1px solid var(--line);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px;font-size:13px}
   .share code{background:var(--surface);padding:2px 6px;border-radius:5px;word-break:break-all}
   .tag.tag-icon::before{display:none}
@@ -73,7 +79,7 @@
   .share-copy-btn{flex:none;border:none;background:transparent;color:var(--muted);cursor:pointer;padding:5px;border-radius:6px;display:flex;transition:background .12s ease,color .12s ease}
   .share-copy-btn:hover{background:#fff;color:var(--accent);box-shadow:var(--shadow-sm)}
   .share-meta{display:flex;align-items:center;gap:5px;font-size:11.5px;margin-bottom:2px}
-  .row{display:flex;gap:8px;align-items:center;margin:8px 0}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
   input,select{padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;transition:border-color .12s ease,box-shadow .12s ease}
   input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
   .muted{color:var(--muted);font-size:12px}
@@ -111,11 +117,99 @@
   @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
   .fade-in{animation:fadeIn .18s ease}
 
+  /* ==========================================================
+     RESPONSIF
+     Tiga tingkat: tablet (≤860px) menumpuk sidebar jadi tab strip,
+     ≤600px mengubah tabel jadi kartu, ≤480px memadatkan header & dialog.
+     ========================================================== */
+
   @media (max-width: 860px){
     .user-grid{grid-template-columns:1fr}
     .user-actions{justify-content:stretch}
     .user-actions .btn{width:100%}
-    .app-shell{flex-direction:column}
-    .app-sidebar{width:100%;height:auto;position:static;border-right:none;border-bottom:1px solid var(--line)}
-    .app-nav{flex-direction:row;flex-wrap:wrap}
+    /* align-items:stretch (bukan flex-start seperti mode desktop) supaya konten
+       melebar penuh dan tidak menyusut ke lebar min-content. */
+    .app-shell{flex-direction:column;align-items:stretch;min-height:0}
+    /* Sidebar jadi strip tab horizontal yang bisa digeser, bukan daftar
+       vertikal yang memakan tinggi layar. */
+    .app-sidebar{width:100%;height:auto;position:static;border-right:none;border-bottom:1px solid var(--line);padding:8px 12px;display:flex;flex-wrap:wrap;align-items:center;gap:8px;overflow:visible}
+    .app-nav{flex-direction:row;flex-wrap:nowrap;width:100%;gap:6px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+    .app-nav::-webkit-scrollbar{display:none}
+    .app-nav-item{flex:none;white-space:nowrap;border:1px solid var(--line);background:#fff;padding:8px 12px}
+    .app-nav-item.active{border-color:transparent}
+    .app-content{padding:20px 16px}
+  }
+
+  /* Tabel jadi kartu: tiap baris satu kartu, label kolom diambil dari <th>
+     oleh responsive-tables.js dan ditampilkan lewat ::before. */
+  @media (max-width: 600px){
+    .table-scroll{overflow-x:visible}
+    .table-scroll>table.cards{min-width:0}
+    table.cards{border:none;background:transparent;box-shadow:none;border-radius:0}
+    table.cards thead{display:none}
+    table.cards,table.cards tbody,table.cards tr,table.cards td{display:block;width:100%}
+    table.cards tr{background:#fff;border:1px solid var(--line);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding:12px 14px;margin-bottom:10px}
+    table.cards tr:last-child{margin-bottom:0}
+    table.cards td{border:none;padding:4px 0;font-size:13px;display:flex;align-items:flex-start;justify-content:space-between;gap:14px;text-align:right;min-width:0;word-break:break-word}
+    table.cards td::before{content:attr(data-l);flex:none;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);padding-top:1px}
+    table.cards td:not([data-l])::before{display:none}
+    /* Kolom pertama jadi judul kartu, kolom aksi jadi baris tombol. */
+    table.cards td:first-child:not([colspan]){display:block;text-align:left;font-size:14px;padding-bottom:8px}
+    table.cards td:first-child::before{display:none}
+    table.cards td:last-child:not([data-l]):not([colspan]):not(:first-child){justify-content:flex-end;flex-wrap:wrap;gap:6px;padding-top:10px;margin-top:6px;border-top:1px solid var(--line-2);text-align:left}
+    table.cards td[colspan]{display:block;text-align:left;padding:0}
+    table.cards td.empty{padding:28px 12px;text-align:center;font-size:13px}
+    table.cards tr:hover{background:#fff}
+    table.cards .acts .btn,table.cards td:last-child .btn{flex:1;justify-content:center;min-height:36px}
+    /* Daftar kuesioner: tombol menu ⋮ dipindah ke pojok kanan atas kartu. */
+    #tbl.cards tr{position:relative}
+    #tbl.cards td:last-child:not([colspan]){position:absolute;top:10px;right:10px;width:auto;padding:0;margin:0;border-top:none;display:block}
+    #tbl.cards td:first-child:not([colspan]){padding-right:38px}
+    .email-tbl td{word-break:break-word}
+  }
+
+  /* Di header sempit, tombol "+ Kuesioner baru" menyusut jadi ikon "+" saja. */
+  @media (max-width: 560px){
+    .btn-label{display:none}
+    #btnNewForm{padding:8px 13px;font-size:16px;line-height:1}
+  }
+
+  @media (max-width: 480px){
+    header{padding:9px 12px;gap:8px}
+    header h1{font-size:14.5px}
+    .user-name,.user-role{display:none}
+    .user-btn{padding:5px 6px}
+    .app-sidebar{padding:8px 10px}
+    main{padding:0 12px;margin:14px auto}
+    .app-content{padding:16px 12px}
+    .bar{gap:8px;margin-bottom:14px}
+    .bar h2{font-size:15px}
+    .user-card{padding:14px}
+    th,td{padding:10px;font-size:12.5px}
+    .row{gap:6px}
+    /* Tombol & kolom isian dibuat cukup besar untuk disentuh. */
+    .btn{padding:9px 14px;min-height:38px}
+    .btn-sm,.btn-xs,.acts .btn{padding:7px 12px;font-size:12px;min-height:34px}
+    .row-menu-btn{width:34px;height:34px}
+    .app-nav-item{min-height:38px}
+    /* 16px mencegah iOS auto-zoom saat kolom isian difokuskan; sebagian input
+       memakai style inline, jadi perlu !important. */
+    input,select,textarea{font-size:16px!important;padding:9px 10px}
+    input[type=checkbox],input[type=radio]{width:18px;height:18px;padding:0}
+    .udd-lang-opt{padding:6px 12px}
+    /* Dialog panjang (yang punya header .dlg-h) jadi lembar penuh dari bawah
+       layar; dialog konfirmasi kecil tetap di tengah. */
+    dialog.sheet{width:100%;max-width:none!important;margin:auto auto 0;border-radius:var(--radius-lg) var(--radius-lg) 0 0;max-height:94vh}
+    dialog{width:96%}
+    .dlg-b{padding:14px 16px;max-height:calc(94vh - 110px)!important}
+    .dlg-h{padding:14px 16px}
+    .dlg-f{padding:12px 16px}
+    .dlg-actions{flex-wrap:wrap;gap:8px}
+    .dlg-actions>*{flex:1 1 auto}
+    .dlg-actions>div{display:flex;gap:8px;flex-basis:100%}
+    .dlg-actions .btn{flex:1;justify-content:center;min-width:0}
+    .share-card{padding:14px}
+    .share-card-top{flex-wrap:wrap}
+    .acts{gap:8px}
+    .acts .btn{flex:1;justify-content:center}
   }

@@ -60,6 +60,8 @@ let FORM_STATUS="draft";
   document.getElementById("navBuilder").href="/builder?id="+FORM_ID;
   document.getElementById("navResponses").href="/responses?id="+FORM_ID;
   await loadForm();
+  const wantedSection=new URLSearchParams(location.search).get("section");
+  if(["share","user","api"].includes(wantedSection)) switchSection(wantedSection);
 })();
 
 (function(){
@@ -123,9 +125,9 @@ function delForm(){
    SIDEBAR — pindah antar section (lazy-load data di kunjungan pertama)
    ====================================================== */
 
-let _shareInited=false,_viewerInited=false,_editorInited=false;
+let _shareInited=false,_userInited=false,_apiInited=false;
 function switchSection(sec){
-  ["overview","share","viewer","editor"].forEach(s=>{
+  ["overview","share","user","api"].forEach(s=>{
     const el=document.getElementById("sec-"+s);
     const btn=document.getElementById("nav-"+s);
     if(el) el.hidden=s!==sec;
@@ -135,8 +137,13 @@ function switchSection(sec){
   if(shown){shown.classList.add("fade-in");setTimeout(()=>shown.classList.remove("fade-in"),200);}
   if(sec==="overview") loadForm();
   else if(sec==="share"&&!_shareInited){_shareInited=true;initShareSection();}
-  else if(sec==="viewer"&&!_viewerInited){_viewerInited=true;initViewerSection();}
-  else if(sec==="editor"&&!_editorInited){_editorInited=true;initEditorSection();}
+  else if(sec==="user"&&!_userInited){_userInited=true;initUserSection();}
+  else if(sec==="api"&&!_apiInited){_apiInited=true;initApiSection();}
+
+  const params=new URLSearchParams(location.search);
+  if(sec==="overview") params.delete("section"); else params.set("section",sec);
+  const qs=params.toString();
+  history.replaceState(null,"",location.pathname+(qs?"?"+qs:""));
 }
 
 /* ======================================================
@@ -374,148 +381,16 @@ $("#makeShare").addEventListener("click",async()=>{
 });
 
 /* ======================================================
-   AKSES EDITOR (dulu editorPermDlg)
+   AKSES EDITOR — sisa yang masih dipakai tabel gabungan User
    ====================================================== */
 
-async function initEditorSection(){
-  await refreshEditorsAndPerms();
-}
-
-async function refreshEditorsAndPerms(){
-  await Promise.all([refreshEditorList(), refreshEditorPermList()]);
-}
-
-async function refreshEditorList(){
-  const el=document.getElementById("editorList");
-  const sel=document.getElementById("epEditorSel");
-  if(!el||!sel) return;
-  el.textContent="Memuat…";
-  try{
-    const {editors}=await api("/api/editors");
-    const cur=sel.value;
-    sel.innerHTML='<option value="">— pilih editor —</option>'+
-      (editors||[]).map(u=>`<option value="${esc(u.id)}">${esc(u.username)}</option>`).join("");
-    sel.value=cur;
-
-    if(!editors||!editors.length){
-      el.innerHTML='<div class="muted" style="font-size:13px">Belum ada editor.</div>';
-      return;
-    }
-
-    el.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:13px">
-      <thead><tr style="background:var(--surface)">
-        <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)">Username</th>
-        <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)">Email</th>
-        <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)">Catatan</th>
-        <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)">Status</th>
-        <th style="padding:6px 8px;border-bottom:1px solid var(--line)"></th>
-      </tr></thead>
-      <tbody>${editors.map(e=>`<tr>
-        <td style="padding:6px 8px;border-bottom:1px solid var(--line-2)">${esc(e.username)}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid var(--line-2);color:var(--muted)">${esc(e.email||"—")}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid var(--line-2);color:var(--muted)">${esc(e.note||"—")}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid var(--line-2)"><span class="tag ${e.isActive?"published":"archived"}">${e.isActive?"Aktif":"Nonaktif"}</span></td>
-        <td style="padding:6px 8px;border-bottom:1px solid var(--line-2);text-align:right">
-          <button class="btn danger" style="font-size:12px;padding:3px 8px" onclick="deleteEditor('${e.id}','${esc(e.username)}')">Hapus</button>
-        </td>
-      </tr>`).join("")}</tbody>
-    </table>`;
-  }catch(e){
-    el.textContent="Gagal: "+e.message;
-  }
-}
-
-async function createEditor(){
-  const email=(document.getElementById("eEmail")?.value||"").trim();
-  const note=(document.getElementById("eNote")?.value||"").trim();
-  if(!email){adminToast("Email Google wajib diisi",true);return;}
-  try{
-    await api("/api/editors",{method:"POST",body:JSON.stringify({email,note})});
-    if(document.getElementById("eEmail"))document.getElementById("eEmail").value="";
-    if(document.getElementById("eNote"))document.getElementById("eNote").value="";
-    await refreshEditorsAndPerms();
-  }catch(e){
-    adminToast("Gagal: "+e.message,true);
-  }
-}
-
-async function deleteEditor(id,name){
-  adminConfirm(`Hapus editor "${name}"? Semua akses form editor ini akan ikut dihapus.`,async()=>{
-    try{
-      await api("/api/editors/"+id,{method:"DELETE"});
-      await refreshEditorsAndPerms();
-    }catch(e){
-      adminToast("Gagal: "+e.message,true);
-    }
-  });
-}
-
 let _epPermCache=[];
-let _epPermSelected=new Set();
-function bulkEpUpdateSelToolbar(){
-  const n=_epPermSelected.size;
-  const mb=document.getElementById("epManageSelBtn"),db=document.getElementById("epDeleteSelBtn");
-  if(mb){mb.disabled=n===0;mb.textContent=n?`Kelola Terpilih (${n})`:"Kelola Terpilih";}
-  if(db){db.disabled=n===0;db.textContent=n?`Hapus Terpilih (${n})`:"Hapus Terpilih";}
-}
-function bulkEpToggleSel(id,checked){
-  if(checked)_epPermSelected.add(id);else _epPermSelected.delete(id);
-  bulkEpUpdateSelToolbar();
-}
-async function refreshEditorPermList(){
-  const listEl=document.getElementById("epPermList");
-  if(!listEl) return;
-  listEl.textContent="Memuat…";
-  _epPermSelected=new Set();
-  bulkEpUpdateSelToolbar();
-  try{
-    const {permissions}=await api("/api/forms/"+FORM_ID+"/editor-permissions");
-    _epPermCache=permissions||[];
-
-    if(!permissions||!permissions.length){
-      listEl.innerHTML='<div class="muted" style="font-size:13px">Belum ada editor yang ditambahkan.</div>';
-      return;
-    }
-    listEl.innerHTML=permissions.map(p=>{
-      const filterCount=p.fieldFilters?Object.keys(p.fieldFilters).length:0;
-      const filterSummary=filterCount?`· ${filterCount} filter variabel aktif`:"";
-      return`<div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-        <input type="checkbox" onchange="bulkEpToggleSel('${p.id}',this.checked)">
-        <div style="flex:1;min-width:120px">
-          <b>${esc(p.editorName||"(editor)")}</b>
-          <div style="font-size:11px;color:var(--muted)">Akses kelola form aktif ${filterSummary}</div>
-        </div>
-        <div class="acts">
-          <button class="btn" style="font-size:12px" onclick="openEpDetail('${p.id}','${esc(p.editorName||"editor")}')">Konfigurasi</button>
-          <button class="btn danger" style="font-size:12px" onclick="removeEditorPerm('${p.id}','${esc(p.editorName||"editor")}')">Cabut</button>
-        </div>
-      </div>`;
-    }).join("");
-  }catch(e){
-    listEl.textContent="Gagal: "+e.message;
-  }
-}
-
-async function addEditorPermission(){
-  const editorId=document.getElementById("epEditorSel")?.value||"";
-  if(!editorId){adminToast("Pilih editor terlebih dahulu",true);return;}
-  try{
-    await api("/api/forms/"+FORM_ID+"/editor-permissions",{
-      method:"POST",
-      body:JSON.stringify({editorId})
-    });
-    document.getElementById("epEditorSel").value="";
-    await refreshEditorPermList();
-  }catch(e){
-    adminToast("Gagal: "+e.message,true);
-  }
-}
 
 async function removeEditorPerm(permId,name){
   adminConfirm(`Cabut akses editor "${name}" dari kuesioner ini?`,async()=>{
     try{
       await api("/api/editor-permissions/"+permId,{method:"DELETE"});
-      await refreshEditorPermList();
+      await refreshUserPermList();
     }catch(e){
       adminToast("Gagal: "+e.message,true);
     }
@@ -523,71 +398,9 @@ async function removeEditorPerm(permId,name){
 }
 
 /* ======================================================
-   AKSES VIEWER (dulu viewerPermDlg)
+   AKSES VIEWER — sisa yang masih dipakai tabel gabungan User
    ====================================================== */
 
-async function initViewerSection(){
-  renderFilterChips("vpAddFilterList",{},"removeVpAddFilter");
-  await refreshViewerList();
-  buildFieldCheckboxes("vpAddFieldList",FORM_SCHEMA,[]);
-  buildFieldOptions(FORM_SCHEMA,"vpAddFilterField");
-  await refreshVpPermList();
-}
-
-async function refreshViewerList(){
-  const el=document.getElementById("viewerList");
-  el.textContent="Memuat…";
-  try{
-    const {viewers}=await api("/api/viewers");
-    const sel=document.getElementById("vpViewerSel");
-    if(sel){
-      const cur=sel.value;
-      sel.innerHTML=`<option value="">— pilih viewer —</option>`+
-        viewers.map(v=>`<option value="${esc(v.id)}">${esc(v.username)}</option>`).join("");
-      sel.value=cur;
-    }
-    if(!viewers.length){el.innerHTML='<div class="muted" style="font-size:13px">Belum ada viewer.</div>';return;}
-    el.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:13px">
-      <thead><tr style="background:var(--surface)">
-        <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)">Username</th>
-        <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)">Email</th>
-        <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)">Catatan</th>
-        <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)">Status</th>
-        <th style="padding:6px 8px;border-bottom:1px solid var(--line)"></th>
-      </tr></thead>
-      <tbody>${viewers.map(v=>`<tr>
-        <td style="padding:6px 8px;border-bottom:1px solid var(--line-2)">${esc(v.username)}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid var(--line-2);color:var(--muted)">${esc(v.email||"—")}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid var(--line-2);color:var(--muted)">${esc(v.note||"—")}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid var(--line-2)"><span class="tag ${v.isActive?"published":"archived"}">${v.isActive?"Aktif":"Nonaktif"}</span></td>
-        <td style="padding:6px 8px;border-bottom:1px solid var(--line-2);text-align:right">
-          <button class="btn danger" style="font-size:12px;padding:3px 8px" onclick="deleteViewer('${v.id}','${esc(v.username)}')">Hapus</button>
-        </td>
-      </tr>`).join("")}</tbody>
-    </table>`;
-  }catch(e){el.textContent="Gagal: "+e.message;}
-}
-
-async function createViewer(){
-  const email=(document.getElementById("vEmail")?.value||"").trim();
-  const note=(document.getElementById("vNote")?.value||"").trim();
-  if(!email){adminToast("Email Google wajib diisi",true);return;}
-  try{
-    await api("/api/viewers",{method:"POST",body:JSON.stringify({email,note})});
-    if(document.getElementById("vEmail"))document.getElementById("vEmail").value="";
-    if(document.getElementById("vNote"))document.getElementById("vNote").value="";
-    await refreshViewerList();
-  }catch(e){adminToast("Gagal: "+e.message,true);}
-}
-
-async function deleteViewer(id,name){
-  adminConfirm(`Hapus viewer "${name}"? Semua akses kuesioner viewer ini akan ikut dihapus.`,async()=>{
-    try{await api("/api/viewers/"+id,{method:"DELETE"});await refreshViewerList();}
-    catch(e){adminToast("Gagal: "+e.message,true);}
-  });
-}
-
-let _vpAddFilters={};
 let _vpdFilters={};
 let _epdPermId=null, _epdFilters={};
 
@@ -624,19 +437,6 @@ function buildFieldOptions(schema,selectId){
   sel.value=cur;
 }
 
-function addVpAddFilter(){
-  const field=document.getElementById("vpAddFilterField").value;
-  const value=(document.getElementById("vpAddFilterValue").value||"").trim();
-  if(!field||!value){adminToast("Pilih variabel dan masukkan nilai",true);return;}
-  _vpAddFilters[field]=value;
-  document.getElementById("vpAddFilterValue").value="";
-  renderFilterChips("vpAddFilterList",_vpAddFilters,"removeVpAddFilter");
-}
-function removeVpAddFilter(field){
-  delete _vpAddFilters[field];
-  renderFilterChips("vpAddFilterList",_vpAddFilters,"removeVpAddFilter");
-}
-
 function addVpdFilter(){
   const field=document.getElementById("vpdFilterField").value;
   const value=(document.getElementById("vpdFilterValue").value||"").trim();
@@ -668,91 +468,298 @@ async function openEpDetail(permId,editorName){
   _epdFilters={};
   document.getElementById("epdEditorName").textContent=editorName;
   try{
-    const perm=await api("/api/editor-permissions/"+permId);
+    const [perm,allowedData,respondentsData]=await Promise.all([
+      api("/api/editor-permissions/"+permId),
+      api("/api/editor-permissions/"+permId+"/respondents").catch(()=>({respondents:[]})),
+      api("/api/forms/"+FORM_ID+"/respondents").catch(()=>({respondents:[]}))
+    ]);
+
+    document.querySelector(`input[name='epdRA'][value='${perm.respondentAccess}']`).checked=true;
+    toggleEditorRespondentSection(perm.respondentAccess==="selected");
+
     _epdFilters=perm.fieldFilters||{};
     buildFieldOptions(FORM_SCHEMA,"epdFilterField");
     renderFilterChips("epdFilterList",_epdFilters,"removeEpdFilter");
+
+    renderAllowedEditorRespondents(allowedData.respondents||[]);
+
+    const picker=document.getElementById("epdRespondentPicker");
+    const allowed=new Set((allowedData.respondents||[]).map(r=>r.respondentId));
+    picker.innerHTML=`<option value="">— pilih responden —</option>`+
+      (respondentsData.respondents||[]).filter(r=>!allowed.has(r.id)).map(r=>
+        `<option value="${esc(r.id)}">${esc(r.name||r.email||r.id)}</option>`).join("");
+
     epDetailDlg.showModal();
   }catch(e){adminToast("Gagal memuat: "+e.message,true);}
 }
 
-async function saveEpDetail(){
-  try{
-    await api("/api/editor-permissions/"+_epdPermId,{
-      method:"PUT",body:JSON.stringify({fieldFilters:_epdFilters})
-    });
-    epDetailDlg.close();
-    await refreshEditorPermList();
-  }catch(e){adminToast("Gagal menyimpan: "+e.message,true);}
+document.querySelectorAll("input[name='epdRA']").forEach(rb=>{
+  rb.addEventListener("change",()=>toggleEditorRespondentSection(rb.value==="selected"));
+});
+
+function toggleEditorRespondentSection(show){
+  document.getElementById("epdRespondentSection").style.display=show?"block":"none";
 }
 
-let _vpPermCache=[];
-let _vpPermSelected=new Set();
-function bulkVpUpdateSelToolbar(){
-  const n=_vpPermSelected.size;
-  const mb=document.getElementById("vpManageSelBtn"),db=document.getElementById("vpDeleteSelBtn");
-  if(mb){mb.disabled=n===0;mb.textContent=n?`Kelola Terpilih (${n})`:"Kelola Terpilih";}
-  if(db){db.disabled=n===0;db.textContent=n?`Hapus Terpilih (${n})`:"Hapus Terpilih";}
-}
-function bulkVpToggleSel(id,checked){
-  if(checked)_vpPermSelected.add(id);else _vpPermSelected.delete(id);
-  bulkVpUpdateSelToolbar();
-}
-async function refreshVpPermList(){
-  const el=document.getElementById("vpPermList");
-  el.textContent="Memuat…";
-  _vpPermSelected=new Set();
-  bulkVpUpdateSelToolbar();
-  try{
-    const {permissions}=await api("/api/forms/"+FORM_ID+"/viewer-permissions");
-    _vpPermCache=permissions||[];
-    if(!permissions.length){el.innerHTML='<div class="muted" style="font-size:13px">Belum ada viewer yang ditambahkan.</div>';return;}
-    el.innerHTML=permissions.map(p=>{
-      const filterCount=p.fieldFilters?Object.keys(p.fieldFilters).length:0;
-      return`<div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-        <input type="checkbox" onchange="bulkVpToggleSel('${p.id}',this.checked)">
-        <div style="flex:1;min-width:120px">
-          <b>${esc(p.viewerUsername)}</b>
-          <div style="font-size:11px;color:var(--muted)">
-            ${p.respondentAccess==="all"?"Semua responden":`${p.allowedCount} responden dipilih`}
-            · ${p.visibleFields&&p.visibleFields.length?p.visibleFields.length+" variabel":"Semua variabel"}
-            ${filterCount?`· ${filterCount} filter variabel`:""}
-          </div>
-        </div>
-        <div class="acts">
-          <button class="btn" style="font-size:12px" onclick="openVpDetail('${p.id}','${esc(p.viewerUsername)}')">Konfigurasi</button>
-          <button class="btn danger" style="font-size:12px" onclick="removeViewerPerm('${p.id}','${esc(p.viewerUsername)}')">Hapus</button>
-        </div>
-      </div>`;
-    }).join("");
-  }catch(e){el.textContent="Gagal: "+e.message;}
+function renderAllowedEditorRespondents(list){
+  const el=document.getElementById("epdRespondentList");
+  if(!list.length){el.innerHTML='<div class="muted" style="font-size:11px">Belum ada responden dipilih.</div>';return;}
+  el.innerHTML=list.map(r=>`
+    <div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px">
+      <span style="flex:1">${esc(r.name||r.email||r.respondentId)}</span>
+      <button class="btn danger" style="font-size:11px;padding:2px 6px" onclick="removeAllowedEditorRespondent('${r.id}')">✕</button>
+    </div>`).join("");
 }
 
-async function addViewerPermission(){
-  const viewerId=document.getElementById("vpViewerSel").value;
-  const respondentAccess=document.querySelector("input[name='vpRA']:checked")?.value||"all";
-  if(!viewerId){adminToast("Pilih viewer terlebih dahulu",true);return;}
-  const cbAll=[...document.querySelectorAll("#vpAddFieldList input[type=checkbox]")];
-  const cbChecked=cbAll.filter(c=>c.checked).map(c=>c.value);
-  const visibleFields=cbAll.length>0&&cbChecked.length<cbAll.length?cbChecked:[];
+async function addAllowedEditorRespondent(){
+  const respondentId=document.getElementById("epdRespondentPicker").value;
+  if(!respondentId)return;
   try{
-    await api("/api/forms/"+FORM_ID+"/viewer-permissions",{
-      method:"POST",body:JSON.stringify({viewerId,respondentAccess,visibleFields,fieldFilters:_vpAddFilters})
+    await api("/api/editor-permissions/"+_epdPermId+"/respondents",{
+      method:"POST",body:JSON.stringify({respondentId})
     });
-    document.getElementById("vpViewerSel").value="";
-    document.querySelector("input[name='vpRA'][value='all']").checked=true;
-    buildFieldCheckboxes("vpAddFieldList",FORM_SCHEMA,[]);
-    _vpAddFilters={};
-    renderFilterChips("vpAddFilterList",{},"removeVpAddFilter");
-    await refreshVpPermList();
+    const [perm,formRespondents]=await Promise.all([
+      api("/api/editor-permissions/"+_epdPermId+"/respondents"),
+      api("/api/forms/"+FORM_ID+"/respondents").catch(()=>({respondents:[]}))
+    ]);
+    renderAllowedEditorRespondents(perm.respondents||[]);
+    const picker=document.getElementById("epdRespondentPicker");
+    const allowed=new Set((perm.respondents||[]).map(r=>r.respondentId));
+    picker.innerHTML=`<option value="">— pilih responden —</option>`+
+      (formRespondents.respondents||[]).filter(r=>!allowed.has(r.id)).map(r=>
+        `<option value="${esc(r.id)}">${esc(r.name||r.email||r.id)}</option>`).join("");
   }catch(e){adminToast("Gagal: "+e.message,true);}
 }
 
+async function removeAllowedEditorRespondent(id){
+  try{
+    await api("/api/editor-respondents/"+id,{method:"DELETE"});
+    const [perm,formRespondents]=await Promise.all([
+      api("/api/editor-permissions/"+_epdPermId+"/respondents"),
+      api("/api/forms/"+FORM_ID+"/respondents").catch(()=>({respondents:[]}))
+    ]);
+    renderAllowedEditorRespondents(perm.respondents||[]);
+    const picker=document.getElementById("epdRespondentPicker");
+    const allowed=new Set((perm.respondents||[]).map(r=>r.respondentId));
+    picker.innerHTML=`<option value="">— pilih responden —</option>`+
+      (formRespondents.respondents||[]).filter(r=>!allowed.has(r.id)).map(r=>
+        `<option value="${esc(r.id)}">${esc(r.name||r.email||r.id)}</option>`).join("");
+  }catch(e){adminToast("Gagal: "+e.message,true);}
+}
+
+async function saveEpDetail(){
+  const respondentAccess=document.querySelector("input[name='epdRA']:checked")?.value||"all";
+  try{
+    await api("/api/editor-permissions/"+_epdPermId,{
+      method:"PUT",body:JSON.stringify({respondentAccess,fieldFilters:_epdFilters})
+    });
+    epDetailDlg.close();
+    await refreshUserPermList();
+  }catch(e){adminToast("Gagal menyimpan: "+e.message,true);}
+}
+
+function convertEpToViewer(){
+  adminConfirm("Ubah akses ini menjadi Viewer? Akses editor yang lama akan dihapus dan digantikan akses viewer baru dengan pengaturan yang sama.",async()=>{
+    try{
+      await api("/api/editor-permissions/"+_epdPermId+"/convert-to-viewer",{method:"POST"});
+      epDetailDlg.close();
+      await refreshUserPermList();
+      adminToast("Akses diubah menjadi viewer");
+    }catch(e){adminToast("Gagal: "+e.message,true);}
+  });
+}
+
+let _vpPermCache=[];
+
 async function removeViewerPerm(permId,viewerName){
   adminConfirm(`Cabut akses "${viewerName}" dari kuesioner ini?`,async()=>{
-    try{await api("/api/viewer-permissions/"+permId,{method:"DELETE"});await refreshVpPermList();}
+    try{await api("/api/viewer-permissions/"+permId,{method:"DELETE"});await refreshUserPermList();}
     catch(e){adminToast("Gagal: "+e.message,true);}
   });
+}
+
+/* ======================================================
+   USER — daftar gabungan viewer + editor untuk kuesioner ini
+   ====================================================== */
+
+async function initUserSection(){
+  await refreshUserPermList();
+}
+
+async function refreshUserPermList(){
+  const el=document.getElementById("userPermList");
+  el.innerHTML='<tr><td colspan="5" class="empty">Memuat…</td></tr>';
+  try{
+    const [vRes,eRes]=await Promise.all([
+      api("/api/forms/"+FORM_ID+"/viewer-permissions"),
+      api("/api/forms/"+FORM_ID+"/editor-permissions"),
+    ]);
+    _vpPermCache=vRes.permissions||[];
+    _epPermCache=eRes.permissions||[];
+    renderUserPermTable();
+  }catch(e){
+    el.innerHTML=`<tr><td colspan="5" class="empty">${esc(e.message)}</td></tr>`;
+  }
+}
+
+function renderUserPermTable(){
+  const el=document.getElementById("userPermList");
+  const rows=[
+    ..._vpPermCache.map(p=>({...p,role:"viewer"})),
+    ..._epPermCache.map(p=>({...p,role:"editor"})),
+  ];
+  if(!rows.length){
+    el.innerHTML='<tr><td colspan="5" class="empty">Belum ada user yang ditambahkan.</td></tr>';
+    return;
+  }
+  el.innerHTML=rows.map(p=>{
+    const isViewer=p.role==="viewer";
+    const email=isViewer?p.viewerUsername:(p.editorName||"(editor)");
+    const respAccess=p.respondentAccess==="all"?"Semua responden":`${p.allowedCount} responden dipilih`;
+    const varAccess=isViewer?(p.visibleFields&&p.visibleFields.length?p.visibleFields.length+" variabel":"Semua variabel"):"-";
+    const detailFn=isViewer?"openVpDetail":"openEpDetail";
+    const removeFn=isViewer?"removeViewerPerm":"removeEditorPerm";
+    return`<tr>
+      <td>${esc(email)}</td>
+      <td><span class="tag${isViewer?"":" archived"}">${isViewer?"Viewer":"Editor"}</span></td>
+      <td class="muted">${respAccess}</td>
+      <td class="muted">${varAccess}</td>
+      <td class="acts">
+        <button class="btn btn-xs" onclick="${detailFn}('${p.id}','${esc(email)}')">Konfigurasi</button>
+        <button class="btn danger btn-xs" onclick="${removeFn}('${p.id}','${esc(email)}')">Hapus</button>
+      </td>
+    </tr>`;
+  }).join("");
+}
+
+let _uaFilters={};
+let _uaSelectedRespondents=[];
+let _uaAllRespondents=[];
+
+function uaRoleChanged(){
+  const isViewer=document.querySelector("input[name='uaRole']:checked")?.value!=="editor";
+  document.getElementById("uaFieldListSection").style.display=isViewer?"block":"none";
+}
+
+function toggleUaRespondentSection(show){
+  document.getElementById("uaRespondentSection").style.display=show?"block":"none";
+}
+
+function renderUaRespondents(){
+  const el=document.getElementById("uaRespondentList");
+  if(!_uaSelectedRespondents.length){el.innerHTML='<div class="muted" style="font-size:11px">Belum ada responden dipilih.</div>';return;}
+  el.innerHTML=_uaSelectedRespondents.map(r=>`
+    <div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px">
+      <span style="flex:1">${esc(r.name||r.email||r.id)}</span>
+      <button class="btn danger" type="button" style="font-size:11px;padding:2px 6px" onclick="removeUaRespondent('${r.id}')">✕</button>
+    </div>`).join("");
+  const picker=document.getElementById("uaRespondentPicker");
+  const chosen=new Set(_uaSelectedRespondents.map(r=>r.id));
+  picker.innerHTML=`<option value="">— pilih responden —</option>`+
+    _uaAllRespondents.filter(r=>!chosen.has(r.id)).map(r=>
+      `<option value="${esc(r.id)}">${esc(r.name||r.email||r.id)}</option>`).join("");
+}
+
+function addUaRespondent(){
+  const id=document.getElementById("uaRespondentPicker").value;
+  if(!id)return;
+  const r=_uaAllRespondents.find(x=>x.id===id);
+  if(!r)return;
+  _uaSelectedRespondents.push(r);
+  renderUaRespondents();
+}
+
+function removeUaRespondent(id){
+  _uaSelectedRespondents=_uaSelectedRespondents.filter(r=>r.id!==id);
+  renderUaRespondents();
+}
+
+function uaCheckAll(on){
+  document.querySelectorAll("#uaFieldList input[type=checkbox]").forEach(cb=>{cb.checked=on;});
+}
+
+function addUaFilter(){
+  const field=document.getElementById("uaFilterField").value;
+  const value=(document.getElementById("uaFilterValue").value||"").trim();
+  if(!field||!value){adminToast("Pilih variabel dan masukkan nilai",true);return;}
+  _uaFilters[field]=value;
+  document.getElementById("uaFilterValue").value="";
+  renderFilterChips("uaFilterList",_uaFilters,"removeUaFilter");
+}
+function removeUaFilter(field){
+  delete _uaFilters[field];
+  renderFilterChips("uaFilterList",_uaFilters,"removeUaFilter");
+}
+
+async function openUserAddDlg(){
+  document.querySelector("input[name='uaRole'][value='viewer']").checked=true;
+  document.getElementById("uaEmail").value="";
+  document.getElementById("uaNote").value="";
+  uaRoleChanged();
+
+  document.querySelector("input[name='uaRA'][value='all']").checked=true;
+  toggleUaRespondentSection(false);
+  _uaSelectedRespondents=[];
+  _uaAllRespondents=[];
+  renderUaRespondents();
+  document.getElementById("uaRespondentPicker").innerHTML='<option value="">— pilih responden —</option>';
+
+  buildFieldCheckboxes("uaFieldList",FORM_SCHEMA,[]);
+
+  _uaFilters={};
+  buildFieldOptions(FORM_SCHEMA,"uaFilterField");
+  document.getElementById("uaFilterField").value="";
+  document.getElementById("uaFilterValue").value="";
+  renderFilterChips("uaFilterList",_uaFilters,"removeUaFilter");
+
+  userAddDlg.showModal();
+
+  try{
+    const{respondents}=await api("/api/forms/"+FORM_ID+"/respondents");
+    _uaAllRespondents=respondents||[];
+    renderUaRespondents();
+  }catch(_){}
+}
+
+async function submitUserAdd(){
+  const role=document.querySelector("input[name='uaRole']:checked")?.value||"viewer";
+  const email=(document.getElementById("uaEmail").value||"").trim().toLowerCase();
+  const note=(document.getElementById("uaNote").value||"").trim();
+  const respondentAccess=document.querySelector("input[name='uaRA']:checked")?.value||"all";
+  const fieldFilters={..._uaFilters};
+  let visibleFields=[];
+  if(role==="viewer"){
+    const checked=[...document.querySelectorAll("#uaFieldList input:checked")].map(cb=>cb.value);
+    const total=document.querySelectorAll("#uaFieldList input").length;
+    visibleFields=checked.length===total?[]:checked;
+  }
+  if(!email){adminToast("Email wajib diisi",true);return;}
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){adminToast("Format email tidak valid",true);return;}
+  const btn=document.getElementById("uaSaveBtn");
+  btn.disabled=true;btn.textContent="Menyimpan…";
+  try{
+    const path=role==="viewer"
+      ?"/api/forms/"+FORM_ID+"/viewer-permissions/bulk"
+      :"/api/forms/"+FORM_ID+"/editor-permissions/bulk";
+    const item=role==="viewer"
+      ?{email,note,respondentAccess,visibleFields,fieldFilters}
+      :{email,note,respondentAccess,fieldFilters};
+    const{results}=await api(path,{method:"POST",body:JSON.stringify({items:[item]})});
+    const res=results&&results[0];
+    if(res&&res.status==="error"){adminToast("Gagal: "+res.error,true);return;}
+    if(respondentAccess==="selected"&&_uaSelectedRespondents.length&&res.permissionId){
+      const respPath=role==="viewer"
+        ?"/api/viewer-permissions/"+res.permissionId+"/respondents"
+        :"/api/editor-permissions/"+res.permissionId+"/respondents";
+      await Promise.all(_uaSelectedRespondents.map(r=>
+        api(respPath,{method:"POST",body:JSON.stringify({respondentId:r.id})}).catch(()=>{})
+      ));
+    }
+    userAddDlg.close();
+    await refreshUserPermList();
+    adminToast("User ditambahkan");
+  }catch(e){adminToast("Gagal: "+e.message,true);}
+  finally{btn.disabled=false;btn.textContent="Tambah";}
 }
 
 let _vpdPermId=null;
@@ -862,10 +869,6 @@ function buildFieldCheckboxes(containerId,schema,checked){
     </label>`).join("");
 }
 
-function vpCheckAll(on){
-  document.querySelectorAll("#vpAddFieldList input[type=checkbox]").forEach(cb=>{cb.checked=on;});
-}
-
 function buildVpdFieldList(schema,checked){buildFieldCheckboxes("vpdFieldList",schema,checked);}
 
 function vpdCheckAll(on){
@@ -882,434 +885,320 @@ async function savePermDetail(){
       method:"PUT",body:JSON.stringify({respondentAccess,visibleFields,fieldFilters:_vpdFilters})
     });
     vpDetailDlg.close();
-    await refreshVpPermList();
+    await refreshUserPermList();
   }catch(e){adminToast("Gagal menyimpan: "+e.message,true);}
 }
 
+function convertVpToEditor(){
+  adminConfirm("Ubah akses ini menjadi Editor? Akses viewer yang lama akan dihapus dan digantikan akses editor baru dengan pengaturan yang sama.",async()=>{
+    try{
+      await api("/api/viewer-permissions/"+_vpdPermId+"/convert-to-editor",{method:"POST"});
+      vpDetailDlg.close();
+      await refreshUserPermList();
+      adminToast("Akses diubah menjadi editor");
+    }catch(e){adminToast("Gagal: "+e.message,true);}
+  });
+}
+
 /* ======================================================
-   BULK ASSIGN — tambah/kelola massal viewer & editor
+   API — key untuk sistem eksternal menarik jawaban kuesioner ini
    ====================================================== */
 
-function bulkParseLines(text){
-  const lines=String(text||"").split(/\r?\n/).map(l=>l.trim()).filter(l=>l.length);
-  if(!lines.length)return[];
-  const delim=lines[0].includes("\t")?"\t":(lines[0].includes(",")?",":";");
-  let rows=lines.map(l=>l.split(delim).map(c=>c.trim()));
-  if(rows.length>1&&rows[0][0]&&!rows[0][0].includes("@")&&rows[1][0]&&rows[1][0].includes("@"))rows=rows.slice(1);
-  return rows.map(c=>({email:(c[0]||"").toLowerCase(),note:c[1]||"",filterValue:c[2]||"",clientError:null,serverError:null,status:null}));
+let _akEditingId=null;            // null = sedang membuat key baru
+let _akFilters={};
+let _akSelectedRespondents=[];
+let _akAllRespondents=[];
+let _akRevealedKey="";
+
+function initApiSection(){
+  document.getElementById("apiDocPre").textContent=apiUsageSnippet("EFORM_API_KEY");
+  refreshApiKeys();
 }
 
-function bulkValidateRows(rows){
-  const seen=new Map();
-  rows.forEach(r=>{
-    r.clientError=null;
-    if(r.status==="created"||r.status==="updated")return;
-    if(!r.email){r.clientError="Email wajib diisi";return;}
-    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r.email)){r.clientError="Format email tidak valid";return;}
-    if(seen.has(r.email)){r.clientError="Email duplikat pada baris ini";seen.get(r.email).clientError="Email duplikat pada baris ini";return;}
-    seen.set(r.email,r);
-  });
-  return rows.every(r=>!r.clientError);
+// apiUsageSnippet menyusun contoh curl memakai key sungguhan (saat baru dibuat) atau
+// placeholder (di dokumentasi bagian bawah).
+function apiUsageSnippet(key){
+  const base=location.origin;
+  return `curl -H "Authorization: Bearer ${key}" \\
+  "${base}/api/v1/forms/${FORM_ID}/responses?limit=50"
+
+# CSV
+curl -H "Authorization: Bearer ${key}" \\
+  "${base}/api/v1/forms/${FORM_ID}/responses.csv" -o responses.csv
+
+# cek konfigurasi key tanpa menarik data
+curl -H "Authorization: Bearer ${key}" "${base}/api/v1/me"`;
 }
 
-function bulkRowStatusHtml(r){
-  if(r.status==="created")return"<span style='color:var(--ok)'>✓ Dibuat</span>";
-  if(r.status==="updated")return"<span style='color:var(--ok)'>✓ Diperbarui</span>";
-  const msg=r.status==="error"?r.serverError:r.clientError;
-  return msg?`<span style="color:#b91c1c">${esc(msg)}</span>`:"";
+function akStatus(k){
+  if(!k.isActive) return{cls:"archived",text:"Nonaktif"};
+  if(k.expiresAt&&new Date(k.expiresAt)<new Date()) return{cls:"archived",text:"Kedaluwarsa"};
+  return{cls:"published",text:"Aktif"};
 }
 
-function bulkFindFieldNode(schema,fieldName){
-  let found=null;
-  function walk(comps){
-    for(const c of comps||[]){
-      if(found)return;
-      if(c.kind==="field"&&c.name===fieldName){found=c;return;}
-      if(c.components)walk(c.components);
-    }
-  }
-  for(const p of schema?.pages||[])walk(p.components||[]);
-  return found;
-}
-
-function bulkFieldChoices(schema,fieldName){
-  const f=bulkFindFieldNode(schema,fieldName);
-  if(!f)return null;
-  if(f.optionsRef){
-    const tbl=schema.referenceData&&schema.referenceData[f.optionsRef];
-    if(!tbl||tbl.source==="api"||!tbl.items)return null;
-    return tbl.items.map(it=>({value:String(it.code),label:it.label!=null?String(it.label):String(it.code)}));
-  }
-  if(Array.isArray(f.options)&&f.options.length){
-    return f.options.map(o=>({value:String(o.value),label:(typeof o.label==="string"?o.label:(o.label&&o.label.id))||String(o.value)}));
-  }
-  return null;
-}
-
-function bulkCoverageSummary(choices,filterField,rows,existingPerms){
-  if(!choices||!filterField)return"";
-  const counts=new Map(choices.map(c=>[c.value,0]));
-  const bump=v=>{if(v==null||v==="")return;const k=String(v);if(counts.has(k))counts.set(k,counts.get(k)+1);};
-  (existingPerms||[]).forEach(p=>{if(p.fieldFilters&&p.fieldFilters[filterField]!=null)bump(p.fieldFilters[filterField]);});
-  (rows||[]).forEach(r=>{if(r.status!=="error")bump(r.filterValue);});
-  const labelOf=v=>{const c=choices.find(x=>x.value===v);return c?c.label:v;};
-  const zero=[...counts.entries()].filter(([,n])=>n===0).map(([v])=>labelOf(v));
-  const dup=[...counts.entries()].filter(([,n])=>n>1).map(([v])=>labelOf(v));
-  const parts=[];
-  if(zero.length)parts.push(`${zero.length} belum ada petugas (${zero.slice(0,5).join(", ")}${zero.length>5?"…":""})`);
-  if(dup.length)parts.push(`${dup.length} diisi >1 petugas (${dup.slice(0,5).join(", ")}${dup.length>5?"…":""})`);
-  return parts.length?" · ⚠ "+parts.join(" · "):"";
-}
-
-async function bulkFillSuggestions(formId,fieldName,datalistId){
-  const dl=document.getElementById(datalistId);
-  if(!dl)return;
-  dl.innerHTML="";
-  if(!fieldName)return;
+async function refreshApiKeys(){
+  const el=document.getElementById("apiKeyList");
   try{
-    const{values}=await api("/api/forms/"+formId+"/fields/"+encodeURIComponent(fieldName)+"/suggested-values");
-    dl.innerHTML=(values||[]).map(v=>`<option value="${esc(v)}">`).join("");
-  }catch(_){}
-}
-
-// ---- Viewer ----
-let _bvRows=[];
-function openBulkViewer(initialRows){
-  _bvRows=initialRows||[];
-  document.getElementById("bvPaste").value="";
-  buildFieldOptions(FORM_SCHEMA,"bvFilterField");
-  document.getElementById("bvFilterField").value="";
-  document.getElementById("bvSuggest").innerHTML="";
-  buildFieldCheckboxes("bvFieldList",FORM_SCHEMA,[]);
-  const raAll=document.querySelector("input[name='bvRA'][value='all']");
-  if(raAll)raAll.checked=true;
-  document.getElementById("bvPreviewBox").style.display="none";
-  document.getElementById("bvApplyBtn").disabled=true;
-  bulkVpRenderTable();
-  bulkViewerDlg.showModal();
-  api("/api/forms").then(({forms})=>{
-    const sel=document.getElementById("bvCopyFormSel");
-    sel.innerHTML='<option value="">— pilih kuesioner —</option>'+
-      (forms||[]).filter(f=>f.id!==FORM_ID).map(f=>`<option value="${esc(f.id)}">${esc(f.title)}</option>`).join("");
-  }).catch(()=>{});
-}
-async function bulkVpCopyFromForm(){
-  const otherId=document.getElementById("bvCopyFormSel").value;
-  if(!otherId){adminToast("Pilih kuesioner sumber dulu",true);return;}
-  try{
-    const{permissions}=await api("/api/forms/"+otherId+"/viewer-permissions");
-    const rows=(permissions||[]).map(p=>({
-      email:p.viewerUsername,note:"",filterValue:"",clientError:null,serverError:null,status:null,sourceFieldFilters:p.fieldFilters||{},
-    }));
-    if(!rows.length){adminToast("Kuesioner sumber belum punya viewer",true);return;}
-    _bvRows=_bvRows.concat(rows);
-    bulkVpFilterFieldChanged();
-  }catch(e){adminToast("Gagal menyalin: "+e.message,true);}
-}
-function bulkVpParse(){
-  const parsed=bulkParseLines(document.getElementById("bvPaste").value);
-  if(!parsed.length){adminToast("Tidak ada baris yang bisa diurai",true);return;}
-  _bvRows=_bvRows.concat(parsed);
-  document.getElementById("bvPaste").value="";
-  bulkVpRenderTable();
-}
-function bulkVpAddRow(){_bvRows.push({email:"",note:"",filterValue:"",clientError:null,serverError:null,status:null});bulkVpRenderTable();}
-function bulkVpRemoveRow(i){_bvRows.splice(i,1);bulkVpRenderTable();}
-function bulkVpCellChange(i,field,value){if(_bvRows[i])_bvRows[i][field]=value;}
-function bulkVpCheckAll(on){document.querySelectorAll("#bvFieldList input[type=checkbox]").forEach(cb=>{cb.checked=on;});}
-
-function bulkVpFilterFieldChanged(){
-  const field=document.getElementById("bvFilterField").value;
-  _bvRows.forEach(r=>{
-    if(r.status==="created"||r.status==="updated")return;
-    if(r.sourcePermId){
-      const src=_vpPermCache.find(p=>p.id===r.sourcePermId);
-      r.filterValue=(field&&src&&src.fieldFilters&&src.fieldFilters[field]!=null)?String(src.fieldFilters[field]):"";
-    }else if(r.sourceFieldFilters){
-      r.filterValue=(field&&r.sourceFieldFilters[field]!=null)?String(r.sourceFieldFilters[field]):"";
+    const{apiKeys}=await api("/api/forms/"+FORM_ID+"/api-keys");
+    document.getElementById("apiDoc").hidden=!(apiKeys&&apiKeys.length);
+    if(!apiKeys||!apiKeys.length){
+      el.innerHTML='<div class="share-empty muted">Belum ada API key. Klik "+ Buat API Key" untuk membuat yang pertama.</div>';
+      return;
     }
-  });
-  if(!bulkFieldChoices(FORM_SCHEMA,field))bulkFillSuggestions(FORM_ID,field,"bvSuggest");
-  bulkVpRenderTable();
+    el.innerHTML=apiKeys.map(k=>{
+      const st=akStatus(k);
+      const badges=[];
+      badges.push(`<span class="tag">${k.respondentAccess==="all"?"Semua responden":`${k.allowedCount||0} responden`}</span>`);
+      badges.push(`<span class="tag">${k.visibleFields&&k.visibleFields.length?`${k.visibleFields.length} variabel`:"Semua variabel"}</span>`);
+      if(!k.includeRespondent) badges.push('<span class="tag">Tanpa identitas</span>');
+      if(k.allowedIps&&k.allowedIps.length) badges.push(`<span class="tag">${k.allowedIps.length} IP</span>`);
+      if(k.fieldFilters&&Object.keys(k.fieldFilters).length) badges.push(`<span class="tag">${Object.keys(k.fieldFilters).length} filter</span>`);
+      const used=k.lastUsedAt
+        ? `Terakhir dipakai ${new Date(k.lastUsedAt).toLocaleString("id-ID")}${k.lastUsedIp?" dari "+esc(k.lastUsedIp):""}`
+        : "Belum pernah dipakai";
+      return`<div class="share-card">
+        <div class="share-card-top">
+          <div class="share-card-title">
+            <b>${esc(k.label||"(tanpa label)")}</b>
+            <span class="tag ${st.cls}">${st.text}</span>
+          </div>
+        </div>
+        <div class="share-badges">${badges.join("")}</div>
+        <div class="share-url-row"><code class="share-url">eform_${esc(k.keyPrefix)}…</code></div>
+        <div class="share-meta muted">${used} · ${k.requestCount||0}× permintaan${k.expiresAt?` · berlaku sampai ${new Date(k.expiresAt).toLocaleString("id-ID")}`:""}</div>
+        <div class="acts" style="margin-top:10px">
+          <button class="btn" type="button" onclick="openApiKeyDlg('${k.id}')">Konfigurasi</button>
+          <button class="btn" type="button" onclick="openApiLogDlg('${k.id}','${esc(k.label||k.keyPrefix)}')">Log Akses</button>
+          <button class="btn" type="button" onclick="rotateApiKey('${k.id}','${esc(k.label||k.keyPrefix)}')">Rotasi</button>
+          <button class="btn danger" type="button" onclick="deleteApiKey('${k.id}','${esc(k.label||k.keyPrefix)}')">Hapus</button>
+        </div>
+      </div>`;
+    }).join("");
+  }catch(e){ el.innerHTML=`<div class="share-empty muted">${esc(e.message)}</div>`; }
 }
 
-function bulkVpManageSelected(){
-  if(!_vpPermSelected.size)return;
-  const rows=_vpPermCache.filter(p=>_vpPermSelected.has(p.id)).map(p=>({
-    email:p.viewerUsername,note:"",filterValue:"",clientError:null,serverError:null,status:null,sourcePermId:p.id,
-  }));
-  openBulkViewer(rows);
+function toggleAkRespondentSection(show){
+  document.getElementById("akRespondentSection").style.display=show?"block":"none";
 }
 
-function bulkVpDeleteSelected(){
-  if(!_vpPermSelected.size)return;
-  const ids=[..._vpPermSelected];
-  adminConfirm(`Hapus akses ${ids.length} viewer terpilih dari kuesioner ini?`,async()=>{
+function akCheckAll(on){
+  document.querySelectorAll("#akFieldList input[type=checkbox]").forEach(cb=>{cb.checked=on;});
+}
+
+function renderAkRespondents(){
+  const el=document.getElementById("akRespondentList");
+  if(!_akSelectedRespondents.length){el.innerHTML='<div class="muted" style="font-size:11px">Belum ada responden dipilih.</div>';}
+  else{
+    el.innerHTML=_akSelectedRespondents.map(r=>`
+      <div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px">
+        <span style="flex:1">${esc(r.name||r.email||r.id)}</span>
+        <button class="btn danger" type="button" style="font-size:11px;padding:2px 6px" onclick="removeAkRespondent('${r.id}')">✕</button>
+      </div>`).join("");
+  }
+  const picker=document.getElementById("akRespondentPicker");
+  const chosen=new Set(_akSelectedRespondents.map(r=>r.id));
+  picker.innerHTML=`<option value="">— pilih responden —</option>`+
+    _akAllRespondents.filter(r=>!chosen.has(r.id)).map(r=>
+      `<option value="${esc(r.id)}">${esc(r.name||r.email||r.id)}</option>`).join("");
+}
+
+function addAkRespondent(){
+  const id=document.getElementById("akRespondentPicker").value;
+  if(!id)return;
+  const r=_akAllRespondents.find(x=>x.id===id);
+  if(!r)return;
+  _akSelectedRespondents.push(r);
+  renderAkRespondents();
+}
+
+function removeAkRespondent(id){
+  _akSelectedRespondents=_akSelectedRespondents.filter(r=>r.id!==id);
+  renderAkRespondents();
+}
+
+function addAkFilter(){
+  const field=document.getElementById("akFilterField").value;
+  const value=(document.getElementById("akFilterValue").value||"").trim();
+  if(!field||!value){adminToast("Pilih variabel dan masukkan nilai",true);return;}
+  _akFilters[field]=value;
+  document.getElementById("akFilterValue").value="";
+  renderFilterChips("akFilterList",_akFilters,"removeAkFilter");
+}
+function removeAkFilter(field){
+  delete _akFilters[field];
+  renderFilterChips("akFilterList",_akFilters,"removeAkFilter");
+}
+
+// openApiKeyDlg dipakai untuk membuat (keyId kosong) maupun mengubah key yang ada.
+async function openApiKeyDlg(keyId){
+  _akEditingId=keyId||null;
+  const isEdit=!!_akEditingId;
+  document.getElementById("akDlgTitle").textContent=isEdit?"Konfigurasi API Key":"Buat API Key";
+  document.getElementById("akSaveBtn").textContent=isEdit?"Simpan":"Buat API Key";
+  document.getElementById("akActiveRow").style.display=isEdit?"flex":"none";
+
+  let k={label:"",respondentAccess:"all",visibleFields:[],fieldFilters:{},
+         includeRespondent:false,allowedIps:[],rateLimitPerMin:60,isActive:true,expiresAt:null};
+  let allowedRespondents=[];
+  if(isEdit){
     try{
-      await api("/api/forms/"+FORM_ID+"/viewer-permissions/bulk",{method:"DELETE",body:JSON.stringify({permissionIds:ids})});
-      await refreshVpPermList();
-      adminToast(`${ids.length} akses viewer dihapus`);
+      const[list,allowed]=await Promise.all([
+        api("/api/forms/"+FORM_ID+"/api-keys"),
+        api("/api/api-keys/"+_akEditingId+"/respondents").catch(()=>({respondents:[]}))
+      ]);
+      const found=(list.apiKeys||[]).find(x=>x.id===_akEditingId);
+      if(found) k=found;
+      allowedRespondents=(allowed.respondents||[]).map(r=>({id:r.respondentId,name:r.name,email:r.email}));
+    }catch(e){adminToast("Gagal memuat: "+e.message,true);return;}
+  }
+
+  document.getElementById("akLabel").value=k.label||"";
+  document.querySelector(`input[name='akRA'][value='${k.respondentAccess||"all"}']`).checked=true;
+  toggleAkRespondentSection(k.respondentAccess==="selected");
+  document.getElementById("akIncludeRespondent").checked=!!k.includeRespondent;
+  document.getElementById("akAllowedIps").value=(k.allowedIps||[]).join(", ");
+  document.getElementById("akRateLimit").value=k.rateLimitPerMin||60;
+  document.getElementById("akIsActive").checked=k.isActive!==false;
+  document.getElementById("akExpiresAt").value=toLocalDT(k.expiresAt);
+
+  buildFieldCheckboxes("akFieldList",FORM_SCHEMA,k.visibleFields||[]);
+
+  _akFilters={...(k.fieldFilters||{})};
+  buildFieldOptions(FORM_SCHEMA,"akFilterField");
+  document.getElementById("akFilterField").value="";
+  document.getElementById("akFilterValue").value="";
+  renderFilterChips("akFilterList",_akFilters,"removeAkFilter");
+
+  _akSelectedRespondents=allowedRespondents;
+  _akAllRespondents=[];
+  renderAkRespondents();
+
+  apiKeyDlg.showModal();
+
+  try{
+    const{respondents}=await api("/api/forms/"+FORM_ID+"/respondents");
+    _akAllRespondents=respondents||[];
+    renderAkRespondents();
+  }catch(e){}
+}
+
+// collectApiKeyForm membaca seluruh isian dialog jadi payload API.
+function collectApiKeyForm(){
+  const checked=[...document.querySelectorAll("#akFieldList input:checked")].map(cb=>cb.value);
+  const total=document.querySelectorAll("#akFieldList input").length;
+  const expiresRaw=document.getElementById("akExpiresAt").value;
+  return{
+    label:document.getElementById("akLabel").value.trim(),
+    respondentAccess:document.querySelector("input[name='akRA']:checked")?.value||"all",
+    // Semua tercentang = tanpa pembatasan kolom, sama seperti permission viewer.
+    visibleFields:checked.length===total?[]:checked,
+    fieldFilters:_akFilters,
+    includeRespondent:document.getElementById("akIncludeRespondent").checked,
+    allowedIps:document.getElementById("akAllowedIps").value.split(",").map(s=>s.trim()).filter(Boolean),
+    rateLimitPerMin:parseInt(document.getElementById("akRateLimit").value,10)||60,
+    isActive:document.getElementById("akIsActive").checked,
+    expiresAt:expiresRaw?new Date(expiresRaw).toISOString():""
+  };
+}
+
+async function submitApiKey(){
+  const btn=document.getElementById("akSaveBtn");
+  const body=collectApiKeyForm();
+  btn.disabled=true;
+  try{
+    if(_akEditingId){
+      await api("/api/api-keys/"+_akEditingId,{method:"PUT",body:JSON.stringify(body)});
+      await syncAkRespondents(_akEditingId);
+      apiKeyDlg.close();
+      adminToast("API key diperbarui");
+    }else{
+      const res=await api("/api/forms/"+FORM_ID+"/api-keys",{method:"POST",body:JSON.stringify(body)});
+      await syncAkRespondents(res.apiKey.id);
+      apiKeyDlg.close();
+      showApiKeyReveal(res.key);
+    }
+    await refreshApiKeys();
+  }catch(e){adminToast("Gagal: "+e.message,true);}
+  finally{btn.disabled=false;}
+}
+
+// syncAkRespondents menyamakan daftar responden di server dengan yang dipilih di dialog.
+async function syncAkRespondents(keyId){
+  if(document.querySelector("input[name='akRA']:checked")?.value!=="selected") return;
+  let existing=[];
+  try{
+    const d=await api("/api/api-keys/"+keyId+"/respondents");
+    existing=d.respondents||[];
+  }catch(e){}
+  const wanted=new Set(_akSelectedRespondents.map(r=>r.id));
+  const have=new Set(existing.map(r=>r.respondentId));
+  for(const r of _akSelectedRespondents){
+    if(!have.has(r.id)){
+      try{await api("/api/api-keys/"+keyId+"/respondents",{method:"POST",body:JSON.stringify({respondentId:r.id})});}catch(e){}
+    }
+  }
+  for(const r of existing){
+    if(!wanted.has(r.respondentId)){
+      try{await api("/api/api-key-respondents/"+r.id,{method:"DELETE"});}catch(e){}
+    }
+  }
+}
+
+function showApiKeyReveal(key){
+  _akRevealedKey=key;
+  document.getElementById("akRevealKey").textContent=key;
+  document.getElementById("akRevealCurl").textContent=apiUsageSnippet(key);
+  apiKeyRevealDlg.showModal();
+}
+
+function copyApiKey(){
+  navigator.clipboard.writeText(_akRevealedKey)
+    .then(()=>adminToast("API key disalin"))
+    .catch(()=>adminToast("Gagal menyalin",true));
+}
+
+function rotateApiKey(id,label){
+  adminConfirm(`Rotasi API key "${label}"? Key yang lama langsung berhenti berfungsi dan sistem yang memakainya harus diperbarui.`,async()=>{
+    try{
+      const res=await api("/api/api-keys/"+id+"/rotate",{method:"POST"});
+      await refreshApiKeys();
+      showApiKeyReveal(res.key);
     }catch(e){adminToast("Gagal: "+e.message,true);}
   });
 }
 
-async function downloadViewerPermsCsv(){
-  try{
-    const r=await fetch("/api/forms/"+FORM_ID+"/viewer-permissions.csv",{headers:H});
-    if(!r.ok)throw new Error("HTTP "+r.status);
-    const blob=await r.blob();const url=URL.createObjectURL(blob);
-    const a=document.createElement("a");a.href=url;a.download="viewer-permissions-"+FORM_ID+".csv";a.click();URL.revokeObjectURL(url);
-  }catch(e){adminToast("Gagal unduh: "+e.message,true);}
-}
-
-function bulkVpFilterCellHtml(r,i,choices,done){
-  if(choices){
-    return`<select ${done?"disabled":""} style="width:100%;font-size:12px;padding:3px 5px;border:1px solid var(--line);border-radius:4px" onchange="bulkVpCellChange(${i},'filterValue',this.value)">
-      <option value="">— pilih —</option>
-      ${choices.map(c=>`<option value="${esc(c.value)}"${r.filterValue===c.value?" selected":""}>${esc(c.label)}</option>`).join("")}
-    </select>`;
-  }
-  return`<input ${done?"disabled":""} value="${esc(r.filterValue)}" list="bvSuggest" style="width:100%;font-size:12px;padding:3px 5px;border:1px solid var(--line);border-radius:4px" oninput="bulkVpCellChange(${i},'filterValue',this.value)">`;
-}
-
-function bulkVpRenderTable(){
-  bulkValidateRows(_bvRows);
-  document.getElementById("bvPreviewBox").style.display="none";
-  document.getElementById("bvApplyBtn").disabled=true;
-  const filterField=document.getElementById("bvFilterField").value;
-  const choices=bulkFieldChoices(FORM_SCHEMA,filterField);
-  const tbody=document.getElementById("bvRows");
-  if(!_bvRows.length){
-    tbody.innerHTML='<tr><td colspan="5" style="padding:14px;text-align:center;color:var(--muted)">Belum ada baris. Tempel daftar di atas lalu klik "Urai".</td></tr>';
-  }else{
-    tbody.innerHTML=_bvRows.map((r,i)=>{
-      const done=r.status==="created"||r.status==="updated";
-      const hasErr=r.clientError||r.status==="error";
-      return`<tr style="${hasErr?"background:#fef2f2":""}">
-        <td style="padding:4px 6px;border-bottom:1px solid var(--line-2)"><input ${done?"disabled":""} value="${esc(r.email)}" style="width:100%;font-size:12px;padding:3px 5px;border:1px solid var(--line);border-radius:4px" oninput="bulkVpCellChange(${i},'email',this.value)"></td>
-        <td style="padding:4px 6px;border-bottom:1px solid var(--line-2)"><input ${done?"disabled":""} value="${esc(r.note)}" style="width:100%;font-size:12px;padding:3px 5px;border:1px solid var(--line);border-radius:4px" oninput="bulkVpCellChange(${i},'note',this.value)"></td>
-        <td style="padding:4px 6px;border-bottom:1px solid var(--line-2)">${bulkVpFilterCellHtml(r,i,choices,done)}</td>
-        <td style="padding:4px 6px;border-bottom:1px solid var(--line-2);font-size:11px">${bulkRowStatusHtml(r)}</td>
-        <td style="padding:4px 6px;border-bottom:1px solid var(--line-2)">${done?"":`<button class="btn danger" style="font-size:11px;padding:2px 7px" type="button" onclick="bulkVpRemoveRow(${i})">✕</button>`}</td>
-      </tr>`;
-    }).join("");
-  }
-  const total=_bvRows.length,doneCount=_bvRows.filter(r=>r.status==="created"||r.status==="updated").length,errCount=_bvRows.filter(r=>r.clientError||r.status==="error").length;
-  const coverage=bulkCoverageSummary(choices,filterField,_bvRows,_vpPermCache);
-  document.getElementById("bvSummary").textContent=total?`${total} baris`+(doneCount?` · ${doneCount} sudah diterapkan`:"")+(errCount?` · ${errCount} error`:"")+coverage:coverage;
-}
-
-function bulkVpPreview(){
-  if(!_bvRows.length){adminToast("Belum ada baris",true);return;}
-  const ok=bulkValidateRows(_bvRows);
-  bulkVpRenderTable();
-  const box=document.getElementById("bvPreviewBox");
-  const pending=_bvRows.filter(r=>r.status!=="created"&&r.status!=="updated");
-  box.style.display="block";
-  if(!ok){
-    box.innerHTML='<b style="color:#b91c1c">Masih ada baris bermasalah.</b> Perbaiki dulu sebelum menerapkan.';
-    document.getElementById("bvApplyBtn").disabled=true;
-    return;
-  }
-  box.innerHTML=`Siap menerapkan <b>${pending.length}</b> baris ke kuesioner ini. Akun baru akan dibuat otomatis untuk email yang belum terdaftar sebagai viewer.`;
-  document.getElementById("bvApplyBtn").disabled=pending.length===0;
-}
-
-async function bulkVpApply(){
-  const respondentAccess=document.querySelector("input[name='bvRA']:checked")?.value||"all";
-  const checked=[...document.querySelectorAll("#bvFieldList input:checked")].map(cb=>cb.value);
-  const totalFields=document.querySelectorAll("#bvFieldList input").length;
-  const visibleFields=checked.length===totalFields?[]:checked;
-  const filterField=document.getElementById("bvFilterField").value;
-  const pendingIdx=[],items=[];
-  _bvRows.forEach((r,i)=>{
-    if(r.status==="created"||r.status==="updated")return;
-    pendingIdx.push(i);
-    items.push({email:r.email,note:r.note,respondentAccess,visibleFields,fieldFilters:filterField&&r.filterValue?{[filterField]:r.filterValue}:{}});
-  });
-  if(!items.length)return;
-  const btn=document.getElementById("bvApplyBtn");
-  btn.disabled=true;btn.textContent="Menerapkan…";
-  try{
-    const{results}=await api("/api/forms/"+FORM_ID+"/viewer-permissions/bulk",{method:"POST",body:JSON.stringify({items})});
-    results.forEach(res=>{
-      const row=_bvRows[pendingIdx[res.index]];
-      if(!row)return;
-      row.status=res.status;
-      row.serverError=res.status==="error"?res.error:null;
-    });
-    bulkVpRenderTable();
-    await refreshVpPermList();
-    await refreshViewerList();
-    const okCount=results.filter(x=>x.status!=="error").length,errCount=results.length-okCount;
-    adminToast(errCount?`${okCount} berhasil, ${errCount} gagal — perbaiki baris merah lalu terapkan lagi`:`${okCount} berhasil diterapkan`,!!errCount);
-  }catch(e){adminToast("Gagal: "+e.message,true);}
-  finally{btn.textContent="Terapkan";btn.disabled=_bvRows.every(r=>r.status==="created"||r.status==="updated");}
-}
-
-// ---- Editor ----
-let _beRows=[];
-function openBulkEditor(initialRows){
-  _beRows=initialRows||[];
-  document.getElementById("bePaste").value="";
-  buildFieldOptions(FORM_SCHEMA,"beFilterField");
-  document.getElementById("beFilterField").value="";
-  document.getElementById("beSuggest").innerHTML="";
-  document.getElementById("bePreviewBox").style.display="none";
-  document.getElementById("beApplyBtn").disabled=true;
-  bulkEpRenderTable();
-  bulkEditorDlg.showModal();
-  api("/api/forms").then(({forms})=>{
-    const sel=document.getElementById("beCopyFormSel");
-    sel.innerHTML='<option value="">— pilih kuesioner —</option>'+
-      (forms||[]).filter(f=>f.id!==FORM_ID).map(f=>`<option value="${esc(f.id)}">${esc(f.title)}</option>`).join("");
-  }).catch(()=>{});
-}
-async function bulkEpCopyFromForm(){
-  const otherId=document.getElementById("beCopyFormSel").value;
-  if(!otherId){adminToast("Pilih kuesioner sumber dulu",true);return;}
-  try{
-    const{permissions}=await api("/api/forms/"+otherId+"/editor-permissions");
-    const rows=(permissions||[]).map(p=>({
-      email:p.editorName,note:"",filterValue:"",clientError:null,serverError:null,status:null,sourceFieldFilters:p.fieldFilters||{},
-    }));
-    if(!rows.length){adminToast("Kuesioner sumber belum punya editor",true);return;}
-    _beRows=_beRows.concat(rows);
-    bulkEpFilterFieldChanged();
-  }catch(e){adminToast("Gagal menyalin: "+e.message,true);}
-}
-function bulkEpParse(){
-  const parsed=bulkParseLines(document.getElementById("bePaste").value);
-  if(!parsed.length){adminToast("Tidak ada baris yang bisa diurai",true);return;}
-  _beRows=_beRows.concat(parsed);
-  document.getElementById("bePaste").value="";
-  bulkEpRenderTable();
-}
-function bulkEpAddRow(){_beRows.push({email:"",note:"",filterValue:"",clientError:null,serverError:null,status:null});bulkEpRenderTable();}
-function bulkEpRemoveRow(i){_beRows.splice(i,1);bulkEpRenderTable();}
-function bulkEpCellChange(i,field,value){if(_beRows[i])_beRows[i][field]=value;}
-
-function bulkEpFilterFieldChanged(){
-  const field=document.getElementById("beFilterField").value;
-  _beRows.forEach(r=>{
-    if(r.status==="created"||r.status==="updated")return;
-    if(r.sourcePermId){
-      const src=_epPermCache.find(p=>p.id===r.sourcePermId);
-      r.filterValue=(field&&src&&src.fieldFilters&&src.fieldFilters[field]!=null)?String(src.fieldFilters[field]):"";
-    }else if(r.sourceFieldFilters){
-      r.filterValue=(field&&r.sourceFieldFilters[field]!=null)?String(r.sourceFieldFilters[field]):"";
-    }
-  });
-  if(!bulkFieldChoices(FORM_SCHEMA,field))bulkFillSuggestions(FORM_ID,field,"beSuggest");
-  bulkEpRenderTable();
-}
-
-function bulkEpManageSelected(){
-  if(!_epPermSelected.size)return;
-  const rows=_epPermCache.filter(p=>_epPermSelected.has(p.id)).map(p=>({
-    email:p.editorName,note:"",filterValue:"",clientError:null,serverError:null,status:null,sourcePermId:p.id,
-  }));
-  openBulkEditor(rows);
-}
-
-function bulkEpDeleteSelected(){
-  if(!_epPermSelected.size)return;
-  const ids=[..._epPermSelected];
-  adminConfirm(`Cabut akses ${ids.length} editor terpilih dari kuesioner ini?`,async()=>{
+function deleteApiKey(id,label){
+  adminConfirm(`Hapus API key "${label}"? Sistem yang memakainya akan langsung kehilangan akses.`,async()=>{
     try{
-      await api("/api/forms/"+FORM_ID+"/editor-permissions/bulk",{method:"DELETE",body:JSON.stringify({permissionIds:ids})});
-      await refreshEditorPermList();
-      adminToast(`${ids.length} akses editor dicabut`);
+      await api("/api/api-keys/"+id,{method:"DELETE"});
+      await refreshApiKeys();
+      adminToast("API key dihapus");
     }catch(e){adminToast("Gagal: "+e.message,true);}
   });
 }
 
-async function downloadEditorPermsCsv(){
+async function openApiLogDlg(id,label){
+  document.getElementById("alKeyLabel").textContent=label;
+  const rows=document.getElementById("apiLogRows");
+  rows.innerHTML='<tr><td colspan="5" class="empty">Memuat…</td></tr>';
+  apiLogDlg.showModal();
   try{
-    const r=await fetch("/api/forms/"+FORM_ID+"/editor-permissions.csv",{headers:H});
-    if(!r.ok)throw new Error("HTTP "+r.status);
-    const blob=await r.blob();const url=URL.createObjectURL(blob);
-    const a=document.createElement("a");a.href=url;a.download="editor-permissions-"+FORM_ID+".csv";a.click();URL.revokeObjectURL(url);
-  }catch(e){adminToast("Gagal unduh: "+e.message,true);}
-}
-
-function bulkEpFilterCellHtml(r,i,choices,done){
-  if(choices){
-    return`<select ${done?"disabled":""} style="width:100%;font-size:12px;padding:3px 5px;border:1px solid var(--line);border-radius:4px" onchange="bulkEpCellChange(${i},'filterValue',this.value)">
-      <option value="">— pilih —</option>
-      ${choices.map(c=>`<option value="${esc(c.value)}"${r.filterValue===c.value?" selected":""}>${esc(c.label)}</option>`).join("")}
-    </select>`;
-  }
-  return`<input ${done?"disabled":""} value="${esc(r.filterValue)}" list="beSuggest" style="width:100%;font-size:12px;padding:3px 5px;border:1px solid var(--line);border-radius:4px" oninput="bulkEpCellChange(${i},'filterValue',this.value)">`;
-}
-
-function bulkEpRenderTable(){
-  bulkValidateRows(_beRows);
-  document.getElementById("bePreviewBox").style.display="none";
-  document.getElementById("beApplyBtn").disabled=true;
-  const filterField=document.getElementById("beFilterField").value;
-  const choices=bulkFieldChoices(FORM_SCHEMA,filterField);
-  const tbody=document.getElementById("beRows");
-  if(!_beRows.length){
-    tbody.innerHTML='<tr><td colspan="5" style="padding:14px;text-align:center;color:var(--muted)">Belum ada baris. Tempel daftar di atas lalu klik "Urai".</td></tr>';
-  }else{
-    tbody.innerHTML=_beRows.map((r,i)=>{
-      const done=r.status==="created"||r.status==="updated";
-      const hasErr=r.clientError||r.status==="error";
-      return`<tr style="${hasErr?"background:#fef2f2":""}">
-        <td style="padding:4px 6px;border-bottom:1px solid var(--line-2)"><input ${done?"disabled":""} value="${esc(r.email)}" style="width:100%;font-size:12px;padding:3px 5px;border:1px solid var(--line);border-radius:4px" oninput="bulkEpCellChange(${i},'email',this.value)"></td>
-        <td style="padding:4px 6px;border-bottom:1px solid var(--line-2)"><input ${done?"disabled":""} value="${esc(r.note)}" style="width:100%;font-size:12px;padding:3px 5px;border:1px solid var(--line);border-radius:4px" oninput="bulkEpCellChange(${i},'note',this.value)"></td>
-        <td style="padding:4px 6px;border-bottom:1px solid var(--line-2)">${bulkEpFilterCellHtml(r,i,choices,done)}</td>
-        <td style="padding:4px 6px;border-bottom:1px solid var(--line-2);font-size:11px">${bulkRowStatusHtml(r)}</td>
-        <td style="padding:4px 6px;border-bottom:1px solid var(--line-2)">${done?"":`<button class="btn danger" style="font-size:11px;padding:2px 7px" type="button" onclick="bulkEpRemoveRow(${i})">✕</button>`}</td>
+    const{logs}=await api("/api/api-keys/"+id+"/logs?limit=100");
+    if(!logs||!logs.length){
+      rows.innerHTML='<tr><td colspan="5" class="empty">Belum ada panggilan API.</td></tr>';
+      return;
+    }
+    rows.innerHTML=logs.map(l=>{
+      const ok=l.status>=200&&l.status<300;
+      return`<tr>
+        <td>${new Date(l.createdAt).toLocaleString("id-ID")}</td>
+        <td class="muted">${esc(l.ip||"-")}</td>
+        <td class="muted" style="word-break:break-all">${esc(l.path||"-")}</td>
+        <td><span class="tag ${ok?"published":"archived"}">${l.status}${l.error?" · "+esc(l.error):""}</span></td>
+        <td class="muted">${l.rowCount||0}</td>
       </tr>`;
     }).join("");
+  }catch(e){
+    rows.innerHTML=`<tr><td colspan="5" class="empty">${esc(e.message)}</td></tr>`;
   }
-  const total=_beRows.length,doneCount=_beRows.filter(r=>r.status==="created"||r.status==="updated").length,errCount=_beRows.filter(r=>r.clientError||r.status==="error").length;
-  const coverage=bulkCoverageSummary(choices,filterField,_beRows,_epPermCache);
-  document.getElementById("beSummary").textContent=total?`${total} baris`+(doneCount?` · ${doneCount} sudah diterapkan`:"")+(errCount?` · ${errCount} error`:"")+coverage:coverage;
-}
-
-function bulkEpPreview(){
-  if(!_beRows.length){adminToast("Belum ada baris",true);return;}
-  const ok=bulkValidateRows(_beRows);
-  bulkEpRenderTable();
-  const box=document.getElementById("bePreviewBox");
-  const pending=_beRows.filter(r=>r.status!=="created"&&r.status!=="updated");
-  box.style.display="block";
-  if(!ok){
-    box.innerHTML='<b style="color:#b91c1c">Masih ada baris bermasalah.</b> Perbaiki dulu sebelum menerapkan.';
-    document.getElementById("beApplyBtn").disabled=true;
-    return;
-  }
-  box.innerHTML=`Siap menerapkan <b>${pending.length}</b> baris ke kuesioner ini. Akun baru akan dibuat otomatis untuk email yang belum terdaftar sebagai editor.`;
-  document.getElementById("beApplyBtn").disabled=pending.length===0;
-}
-
-async function bulkEpApply(){
-  const filterField=document.getElementById("beFilterField").value;
-  const pendingIdx=[],items=[];
-  _beRows.forEach((r,i)=>{
-    if(r.status==="created"||r.status==="updated")return;
-    pendingIdx.push(i);
-    items.push({email:r.email,note:r.note,fieldFilters:filterField&&r.filterValue?{[filterField]:r.filterValue}:{}});
-  });
-  if(!items.length)return;
-  const btn=document.getElementById("beApplyBtn");
-  btn.disabled=true;btn.textContent="Menerapkan…";
-  try{
-    const{results}=await api("/api/forms/"+FORM_ID+"/editor-permissions/bulk",{method:"POST",body:JSON.stringify({items})});
-    results.forEach(res=>{
-      const row=_beRows[pendingIdx[res.index]];
-      if(!row)return;
-      row.status=res.status;
-      row.serverError=res.status==="error"?res.error:null;
-    });
-    bulkEpRenderTable();
-    await refreshEditorPermList();
-    await refreshEditorList();
-    const okCount=results.filter(x=>x.status!=="error").length,errCount=results.length-okCount;
-    adminToast(errCount?`${okCount} berhasil, ${errCount} gagal — perbaiki baris merah lalu terapkan lagi`:`${okCount} berhasil diterapkan`,!!errCount);
-  }catch(e){adminToast("Gagal: "+e.message,true);}
-  finally{btn.textContent="Terapkan";btn.disabled=_beRows.every(r=>r.status==="created"||r.status==="updated");}
 }
