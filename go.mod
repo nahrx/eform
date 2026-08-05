@@ -1,4 +1,4 @@
-module github.com/bpskaltim/eform-backend
+module github.com/nahrx/eform
 
 go 1.23
 

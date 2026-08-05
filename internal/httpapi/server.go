@@ -9,9 +9,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/bpskaltim/eform-backend/internal/auth"
-	"github.com/bpskaltim/eform-backend/internal/config"
-	"github.com/bpskaltim/eform-backend/internal/store"
+	"github.com/nahrx/eform/internal/auth"
+	"github.com/nahrx/eform/internal/config"
+	"github.com/nahrx/eform/internal/store"
 )
 
 type Server struct {

@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bpskaltim/eform-backend/internal/auth"
-	"github.com/bpskaltim/eform-backend/internal/models"
-	"github.com/bpskaltim/eform-backend/internal/store"
+	"github.com/nahrx/eform/internal/auth"
+	"github.com/nahrx/eform/internal/models"
+	"github.com/nahrx/eform/internal/store"
 )
 
 // resolveShare memvalidasi token: aktif, belum kedaluwarsa, dan (jika perlu) password cocok.

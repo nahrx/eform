@@ -21,8 +21,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/bpskaltim/eform-backend/internal/config"
-	"github.com/bpskaltim/eform-backend/internal/db"
+	"github.com/nahrx/eform/internal/config"
+	"github.com/nahrx/eform/internal/db"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )

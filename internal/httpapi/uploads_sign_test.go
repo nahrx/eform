@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bpskaltim/eform-backend/internal/config"
+	"github.com/nahrx/eform/internal/config"
 )
 
 func testServer() *Server {

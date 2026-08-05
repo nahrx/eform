@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bpskaltim/eform-backend/internal/models"
+	"github.com/nahrx/eform/internal/models"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )

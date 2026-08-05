@@ -10,12 +10,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/bpskaltim/eform-backend/internal/auth"
-	"github.com/bpskaltim/eform-backend/internal/config"
-	"github.com/bpskaltim/eform-backend/internal/db"
-	"github.com/bpskaltim/eform-backend/internal/httpapi"
-	"github.com/bpskaltim/eform-backend/internal/store"
-	migrations "github.com/bpskaltim/eform-backend/migrations"
+	"github.com/nahrx/eform/internal/auth"
+	"github.com/nahrx/eform/internal/config"
+	"github.com/nahrx/eform/internal/db"
+	"github.com/nahrx/eform/internal/httpapi"
+	"github.com/nahrx/eform/internal/store"
+	migrations "github.com/nahrx/eform/migrations"
 )
 
 func main() {

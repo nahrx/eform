@@ -15,7 +15,7 @@ import (
 	"golang.org/x/image/font/opentype"
 	"golang.org/x/image/math/fixed"
 
-	"github.com/bpskaltim/eform-backend/internal/models"
+	"github.com/nahrx/eform/internal/models"
 )
 
 // offlineSettingsOf membaca settings.offline.enabled dari schema instrumen (JSON bebas bentuk).

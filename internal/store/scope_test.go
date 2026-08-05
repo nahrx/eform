@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bpskaltim/eform-backend/internal/models"
+	"github.com/nahrx/eform/internal/models"
 )
 
 /* Aturan yang paling berbahaya kalau diam-diam berubah: kolom mana yang boleh terbaca

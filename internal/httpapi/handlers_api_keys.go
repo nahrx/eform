@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bpskaltim/eform-backend/internal/models"
-	"github.com/bpskaltim/eform-backend/internal/store"
+	"github.com/nahrx/eform/internal/models"
+	"github.com/nahrx/eform/internal/store"
 )
 
 /* Pengelolaan API key dari panel /manage (menu "API").
