@@ -15,7 +15,9 @@
     const labels = [];
     table.querySelectorAll("thead th").forEach(th => {
       if (th.style.display === "none") return;
-      labels.push(th.textContent.trim());
+      // data-label dipakai kalau <th> memuat elemen hiasan yang tidak boleh ikut
+      // jadi label — mis. ikon urutan "↕" pada header yang bisa di-sort.
+      labels.push((th.getAttribute("data-label") || th.textContent).trim());
     });
     table.querySelectorAll("tbody tr").forEach(tr => {
       Array.prototype.forEach.call(tr.children, (td, i) => {

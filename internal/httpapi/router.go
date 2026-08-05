@@ -171,6 +171,7 @@ func (s *Server) Routes() http.Handler {
 		"login.css", "login.js",
 		"admin.css", "admin.js",
 		"manage.css", "manage.js",
+		"responses.css", "responses-ui.js",
 		"builder.css", "builder.js", "builder-bridge.js",
 		"searchable-select.js", "geo-map.js",
 		"i18n.js", "responsive-tables.js",

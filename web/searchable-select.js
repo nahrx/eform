@@ -33,6 +33,21 @@
 .ss-opt.ss-active{background:var(--accent-soft,#d6edf1);color:var(--accent-ink,#0b5563)}
 .ss-opt.ss-selected{font-weight:600}
 .ss-empty{padding:10px 12px;font-size:12.5px;color:var(--muted,#79828f);text-align:center}
+/* --- pilihan ganda: tiap baris jadi kotak centang --- */
+.ss-opt.ss-check{display:flex;align-items:center;gap:9px;font-weight:400}
+.ss-opt.ss-check.ss-selected{font-weight:500}
+.ss-box{flex:none;width:16px;height:16px;border:1.5px solid var(--line,#dfe4ea);border-radius:4px;
+  display:grid;place-items:center;background:var(--panel,#fff);transition:background .12s,border-color .12s}
+.ss-opt.ss-selected .ss-box{background:var(--accent,#0e7490);border-color:var(--accent,#0e7490)}
+.ss-box::after{content:"";width:9px;height:5px;opacity:0;
+  border-left:2px solid #fff;border-bottom:2px solid #fff;transform:rotate(-45deg) translateY(-1px)}
+.ss-opt.ss-selected .ss-box::after{opacity:1}
+.ss-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:7px 10px;border-top:1px solid var(--line,#dfe4ea);font-size:12px;color:var(--muted,#79828f)}
+.ss-clear{border:none;background:none;color:var(--accent,#0e7490);font:inherit;font-size:12px;
+  cursor:pointer;padding:3px 7px;border-radius:5px}
+.ss-clear:hover{background:var(--accent-soft,#d6edf1)}
+.ss-clear[disabled]{opacity:.45;cursor:default;background:none}
 `;
   document.head.appendChild(style);
 
@@ -52,22 +67,45 @@
       if (w !== except) closePanel(w);
     });
   }
+  // Nilai yang sedang terpilih. Untuk pilihan ganda bisa lebih dari satu.
+  function selectedValues(select) {
+    return Array.from(select.selectedOptions || []).map((o) => o.value);
+  }
+
   function renderList(wrap, query) {
     const select = wrap.querySelector("select"),
       list = wrap.querySelector(".ss-list");
+    const multi = select.multiple;
     const q = query.trim().toLowerCase();
     const opts = optList(select);
     const filtered = q ? opts.filter((o) => o.label.toLowerCase().includes(q)) : opts;
     if (!filtered.length) {
       list.innerHTML = '<li class="ss-empty">Tidak ditemukan</li>';
+      updateFoot(wrap);
       return;
     }
+    const chosen = new Set(multi ? selectedValues(select) : [select.value]);
     list.innerHTML = filtered
-      .map(
-        (o, i) =>
-          `<li class="ss-opt${o.value === select.value ? " ss-selected" : ""}${i === 0 ? " ss-active" : ""}" data-value="${escHtml(o.value)}" role="option">${escHtml(o.label) || "&nbsp;"}</li>`
-      )
+      .map((o, i) => {
+        const sel = chosen.has(o.value);
+        const cls =
+          "ss-opt" + (multi ? " ss-check" : "") + (sel ? " ss-selected" : "") + (i === 0 ? " ss-active" : "");
+        const body = multi
+          ? `<span class="ss-box"></span><span>${escHtml(o.label) || "&nbsp;"}</span>`
+          : escHtml(o.label) || "&nbsp;";
+        return `<li class="${cls}" data-value="${escHtml(o.value)}" role="option" aria-selected="${sel}">${body}</li>`;
+      })
       .join("");
+    updateFoot(wrap);
+  }
+
+  // Kaki panel hanya dipakai mode pilihan ganda: jumlah terpilih + tombol bersihkan.
+  function updateFoot(wrap) {
+    const foot = wrap.querySelector(".ss-foot");
+    if (!foot) return;
+    const n = selectedValues(wrap.querySelector("select")).filter(Boolean).length;
+    foot.querySelector(".ss-foot-count").textContent = n ? n + " dipilih" : "Belum ada dipilih";
+    foot.querySelector(".ss-clear").disabled = n === 0;
   }
   function moveActive(list, dir) {
     const items = [...list.querySelectorAll(".ss-opt")];
@@ -82,21 +120,69 @@
     const select = wrap.querySelector("select"),
       label = wrap.querySelector(".ss-ctrl-label"),
       ctrl = wrap.querySelector(".ss-ctrl");
+
+    if (select.multiple) {
+      // Tampilkan nama pilihannya selama masih muat; lebih dari dua cukup jumlahnya.
+      const chosen = Array.from(select.selectedOptions).filter((o) => o.value !== "");
+      let txt;
+      if (!chosen.length) txt = "— pilih —";
+      else if (chosen.length <= 2) txt = chosen.map((o) => o.textContent).join(", ");
+      else txt = chosen.length + " dipilih";
+      label.textContent = txt;
+      label.classList.toggle("ss-placeholder", chosen.length === 0);
+      ctrl.disabled = select.disabled;
+      updateFoot(wrap);
+      return;
+    }
+
     const opt = select.options[select.selectedIndex];
     const txt = opt ? opt.textContent : "";
     label.textContent = select.value ? txt : txt || "— pilih —";
     label.classList.toggle("ss-placeholder", !select.value);
     ctrl.disabled = select.disabled;
   }
+
+  function fire(select) {
+    select.dispatchEvent(new Event("input", { bubbles: true }));
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
   function pick(wrap, value) {
     const select = wrap.querySelector("select");
+
+    // Pilihan ganda: centang/hapus centang, panel dibiarkan terbuka supaya beberapa
+    // nilai bisa dipilih beruntun.
+    if (select.multiple) {
+      const opt = Array.from(select.options).find((o) => o.value === value);
+      if (!opt) return;
+      opt.selected = !opt.selected;
+      fire(select);
+      updateCtrl(wrap);
+      renderList(wrap, wrap.querySelector(".ss-search").value);
+      // Kembalikan penanda baris aktif ke opsi yang barusan dicentang, supaya
+      // navigasi panah/Enter tidak melompat ke atas tiap kali mencentang.
+      const items = [...wrap.querySelectorAll(".ss-list .ss-opt")];
+      items.forEach((li) => li.classList.remove("ss-active"));
+      const same = items.find((li) => li.dataset.value === value);
+      if (same) same.classList.add("ss-active");
+      return;
+    }
+
     if (select.value !== value) {
       select.value = value;
-      select.dispatchEvent(new Event("input", { bubbles: true }));
-      select.dispatchEvent(new Event("change", { bubbles: true }));
+      fire(select);
     }
     updateCtrl(wrap);
     closePanel(wrap);
+  }
+
+  function clearAll(wrap) {
+    const select = wrap.querySelector("select");
+    if (!selectedValues(select).filter(Boolean).length) return;
+    Array.from(select.options).forEach((o) => (o.selected = false));
+    fire(select);
+    updateCtrl(wrap);
+    renderList(wrap, wrap.querySelector(".ss-search").value);
   }
   function openPanel(wrap) {
     const ctrl = wrap.querySelector(".ss-ctrl");
@@ -109,7 +195,12 @@
     panel.hidden = false;
     search.value = "";
     renderList(wrap, "");
-    requestAnimationFrame(() => search.focus());
+    requestAnimationFrame(() => {
+      search.focus();
+      // Kalau dropdown terbuka di dekat dasar wadah yang bisa digulir (mis. laci
+      // filter), panelnya bisa tertutup kaki laci — geser secukupnya agar terlihat.
+      panel.scrollIntoView({ block: "nearest" });
+    });
   }
   function refresh(select) {
     const wrap = select.closest(".ss-wrap");
@@ -118,7 +209,7 @@
     if (wrap.classList.contains("ss-is-open")) renderList(wrap, wrap.querySelector(".ss-search").value);
   }
   function enhance(select) {
-    if (!select || select.tagName !== "SELECT" || select.multiple) return;
+    if (!select || select.tagName !== "SELECT") return;
     if (select.closest(".ss-wrap")) return;
 
     // Salin class asli select (mis. "ff-input", "pv-in", "filter-sel") ke tombol
@@ -142,11 +233,18 @@
     const panel = document.createElement("div");
     panel.className = "ss-panel";
     panel.hidden = true;
-    panel.innerHTML = '<input type="text" class="ss-search" placeholder="Cari…" autocomplete="off"><ul class="ss-list" role="listbox"></ul>';
+    panel.innerHTML =
+      '<input type="text" class="ss-search" placeholder="Cari…" autocomplete="off">' +
+      '<ul class="ss-list" role="listbox"' + (select.multiple ? ' aria-multiselectable="true"' : "") + "></ul>" +
+      (select.multiple
+        ? '<div class="ss-foot"><span class="ss-foot-count"></span><button type="button" class="ss-clear">Bersihkan</button></div>'
+        : "");
     wrap.appendChild(panel);
 
     const search = panel.querySelector(".ss-search"),
-      list = panel.querySelector(".ss-list");
+      list = panel.querySelector(".ss-list"),
+      clearBtn = panel.querySelector(".ss-clear");
+    if (clearBtn) clearBtn.addEventListener("click", () => clearAll(wrap));
 
     ctrl.addEventListener("click", () => {
       if (wrap.classList.contains("ss-is-open")) closePanel(wrap);
