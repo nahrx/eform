@@ -1,14 +1,20 @@
   const $=s=>document.querySelector(s);
+  // Viewer DAN editor sama-sama diarahkan ke /viewer-portal: halaman itu menampilkan
+  // gabungan kuesioner viewer & editor akun tersebut. Dashboard /admin menolak role
+  // editor (listForms hanya melayani admin/superadmin), jadi mengarahkan editor ke sana
+  // hanya menghasilkan halaman error.
+  const homeFor=role=>(role==="viewer"||role==="editor")?"/viewer-portal":"/admin";
+
   // sudah login? arahkan ke halaman yang sesuai role
   const _existing=localStorage.getItem("eform_token");
   if(_existing){
     try{
       const _u=JSON.parse(localStorage.getItem("eform_user")||"{}");
-      location.replace(_u.role==="viewer"?"/viewer-portal":"/admin");
+      location.replace(homeFor(_u.role));
     }catch{ location.replace("/admin"); }
   }
   function redirectByRole(user){
-    location.replace(user.role==="viewer"?"/viewer-portal":"/admin");
+    location.replace(homeFor(user.role));
   }
   async function login(){
     const btn=$("#btn"); const err=$("#err"); err.style.display="none";

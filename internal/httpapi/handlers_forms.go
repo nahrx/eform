@@ -4,6 +4,7 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -135,7 +136,8 @@ func (s *Server) updateForm(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) deleteForm(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if _, ok := s.ensureFormAccess(w, r, id); !ok {
+	f, ok := s.ensureFormAccess(w, r, id)
+	if !ok {
 		return
 	}
 	count, err := s.st.CountAllResponsesByForm(r.Context(), id, store.ResponseFilter{})
@@ -154,11 +156,13 @@ func (s *Server) deleteForm(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "gagal menghapus")
 		return
 	}
+	s.audit(r, "form.delete", "form", id, f.Title, "", "")
 	writeJSON(w, http.StatusOK, map[string]bool{"deleted": true})
 }
 
 func (s *Server) publishForm(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.ensureFormAccess(w, r, r.PathValue("id")); !ok {
+	f, ok := s.ensureFormAccess(w, r, r.PathValue("id"))
+	if !ok {
 		return
 	}
 	var in struct {
@@ -182,6 +186,7 @@ func (s *Server) publishForm(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "gagal memperbarui status")
 		return
 	}
+	s.audit(r, "form.status", "form", f.ID, f.Title, f.ID, "status → "+status)
 	writeJSON(w, http.StatusOK, map[string]string{"status": status})
 }
 
@@ -234,6 +239,7 @@ func (s *Server) createShare(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "gagal membuat share")
 		return
 	}
+	s.audit(r, "share.create", "share", sh.ID, in.Label, formID, "mode="+in.AccessMode)
 	writeJSON(w, http.StatusCreated, s.shareWithURL(sh))
 }
 
@@ -267,6 +273,7 @@ func (s *Server) revokeShare(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "gagal mencabut share")
 		return
 	}
+	s.audit(r, "share.revoke", "share", r.PathValue("id"), "", "", "")
 	writeJSON(w, http.StatusOK, map[string]bool{"revoked": true})
 }
 
@@ -655,10 +662,14 @@ func (s *Server) exportResponses(w http.ResponseWriter, r *http.Request) {
 	cw := csv.NewWriter(w)
 	_ = cw.Write(append(csvBaseHeader(true), cols...))
 	// 3. Stream setiap baris langsung ke CSV tanpa buffering di memori
+	n := 0
 	_ = s.st.ForEachResponseByForm(r.Context(), formID, func(rr models.Response) error {
 		writeCSVRow(cw, rr, cols, true)
+		n++
 		return nil
 	})
+	// Ekspor CSV adalah jalur keluarnya data terbesar — selalu dicatat.
+	s.audit(r, "export.csv", "form", formID, "", formID, fmt.Sprintf("%d baris (admin)", n))
 }
 
 // parseResponseFilter membaca filter & sort daftar jawaban dari query string.

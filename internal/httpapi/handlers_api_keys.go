@@ -259,6 +259,32 @@ func (s *Server) listAPIKeyLogs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"logs": logs})
 }
 
+// listActivityLogs menampilkan riwayat aksi admin. Tanpa parameter form, hanya
+// superadmin yang boleh melihat seluruh sistem; dengan ?formId=, admin pemilik
+// kuesioner boleh melihat jejak kuesionernya sendiri.
+func (s *Server) listActivityLogs(w http.ResponseWriter, r *http.Request) {
+	u := userFrom(r.Context())
+	formID := r.URL.Query().Get("formId")
+
+	if formID == "" {
+		if u.Role != "superadmin" {
+			writeErr(w, http.StatusForbidden, "akses ditolak")
+			return
+		}
+	} else if _, ok := s.ensureFormAccess(w, r, formID); !ok {
+		return
+	}
+
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	logs, total, err := s.st.ListActivityLogs(r.Context(), formID, limit, offset)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"logs": logs, "total": total})
+}
+
 // ensureAPIKeyAccess memastikan key ada dan pemanggil berhak mengelola kuesionernya.
 func (s *Server) ensureAPIKeyAccess(w http.ResponseWriter, r *http.Request, keyID string) (*models.FormAPIKey, bool) {
 	k, err := s.st.GetAPIKeyByID(r.Context(), keyID)

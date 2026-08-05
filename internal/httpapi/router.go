@@ -97,6 +97,9 @@ func (s *Server) Routes() http.Handler {
 	mux.Handle("DELETE /api/api-key-respondents/{id}", s.authMW(s.requireRole(s.removeAPIKeyRespondent, "superadmin", "admin")))
 	mux.Handle("GET /api/api-keys/{keyId}/logs", s.authMW(s.requireRole(s.listAPIKeyLogs, "superadmin", "admin")))
 
+	// --- riwayat aksi admin (audit) ---
+	mux.Handle("GET /api/activity-logs", s.authMW(s.requireRole(s.listActivityLogs, "superadmin", "admin")))
+
 	// --- API publik untuk sistem eksternal: autentikasi API key, read-only ---
 	// Seluruh pembatasan (aktif, kedaluwarsa, IP, kuota) ada di apiKeyMW; cakupan datanya
 	// di store.APIKeyScope. Tidak ada endpoint tulis di sini, dan tidak akan ditambahkan.
@@ -141,11 +144,13 @@ func (s *Server) Routes() http.Handler {
 	mux.Handle("GET /api/public/forms/{token}/my-response", s.respondentMW(s.myResponse))
 	mux.Handle("GET /api/public/forms/{token}/my-responses", s.respondentMW(s.myResponses))
 	mux.Handle("GET /api/public/forms/{token}/check-access", s.respondentMW(s.checkAccess))
-	mux.Handle("POST /api/public/forms/{token}/uploads", s.respondentMW(s.publicUpload))
-	mux.Handle("POST /api/public/forms/{token}/responses", s.respondentMW(s.publicSubmit))
-	mux.Handle("POST /api/public/forms/{token}/responses/{responseId}/unsubmit", s.respondentMW(s.unsubmitResponse))
+	// Endpoint yang menulis data dibatasi lajunya: per akun responden dan per IP.
+	// Draft disimpan otomatis saat mengisi, jadi kuotanya paling longgar.
+	mux.Handle("POST /api/public/forms/{token}/uploads", s.respondentMW(s.limitRespondent(s.publicUpload, 30, 90)))
+	mux.Handle("POST /api/public/forms/{token}/responses", s.respondentMW(s.limitRespondent(s.publicSubmit, 20, 60)))
+	mux.Handle("POST /api/public/forms/{token}/responses/{responseId}/unsubmit", s.respondentMW(s.limitRespondent(s.unsubmitResponse, 20, 60)))
 	mux.Handle("GET /api/public/forms/{token}/draft", s.respondentMW(s.myDraft))
-	mux.Handle("POST /api/public/forms/{token}/draft", s.respondentMW(s.saveDraftHandler))
+	mux.Handle("POST /api/public/forms/{token}/draft", s.respondentMW(s.limitRespondent(s.saveDraftHandler, 120, 300)))
 
 	// --- OAuth Google (redirect, tidak butuh JWT) ---
 	mux.HandleFunc("GET /auth/google", s.googleLogin)
@@ -171,7 +176,7 @@ func (s *Server) Routes() http.Handler {
 		"login.css", "login.js",
 		"admin.css", "admin.js",
 		"manage.css", "manage.js",
-		"responses.css", "responses-ui.js",
+		"responses.css", "responses-ui.js", "responses-core.js",
 		"builder.css", "builder.js", "builder-bridge.js",
 		"searchable-select.js", "geo-map.js",
 		"i18n.js", "responsive-tables.js",

@@ -33,7 +33,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnauthorized, "username atau password salah")
 		return
 	}
-	token, err := s.auth.Generate(u.ID, u.Username, u.Role)
+	token, err := s.auth.Generate(u.ID, u.Username, u.Role, u.TokenVersion)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "gagal membuat token")
 		return
@@ -85,8 +85,12 @@ func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in.Username = strings.TrimSpace(in.Username)
-	if in.Username == "" || len(in.Password) < 6 {
-		writeErr(w, http.StatusBadRequest, "username wajib, password minimal 6 karakter")
+	if in.Username == "" {
+		writeErr(w, http.StatusBadRequest, "username wajib diisi")
+		return
+	}
+	if err := auth.ValidatePassword(in.Password, in.Username, in.Email); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	if in.Role == "" {
@@ -106,6 +110,7 @@ func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusConflict, "username/email mungkin sudah dipakai")
 		return
 	}
+	s.audit(r, "user.create", "user", u.ID, u.Username, "", "role="+u.Role)
 	writeJSON(w, http.StatusCreated, u)
 }
 
@@ -143,9 +148,11 @@ func (s *Server) patchAdminUser(w http.ResponseWriter, r *http.Request) {
 	if in.Role != "admin" && in.Role != "superadmin" {
 		in.Role = "admin"
 	}
-	if in.Password != "" && len(in.Password) < 6 {
-		writeErr(w, http.StatusBadRequest, "password minimal 6 karakter")
-		return
+	if in.Password != "" {
+		if err := auth.ValidatePassword(in.Password, in.Username, in.Email); err != nil {
+			writeErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
 	}
 	// Pastikan target adalah admin/superadmin — cegah eskalasi privilege viewer/editor
 	target, err := s.st.GetUser(r.Context(), id)
@@ -161,12 +168,19 @@ func (s *Server) patchAdminUser(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusConflict, "username/email mungkin sudah dipakai")
 		return
 	}
+	pwChanged := false
 	if in.Password != "" {
 		hash, err := auth.HashPassword(in.Password)
 		if err == nil {
 			_ = s.st.UpdateUserPassword(r.Context(), id, hash)
+			pwChanged = true
 		}
 	}
+	detail := "role=" + in.Role
+	if pwChanged {
+		detail += ", password diganti (sesi lama dicabut)"
+	}
+	s.audit(r, "user.update", "user", id, in.Username, "", detail)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 }
 
@@ -185,5 +199,6 @@ func (s *Server) deleteAdminUser(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "gagal menghapus")
 		return
 	}
+	s.audit(r, "user.delete", "user", id, "", "", "")
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }

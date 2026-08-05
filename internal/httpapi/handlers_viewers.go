@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/csv"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -46,6 +47,7 @@ func (s *Server) createViewerPermission(w http.ResponseWriter, r *http.Request) 
 		writeErr(w, http.StatusConflict, "viewer mungkin sudah memiliki akses ke kuesioner ini")
 		return
 	}
+	s.audit(r, "permission.viewer.create", "permission", p.ID, in.ViewerID, formID, "akses="+in.RespondentAccess)
 	writeJSON(w, http.StatusCreated, p)
 }
 
@@ -165,6 +167,7 @@ func (s *Server) deleteViewerPermission(w http.ResponseWriter, r *http.Request) 
 		writeErr(w, http.StatusInternalServerError, "gagal menghapus")
 		return
 	}
+	s.audit(r, "permission.viewer.delete", "permission", perm.ID, perm.ViewerUsername, perm.FormID, "")
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
@@ -462,7 +465,6 @@ func (s *Server) listFormRespondents(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"respondents": respondents})
 }
 
-
 /* ================================================================
    VIEWER — endpoint yang dipanggil viewer setelah login
    ================================================================ */
@@ -584,10 +586,13 @@ func (s *Server) viewerExportResponses(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", "attachment; filename=\"responses-"+formID+".csv\"")
 	cw := csv.NewWriter(w)
 	_ = cw.Write(append(csvBaseHeader(true), cols...))
+	n := 0
 	_ = s.st.ForEachViewerResponse(r.Context(), viewerID, formID, func(rr models.Response) error {
 		writeCSVRow(cw, rr, cols, true)
+		n++
 		return nil
 	})
+	s.audit(r, "export.csv", "form", formID, "", formID, fmt.Sprintf("%d baris (viewer)", n))
 }
 
 // viewerGetResponse mengembalikan detail satu respons yang boleh dilihat viewer.

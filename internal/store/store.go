@@ -221,9 +221,9 @@ func (s *Store) GetUserByUsername(ctx context.Context, username string) (*models
 	u := &models.User{}
 	var em *string
 	err := s.pool.QueryRow(ctx,
-		`SELECT id,username,email,password_hash,role,is_active,preferred_language,created_at,updated_at
+		`SELECT id,username,email,password_hash,role,is_active,preferred_language,token_version,created_at,updated_at
 		 FROM users WHERE username=$1`, username,
-	).Scan(&u.ID, &u.Username, &em, &u.PasswordHash, &u.Role, &u.IsActive, &u.PreferredLanguage, &u.CreatedAt, &u.UpdatedAt)
+	).Scan(&u.ID, &u.Username, &em, &u.PasswordHash, &u.Role, &u.IsActive, &u.PreferredLanguage, &u.TokenVersion, &u.CreatedAt, &u.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -240,8 +240,8 @@ func (s *Store) GetUser(ctx context.Context, id string) (*models.User, error) {
 	u := &models.User{}
 	var em *string
 	err := s.pool.QueryRow(ctx,
-		`SELECT id,username,email,role,is_active,preferred_language,created_at,updated_at FROM users WHERE id=$1`, id,
-	).Scan(&u.ID, &u.Username, &em, &u.Role, &u.IsActive, &u.PreferredLanguage, &u.CreatedAt, &u.UpdatedAt)
+		`SELECT id,username,email,role,is_active,preferred_language,token_version,created_at,updated_at FROM users WHERE id=$1`, id,
+	).Scan(&u.ID, &u.Username, &em, &u.Role, &u.IsActive, &u.PreferredLanguage, &u.TokenVersion, &u.CreatedAt, &u.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -252,6 +252,34 @@ func (s *Store) GetUser(ctx context.Context, id string) (*models.User, error) {
 		u.Email = *em
 	}
 	return u, nil
+}
+
+// AuthSnapshot adalah data seminimal mungkin yang dibutuhkan authMW untuk memutuskan
+// apakah sebuah token masih boleh dipakai.
+type AuthSnapshot struct {
+	IsActive     bool
+	Role         string
+	TokenVersion int
+}
+
+// GetAuthSnapshot dipanggil di tiap permintaan ber-JWT. Sengaja satu baris lookup
+// lewat primary key supaya penonaktifan akun, penghapusan, penggantian password, dan
+// perubahan role langsung berlaku — bukan menunggu token kedaluwarsa.
+func (s *Store) GetAuthSnapshot(ctx context.Context, id string) (*AuthSnapshot, error) {
+	a := &AuthSnapshot{}
+	err := s.pool.QueryRow(ctx,
+		`SELECT is_active,role,token_version FROM users WHERE id=$1`, id,
+	).Scan(&a.IsActive, &a.Role, &a.TokenVersion)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return a, err
+}
+
+// BumpTokenVersion mencabut seluruh sesi milik satu user.
+func (s *Store) BumpTokenVersion(ctx context.Context, id string) error {
+	_, err := s.pool.Exec(ctx, `UPDATE users SET token_version=token_version+1 WHERE id=$1`, id)
+	return err
 }
 
 func (s *Store) ListUsers(ctx context.Context) ([]models.User, error) {
@@ -278,13 +306,16 @@ func (s *Store) ListUsers(ctx context.Context) ([]models.User, error) {
 }
 
 // UpdateAdminUser mengupdate username, email, dan role user — hanya untuk admin/superadmin.
+// Perubahan role menaikkan token_version supaya hak pada sesi yang sedang berjalan
+// tidak tertinggal di level lama.
 func (s *Store) UpdateAdminUser(ctx context.Context, id, username, email, role string) error {
 	var emailArg any
 	if email != "" {
 		emailArg = email
 	}
 	ct, err := s.pool.Exec(ctx,
-		`UPDATE users SET username=$1, email=$2, role=$3, updated_at=now()
+		`UPDATE users SET username=$1, email=$2, role=$3, updated_at=now(),
+		        token_version=token_version+CASE WHEN role<>$3 THEN 1 ELSE 0 END
 		 WHERE id=$4 AND role IN ('admin','superadmin')`,
 		username, emailArg, role, id)
 	if err != nil {
@@ -296,10 +327,11 @@ func (s *Store) UpdateAdminUser(ctx context.Context, id, username, email, role s
 	return nil
 }
 
-// UpdateUserPassword mengupdate password hash user.
+// UpdateUserPassword mengupdate password hash user. token_version ikut dinaikkan
+// supaya sesi yang masih memakai password lama langsung terputus.
 func (s *Store) UpdateUserPassword(ctx context.Context, id, hash string) error {
 	ct, err := s.pool.Exec(ctx,
-		`UPDATE users SET password_hash=$1, updated_at=now() WHERE id=$2`,
+		`UPDATE users SET password_hash=$1, token_version=token_version+1, updated_at=now() WHERE id=$2`,
 		hash, id)
 	if err != nil {
 		return err
@@ -355,18 +387,26 @@ func (s *Store) SaveFormColumnConfig(ctx context.Context, formID string, config 
 }
 
 // ListForms tidak mengembalikan schema (hemat payload untuk daftar).
-func (s *Store) ListForms(ctx context.Context) ([]models.Form, error) {
-	rows, err := s.pool.Query(ctx,
-		`SELECT id,slug,title,description,status,version,owner_id,created_at,updated_at
-		 FROM forms ORDER BY updated_at DESC`)
-	if err != nil {
-		return nil, err
-	}
+// listFormsQuery adalah bentuk baku daftar kuesioner: kolom form + jumlah jawaban
+// terkirim, dihitung sekaligus lewat sub-query.
+//
+// Jumlah mencakup jawaban terkirim DAN draf — sama seperti angka di halaman kelola
+// kuesioner, supaya kedua halaman tidak menampilkan angka berbeda.
+// Ikut di query ini supaya dashboard tidak perlu memanggil endpoint jumlah satu per
+// satu untuk tiap kuesioner (dulu N+1 permintaan HTTP dari browser).
+const listFormsQuery = `SELECT f.id,f.slug,f.title,f.description,f.status,f.version,f.owner_id,
+	       f.created_at,f.updated_at,
+	       (SELECT count(*) FROM form_responses fr WHERE fr.form_id=f.id)
+	     + (SELECT count(*) FROM response_drafts rd WHERE rd.form_id=f.id)
+	FROM forms f`
+
+func scanFormRows(rows pgx.Rows) ([]models.Form, error) {
 	defer rows.Close()
 	var out []models.Form
 	for rows.Next() {
 		f := models.Form{}
-		if err := rows.Scan(&f.ID, &f.Slug, &f.Title, &f.Description, &f.Status, &f.Version, &f.OwnerID, &f.CreatedAt, &f.UpdatedAt); err != nil {
+		if err := rows.Scan(&f.ID, &f.Slug, &f.Title, &f.Description, &f.Status, &f.Version,
+			&f.OwnerID, &f.CreatedAt, &f.UpdatedAt, &f.ResponseCount); err != nil {
 			return nil, err
 		}
 		out = append(out, f)
@@ -374,24 +414,21 @@ func (s *Store) ListForms(ctx context.Context) ([]models.Form, error) {
 	return out, rows.Err()
 }
 
-// ListFormsByOwner mengembalikan daftar form milik owner tertentu.
-func (s *Store) ListFormsByOwner(ctx context.Context, ownerID string) ([]models.Form, error) {
-	rows, err := s.pool.Query(ctx,
-		`SELECT id,slug,title,description,status,version,owner_id,created_at,updated_at
-		 FROM forms WHERE owner_id=$1 ORDER BY updated_at DESC`, ownerID)
+func (s *Store) ListForms(ctx context.Context) ([]models.Form, error) {
+	rows, err := s.pool.Query(ctx, listFormsQuery+` ORDER BY f.updated_at DESC`)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var out []models.Form
-	for rows.Next() {
-		f := models.Form{}
-		if err := rows.Scan(&f.ID, &f.Slug, &f.Title, &f.Description, &f.Status, &f.Version, &f.OwnerID, &f.CreatedAt, &f.UpdatedAt); err != nil {
-			return nil, err
-		}
-		out = append(out, f)
+	return scanFormRows(rows)
+}
+
+// ListFormsByOwner mengembalikan daftar form milik owner tertentu.
+func (s *Store) ListFormsByOwner(ctx context.Context, ownerID string) ([]models.Form, error) {
+	rows, err := s.pool.Query(ctx, listFormsQuery+` WHERE f.owner_id=$1 ORDER BY f.updated_at DESC`, ownerID)
+	if err != nil {
+		return nil, err
 	}
-	return out, rows.Err()
+	return scanFormRows(rows)
 }
 
 // ListFormsByEditor mengembalikan daftar form yang ditugaskan ke editor.
@@ -1133,9 +1170,9 @@ func (s *Store) GetUserByEmail(ctx context.Context, email string) (*models.User,
 	u := &models.User{}
 	var em *string
 	err := s.pool.QueryRow(ctx,
-		`SELECT id,username,email,password_hash,role,is_active,created_at,updated_at
+		`SELECT id,username,email,password_hash,role,is_active,token_version,created_at,updated_at
 		 FROM users WHERE lower(email)=lower($1)`, email,
-	).Scan(&u.ID, &u.Username, &em, &u.PasswordHash, &u.Role, &u.IsActive, &u.CreatedAt, &u.UpdatedAt)
+	).Scan(&u.ID, &u.Username, &em, &u.PasswordHash, &u.Role, &u.IsActive, &u.TokenVersion, &u.CreatedAt, &u.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -2435,6 +2472,60 @@ func (s *Store) ListAPIAccessLogs(ctx context.Context, apiKeyID string, limit in
 		out = []models.APIAccessLog{}
 	}
 	return out, rows.Err()
+}
+
+/* ---------------- activity log ---------------- */
+
+// InsertActivityLog mencatat satu aksi admin. Kegagalan mencatat tidak boleh
+// menggagalkan aksinya — pemanggil cukup mencatat errornya ke stdout.
+func (s *Store) InsertActivityLog(ctx context.Context, l *models.ActivityLog) error {
+	_, err := s.pool.Exec(ctx,
+		`INSERT INTO activity_logs(actor_id,actor_name,actor_role,action,target_type,target_id,target_label,form_id,ip,detail)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+		l.ActorID, l.ActorName, l.ActorRole, l.Action, l.TargetType, l.TargetID, l.TargetLabel, l.FormID, l.IP, l.Detail)
+	return err
+}
+
+// ListActivityLogs mengembalikan riwayat aksi, terbaru dulu. formID kosong = semua.
+func (s *Store) ListActivityLogs(ctx context.Context, formID string, limit, offset int) ([]models.ActivityLog, int64, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	where, args := "", []any{}
+	if formID != "" {
+		where = " WHERE form_id=$1"
+		args = append(args, formID)
+	}
+
+	var total int64
+	if err := s.pool.QueryRow(ctx, `SELECT count(*) FROM activity_logs`+where, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	args = append(args, limit, offset)
+	rows, err := s.pool.Query(ctx,
+		fmt.Sprintf(`SELECT id,actor_id,actor_name,actor_role,action,target_type,target_id,target_label,
+		                    form_id,ip,detail,created_at
+		             FROM activity_logs%s ORDER BY created_at DESC LIMIT $%d OFFSET $%d`,
+			where, len(args)-1, len(args)),
+		args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	var out []models.ActivityLog
+	for rows.Next() {
+		l := models.ActivityLog{}
+		if err := rows.Scan(&l.ID, &l.ActorID, &l.ActorName, &l.ActorRole, &l.Action, &l.TargetType,
+			&l.TargetID, &l.TargetLabel, &l.FormID, &l.IP, &l.Detail, &l.CreatedAt); err != nil {
+			return nil, 0, err
+		}
+		out = append(out, l)
+	}
+	if out == nil {
+		out = []models.ActivityLog{}
+	}
+	return out, total, rows.Err()
 }
 
 /* ---------------- wilayah ---------------- */

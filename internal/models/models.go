@@ -13,6 +13,7 @@ type User struct {
 	Note              string    `json:"note,omitempty"`
 	Role              string    `json:"role"`
 	IsActive          bool      `json:"isActive"`
+	TokenVersion      int       `json:"-"`                 // dinaikkan untuk mencabut sesi lama
 	PreferredLanguage string    `json:"preferredLanguage"` // 'id' | 'en' — bahasa UI builder/dashboard
 	CreatedAt         time.Time `json:"createdAt"`
 	UpdatedAt         time.Time `json:"updatedAt"`
@@ -30,6 +31,9 @@ type Form struct {
 	ColumnConfig json.RawMessage `json:"columnConfig,omitempty"`
 	CreatedAt    time.Time       `json:"createdAt"`
 	UpdatedAt    time.Time       `json:"updatedAt"`
+	// ResponseCount diisi saat listing (jumlah jawaban terkirim), supaya dashboard
+	// tidak perlu memanggil endpoint jumlah satu per satu.
+	ResponseCount int64 `json:"responseCount"`
 }
 
 type Share struct {
@@ -181,6 +185,23 @@ type APIKeyAllowedRespondent struct {
 	Email        string    `json:"email,omitempty"`
 	Name         string    `json:"name,omitempty"`
 	CreatedAt    time.Time `json:"createdAt"`
+}
+
+// ActivityLog mencatat satu aksi admin/superadmin yang mengubah data atau
+// mengeluarkan data dari sistem (mis. ekspor CSV).
+type ActivityLog struct {
+	ID          string    `json:"id"`
+	ActorID     *string   `json:"actorId,omitempty"`
+	ActorName   string    `json:"actorName"`
+	ActorRole   string    `json:"actorRole"`
+	Action      string    `json:"action"`
+	TargetType  string    `json:"targetType,omitempty"`
+	TargetID    string    `json:"targetId,omitempty"`
+	TargetLabel string    `json:"targetLabel,omitempty"`
+	FormID      *string   `json:"formId,omitempty"`
+	IP          string    `json:"ip"`
+	Detail      string    `json:"detail,omitempty"`
+	CreatedAt   time.Time `json:"createdAt"`
 }
 
 // APIAccessLog mencatat satu panggilan ke /api/v1, termasuk yang ditolak.

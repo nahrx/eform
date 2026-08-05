@@ -311,6 +311,18 @@
     "Hapus Kuesioner": "Delete Form",
     "Memuat jumlah jawaban…": "Loading response count…",
 
+    // ---- riwayat aksi (audit) ----
+    "Riwayat Aksi": "Activity Log",
+    "Jejak aksi yang mengubah data atau mengeluarkan data dari sistem, termasuk unduhan CSV. Tercatat otomatis dan tidak dapat diubah dari aplikasi.":
+      "A trail of actions that change data or take data out of the system, including CSV downloads. Recorded automatically and not editable from the app.",
+    "Belum ada aksi tercatat.": "No actions recorded yet.",
+    "Pelaku": "Actor",
+    "Aksi": "Action",
+    "Sasaran": "Target",
+    "Keterangan": "Details",
+    "‹ Sebelumnya": "‹ Previous",
+    "Berikutnya ›": "Next ›",
+
     // ---- menu API (kelola kuesioner) ----
     "+ Buat API Key": "+ Create API Key",
     "Buat API Key": "Create API Key",
@@ -574,19 +586,48 @@
   // Pisahkan ikonnya dulu supaya sisa teksnya masih bisa cocok persis di kamus.
   const ICON_PREFIX_RE = /^([^\w\sÀ-ÿ]+ )(.*)$/;
 
+  // Kamus versi "dinormalkan": spasi beruntun (termasuk ganti baris dan indentasi
+  // HTML) diringkas jadi satu spasi. Tanpa ini, satu kalimat yang di markup ditulis
+  // memanjang beberapa baris tidak akan pernah cocok dengan kuncinya di DICT_EN —
+  // sumber bug yang berulang saat menambah teks baru.
+  const norm = t => t.replace(/\s+/g, " ").trim();
+  const DICT_NORM = Object.create(null);
+  for (const k of Object.keys(DICT_EN)) {
+    const nk = norm(k);
+    if (!(nk in DICT_NORM)) DICT_NORM[nk] = DICT_EN[k];
+  }
+
+  // Kumpulan teks Indonesia yang belum ada terjemahannya. Bisa diperiksa dari konsol
+  // lewat window.__i18nMissing() untuk menemukan celah kamus tanpa menebak-nebak.
+  const missing = new Set();
+  window.__i18nMissing = () => [...missing].sort();
+
+  function lookup(t) {
+    if (Object.prototype.hasOwnProperty.call(DICT_EN, t)) return DICT_EN[t];
+    const nt = norm(t);
+    if (Object.prototype.hasOwnProperty.call(DICT_NORM, nt)) return DICT_NORM[nt];
+    return null;
+  }
+
   function translateText(s) {
     if (currentLang() !== "en") return s;
-    const trimmed = s;
-    if (Object.prototype.hasOwnProperty.call(DICT_EN, trimmed)) return DICT_EN[trimmed];
+    const hit = lookup(s);
+    if (hit != null) return hit;
+
     // varian dengan spasi/koma di ujung terpotong node teks — coba versi trim
-    const t2 = trimmed.trim();
-    if (t2 !== trimmed && Object.prototype.hasOwnProperty.call(DICT_EN, t2)) {
-      return trimmed.replace(t2, DICT_EN[t2]);
+    const t2 = s.trim();
+    if (t2 !== s) {
+      const hit2 = lookup(t2);
+      if (hit2 != null) return s.replace(t2, hit2);
     }
-    const iconMatch = ICON_PREFIX_RE.exec(trimmed);
-    if (iconMatch && Object.prototype.hasOwnProperty.call(DICT_EN, iconMatch[2])) {
-      return iconMatch[1] + DICT_EN[iconMatch[2]];
+    const iconMatch = ICON_PREFIX_RE.exec(s);
+    if (iconMatch) {
+      const hit3 = lookup(iconMatch[2]);
+      if (hit3 != null) return iconMatch[1] + hit3;
     }
+    // Hanya catat teks yang benar-benar mengandung huruf, supaya angka/tanda baca
+    // tidak memenuhi daftar.
+    if (t2.length > 1 && /[a-zA-Z]/.test(t2)) missing.add(t2);
     return s;
   }
 

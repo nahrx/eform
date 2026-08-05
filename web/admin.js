@@ -65,10 +65,12 @@ let ACTIVE_NAV="forms";
 
 function setupAdminMenu(){
   const navUsersBtn=$("#navUsersBtn");
+  const navAuditBtn=$("#navAuditBtn");
   const btnNewForm=$("#btnNewForm");
   const canManageUsers=MY_ROLE==="superadmin";
   const canCreateForm=MY_ROLE==="admin"||MY_ROLE==="superadmin";
   if(navUsersBtn) navUsersBtn.hidden=!canManageUsers;
+  if(navAuditBtn) navAuditBtn.hidden=!canManageUsers;
   if(btnNewForm) btnNewForm.style.display=canCreateForm?"":"none";
 
   if(!canCreateForm){ switchNav("forms"); return; }
@@ -78,35 +80,77 @@ function setupAdminMenu(){
     navUsersBtn?.addEventListener("click",()=>switchNav("users"));
     $("#refreshUsers")?.addEventListener("click",loadUsers);
     $("#btnCreateUser")?.addEventListener("click",createUserFromPanel);
+    navAuditBtn?.addEventListener("click",()=>switchNav("audit"));
+    $("#refreshAudit")?.addEventListener("click",()=>loadAudit(0));
+    $("#auditPrev")?.addEventListener("click",()=>loadAudit(AUDIT_PAGE-1));
+    $("#auditNext")?.addEventListener("click",()=>loadAudit(AUDIT_PAGE+1));
   }
 
   const wantedNav=new URLSearchParams(location.search).get("tab");
-  switchNav(wantedNav==="users"&&canManageUsers?"users":"forms");
+  const allowed=["users","audit"].includes(wantedNav)&&canManageUsers;
+  switchNav(allowed?wantedNav:"forms");
 }
 
 function switchNav(nav){
   ACTIVE_NAV=nav;
-  const formsNav=$("#navFormsBtn");
-  const usersNav=$("#navUsersBtn");
-  const formsSection=$("#formsSection");
-  const usersSection=$("#usersSection");
-  const newFormBtn=$("#btnNewForm");
-  const isUsers=nav==="users";
   const canCreateForm=MY_ROLE==="admin"||MY_ROLE==="superadmin";
-  formsSection.hidden=isUsers;
-  usersSection.hidden=!isUsers;
-  (isUsers?usersSection:formsSection)?.classList.add("fade-in");
-  setTimeout(()=>(isUsers?usersSection:formsSection)?.classList.remove("fade-in"),200);
-  formsNav?.classList.toggle("active",!isUsers);
-  usersNav?.classList.toggle("active",isUsers);
-  if(newFormBtn) newFormBtn.style.display=(!isUsers&&canCreateForm)?"":"none";
-  if(isUsers){
-    loadUsers();
-  }
+  const sections={forms:"#formsSection",users:"#usersSection",audit:"#auditSection"};
+  const navs={forms:"#navFormsBtn",users:"#navUsersBtn",audit:"#navAuditBtn"};
+  Object.entries(sections).forEach(([key,sel])=>{
+    const el=$(sel);
+    if(el) el.hidden=key!==nav;
+    $(navs[key])?.classList.toggle("active",key===nav);
+  });
+  const shown=$(sections[nav]);
+  if(shown){shown.classList.add("fade-in");setTimeout(()=>shown.classList.remove("fade-in"),200);}
+
+  const newFormBtn=$("#btnNewForm");
+  if(newFormBtn) newFormBtn.style.display=(nav==="forms"&&canCreateForm)?"":"none";
+
+  if(nav==="users") loadUsers();
+  else if(nav==="audit") loadAudit(0);
+
   const params=new URLSearchParams(location.search);
-  if(isUsers) params.set("tab","users"); else params.delete("tab");
+  if(nav==="forms") params.delete("tab"); else params.set("tab",nav);
   const qs=params.toString();
   history.replaceState(null,"",location.pathname+(qs?"?"+qs:""));
+}
+
+/* ======================================================
+   RIWAYAT AKSI (audit) — superadmin
+   ====================================================== */
+
+let AUDIT_PAGE=0;
+const AUDIT_SIZE=50;
+
+async function loadAudit(page){
+  if(page<0) return;
+  const rows=$("#auditRows");
+  if(!rows) return;
+  rows.innerHTML='<tr><td colspan="6" class="empty">Memuat…</td></tr>';
+  try{
+    const d=await api(`/api/activity-logs?limit=${AUDIT_SIZE}&offset=${page*AUDIT_SIZE}`);
+    AUDIT_PAGE=page;
+    const logs=d.logs||[];
+    if(!logs.length){
+      rows.innerHTML='<tr><td colspan="6" class="empty">Belum ada aksi tercatat.</td></tr>';
+    }else{
+      rows.innerHTML=logs.map(l=>`<tr>
+        <td class="muted">${new Date(l.createdAt).toLocaleString("id-ID")}</td>
+        <td><b>${esc(l.actorName||"—")}</b><div class="muted">${esc(l.actorRole||"")}</div></td>
+        <td><span class="tag${/delete|revoke/.test(l.action)?" archived":""}">${esc(l.action)}</span></td>
+        <td>${esc(l.targetLabel||l.targetId||"—")}</td>
+        <td class="muted">${esc(l.ip||"—")}</td>
+        <td class="muted">${esc(l.detail||"")}</td>
+      </tr>`).join("");
+    }
+    const totalPages=Math.max(1,Math.ceil((d.total||0)/AUDIT_SIZE));
+    $("#auditPageInfo").textContent=`Hal. ${page+1} / ${totalPages} · ${d.total||0} aksi`;
+    $("#auditPrev").disabled=page<=0;
+    $("#auditNext").disabled=page>=totalPages-1;
+  }catch(e){
+    rows.innerHTML=`<tr><td colspan="6" class="empty">${esc(e.message)}</td></tr>`;
+  }
 }
 
 /* ======================================================
@@ -122,14 +166,13 @@ async function load(){
     if(answersTh) answersTh.style.display=canViewResults?"":"none";
     const colCount=(canViewResults?4:3)+1;
     if(!forms||!forms.length){rows.innerHTML=`<tr><td colspan="${colCount}" class="empty">Belum ada kuesioner. Klik “+ Kuesioner baru”.</td></tr>`;return;}
-    const counts=canViewResults
-      ? await Promise.all(forms.map(f=>api("/api/forms/"+f.id+"/responses?limit=1").then(d=>d.total).catch(()=>0)))
-      : forms.map(()=>0);
-    rows.innerHTML=forms.map((f,i)=>`<tr onclick="location.href='/manage?id=${f.id}'" style="cursor:pointer">
+    // Jumlah jawaban sudah ikut di /api/forms — dulu di sini ada satu permintaan HTTP
+    // per kuesioner hanya untuk mengambil angkanya.
+    rows.innerHTML=forms.map(f=>`<tr onclick="location.href='/manage?id=${f.id}'" style="cursor:pointer">
       <td><b>${esc(f.title)}</b><div class="muted">${esc(f.slug)}</div></td>
       <td><span class="tag ${f.status}">${f.status}</span></td>
       <td class="muted">${new Date(f.updatedAt).toLocaleString("id-ID")}</td>
-      ${canViewResults?`<td>${counts[i]}</td>`:""}
+      ${canViewResults?`<td>${f.responseCount||0}</td>`:""}
       <td style="text-align:center"><button class="row-menu-btn" type="button" onclick="event.stopPropagation();toggleRowMenu(event,'${f.id}')">⋮</button></td>
     </tr>`).join("");
   }catch(e){
@@ -320,5 +363,6 @@ async function createUserFromPanel(){
 $("#logout").addEventListener("click",()=>{localStorage.removeItem("eform_token");localStorage.removeItem("eform_user");location.replace("/login");});
 $("#refresh").addEventListener("click",()=>{
   if(ACTIVE_NAV==="users"){ loadUsers(); return; }
+  if(ACTIVE_NAV==="audit"){ loadAudit(AUDIT_PAGE); return; }
   load();
 });

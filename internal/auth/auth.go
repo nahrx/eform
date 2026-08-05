@@ -2,6 +2,8 @@ package auth
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -27,7 +29,62 @@ func (m *Manager) WithRespondentTTL(d time.Duration) *Manager {
 type Claims struct {
 	Username string `json:"username"`
 	Role     string `json:"role"`
+	// TokenVersion mengikat token ke users.token_version. Server menaikkan angka itu
+	// saat akun dinonaktifkan atau passwordnya diganti, sehingga token lama langsung
+	// tidak berlaku tanpa perlu menunggu masa berlakunya habis.
+	TokenVersion int `json:"tv"`
 	jwt.RegisteredClaims
+}
+
+// MinPasswordLen adalah panjang minimum password akun admin/superadmin.
+const MinPasswordLen = 10
+
+// commonPasswords adalah daftar pendek password yang paling sering dipakai/ditebak.
+// Sengaja tidak panjang: tujuannya menjaring pilihan yang jelas buruk, bukan
+// menggantikan daftar kebocoran yang lengkap.
+var commonPasswords = map[string]bool{
+	"password": true, "password1": true, "password123": true, "passw0rd": true,
+	"qwerty123": true, "1234567890": true, "123456789": true, "12345678": true,
+	"admin12345": true, "administrator": true, "adminadmin": true, "rahasia123": true,
+	"indonesia": true, "bismillah": true, "letmein123": true, "welcome123": true,
+	"iloveyou1": true, "abcd123456": true, "qwertyuiop": true, "asdfghjkl": true,
+}
+
+// ValidatePassword menerapkan kebijakan password akun admin.
+//
+// Mengikuti anjuran NIST: yang ditekankan panjang dan tidak mudah ditebak, bukan
+// kombinasi huruf besar/angka/simbol yang justru mendorong pola seperti "Passw0rd!".
+func ValidatePassword(pw, username, email string) error {
+	if len([]rune(pw)) < MinPasswordLen {
+		return fmt.Errorf("password minimal %d karakter", MinPasswordLen)
+	}
+	low := strings.ToLower(pw)
+	if commonPasswords[low] {
+		return errors.New("password terlalu umum, pilih yang lain")
+	}
+	if u := strings.ToLower(strings.TrimSpace(username)); u != "" && strings.Contains(low, u) {
+		return errors.New("password tidak boleh memuat username")
+	}
+	if e := strings.ToLower(strings.TrimSpace(email)); e != "" {
+		if local, _, ok := strings.Cut(e, "@"); ok && local != "" && strings.Contains(low, local) {
+			return errors.New("password tidak boleh memuat alamat email")
+		}
+	}
+	// Satu karakter berulang ("aaaaaaaaaa") panjangnya memenuhi syarat tapi tidak aman.
+	if isSingleRuneRepeat(pw) {
+		return errors.New("password tidak boleh berupa satu karakter yang diulang")
+	}
+	return nil
+}
+
+func isSingleRuneRepeat(pw string) bool {
+	rs := []rune(pw)
+	for _, r := range rs[1:] {
+		if r != rs[0] {
+			return false
+		}
+	}
+	return len(rs) > 0
 }
 
 func HashPassword(pw string) (string, error) {
@@ -39,11 +96,12 @@ func CheckPassword(hash, pw string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(pw)) == nil
 }
 
-func (m *Manager) Generate(userID, username, role string) (string, error) {
+func (m *Manager) Generate(userID, username, role string, tokenVersion int) (string, error) {
 	now := time.Now()
 	claims := Claims{
-		Username: username,
-		Role:     role,
+		Username:     username,
+		Role:         role,
+		TokenVersion: tokenVersion,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userID,
 			IssuedAt:  jwt.NewNumericDate(now),

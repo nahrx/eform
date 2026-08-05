@@ -124,6 +124,19 @@ func (s *Server) authMW(next http.HandlerFunc) http.HandlerFunc {
 			writeErr(w, http.StatusUnauthorized, "token tidak valid untuk endpoint ini")
 			return
 		}
+
+		// Tanda tangan yang sah belum cukup: akun bisa saja sudah dinonaktifkan,
+		// dihapus, atau passwordnya diganti setelah token diterbitkan. Satu lookup
+		// primary key per permintaan membuat pencabutan berlaku seketika.
+		snap, err := s.st.GetAuthSnapshot(r.Context(), claims.Subject)
+		if err != nil || !snap.IsActive || snap.TokenVersion != claims.TokenVersion {
+			writeErr(w, http.StatusUnauthorized, "sesi tidak valid atau kedaluwarsa")
+			return
+		}
+		// Role diambil dari DB, bukan dari token, supaya penurunan hak juga langsung
+		// berlaku tanpa menunggu token baru.
+		claims.Role = snap.Role
+
 		ctx := context.WithValue(r.Context(), userKey, claims)
 		next(w, r.WithContext(ctx))
 	}
@@ -285,6 +298,38 @@ func (s *Server) logAPIAccess(r *http.Request, key *models.FormAPIKey, prefix, i
 	}
 }
 
+/* ---------------- audit aksi admin ---------------- */
+
+// audit mencatat satu aksi admin ke activity_logs. Pelaku diambil dari context, jadi
+// pemanggil cukup menyebut aksi dan sasarannya.
+//
+// Sengaja best-effort: gagal mencatat tidak boleh menggagalkan aksi yang sudah
+// terlanjur berhasil, tapi kegagalannya tetap muncul di log server.
+func (s *Server) audit(r *http.Request, action, targetType, targetID, targetLabel, formID, detail string) {
+	l := &models.ActivityLog{
+		Action:      action,
+		TargetType:  targetType,
+		TargetID:    targetID,
+		TargetLabel: targetLabel,
+		IP:          clientIP(r),
+		Detail:      detail,
+	}
+	if u := userFrom(r.Context()); u != nil {
+		id := u.Subject
+		l.ActorID = &id
+		l.ActorName = u.Username
+		l.ActorRole = u.Role
+	}
+	if formID != "" {
+		l.FormID = &formID
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := s.st.InsertActivityLog(ctx, l); err != nil {
+		log.Printf("[audit] gagal mencatat %s: %v", action, err)
+	}
+}
+
 // requireRole membatasi akses ke salah satu role yang diizinkan.
 func (s *Server) requireRole(next http.HandlerFunc, roles ...string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -364,6 +409,34 @@ var loginRL = newSlidingWindowLimiter()
 
 // apiKeyRL membatasi pemakaian tiap API key; kuotanya per key (rate_limit_per_min).
 var apiKeyRL = newSlidingWindowLimiter()
+
+// publicRL membatasi endpoint pengisian kuesioner publik.
+var publicRL = newSlidingWindowLimiter()
+
+// limitRespondent membatasi laju per akun responden sekaligus per IP.
+//
+// Dua kunci dipakai bersamaan: batas per responden mencegah satu akun membanjiri,
+// batas per IP mencegah satu mesin memakai banyak akun sekaligus.
+func (s *Server) limitRespondent(next http.HandlerFunc, perRespondent, perIP int) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ip := clientIP(r)
+		id := ""
+		if rc := respondentFrom(r.Context()); rc != nil {
+			id = rc.RespondentID
+		}
+		if id != "" && !publicRL.allow("resp:"+id, perRespondent) {
+			w.Header().Set("Retry-After", "60")
+			writeErr(w, http.StatusTooManyRequests, "terlalu banyak permintaan, coba lagi dalam 1 menit")
+			return
+		}
+		if !publicRL.allow("pip:"+ip, perIP) {
+			w.Header().Set("Retry-After", "60")
+			writeErr(w, http.StatusTooManyRequests, "terlalu banyak permintaan dari jaringan ini, coba lagi dalam 1 menit")
+			return
+		}
+		next(w, r)
+	}
+}
 
 func (l *slidingWindowLimiter) allowRequest(r *http.Request) bool {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)

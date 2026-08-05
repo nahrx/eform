@@ -91,11 +91,17 @@ func Load() *Config {
 	}
 	c.JWTTTL = time.Duration(ttlHours) * time.Hour
 
-	origins := env("CORS_ORIGINS", "*")
+	// Default sengaja PublicBaseURL saja, bukan "*". Aplikasi menyajikan UI-nya sendiri
+	// dari origin yang sama sehingga tidak butuh CORS terbuka; kalau memang perlu diakses
+	// dari origin lain, isi CORS_ORIGINS secara eksplisit.
+	origins := env("CORS_ORIGINS", c.PublicBaseURL)
 	for _, o := range strings.Split(origins, ",") {
 		if o = strings.TrimSpace(o); o != "" {
 			c.CORSOrigins = append(c.CORSOrigins, o)
 		}
+	}
+	if len(c.CORSOrigins) == 1 && c.CORSOrigins[0] == "*" {
+		log.Println("[WARN] CORS_ORIGINS=* mengizinkan semua origin — isi daftar origin secara eksplisit di produksi.")
 	}
 	return c
 }

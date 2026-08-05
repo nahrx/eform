@@ -129,7 +129,7 @@ func (s *Server) googleCallback(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, "/viewer-portal?error=not_authorized&email="+url.QueryEscape(gUser.Email), http.StatusFound)
 			return
 		}
-		jwtToken, err := s.auth.Generate(user.ID, user.Username, user.Role)
+		jwtToken, err := s.auth.Generate(user.ID, user.Username, user.Role, user.TokenVersion)
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, "gagal menerbitkan token")
 			return
