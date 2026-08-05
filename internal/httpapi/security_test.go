@@ -1,10 +1,13 @@
 package httpapi
 
 import (
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/bpskaltim/eform-backend/internal/config"
 )
 
 func TestIPAllowed(t *testing.T) {
@@ -146,4 +149,48 @@ func contains(ss []string, s string) bool {
 		}
 	}
 	return false
+}
+
+func TestClientIPTanpaProxyTepercaya(t *testing.T) {
+	// Tanpa daftar proxy, X-Forwarded-For tidak boleh dipercaya sama sekali.
+	s := &Server{cfg: &config.Config{}}
+	r := httptest.NewRequest("GET", "/", nil)
+	r.RemoteAddr = "203.0.113.9:1234"
+	r.Header.Set("X-Forwarded-For", "1.2.3.4")
+	if got := s.clientIP(r); got != "203.0.113.9" {
+		t.Fatalf("harus memakai RemoteAddr, dapat %q", got)
+	}
+}
+
+func TestClientIPDenganProxyTepercaya(t *testing.T) {
+	s := &Server{cfg: &config.Config{TrustedProxies: []string{"10.0.0.0/8"}}}
+
+	t.Run("koneksi dari proxy tepercaya -> pakai XFF", func(t *testing.T) {
+		r := httptest.NewRequest("GET", "/", nil)
+		r.RemoteAddr = "10.0.0.5:1234"
+		r.Header.Set("X-Forwarded-For", "203.0.113.7")
+		if got := s.clientIP(r); got != "203.0.113.7" {
+			t.Fatalf("dapat %q", got)
+		}
+	})
+
+	t.Run("rantai proxy: ambil klien sebenarnya", func(t *testing.T) {
+		r := httptest.NewRequest("GET", "/", nil)
+		r.RemoteAddr = "10.0.0.5:1234"
+		// Klien menulis sendiri "9.9.9.9" untuk mengelabui; proxy menambahkan IP asli
+		// di sebelah kanannya.
+		r.Header.Set("X-Forwarded-For", "9.9.9.9, 203.0.113.7, 10.0.0.9")
+		if got := s.clientIP(r); got != "203.0.113.7" {
+			t.Fatalf("harus mengambil entri kanan yang bukan proxy, dapat %q", got)
+		}
+	})
+
+	t.Run("koneksi dari IP tak tepercaya -> XFF diabaikan", func(t *testing.T) {
+		r := httptest.NewRequest("GET", "/", nil)
+		r.RemoteAddr = "203.0.113.50:1234"
+		r.Header.Set("X-Forwarded-For", "1.1.1.1")
+		if got := s.clientIP(r); got != "203.0.113.50" {
+			t.Fatalf("dapat %q", got)
+		}
+	})
 }

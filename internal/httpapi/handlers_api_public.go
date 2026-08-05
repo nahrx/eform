@@ -31,7 +31,7 @@ func (s *Server) apiScope(w http.ResponseWriter, r *http.Request) (*models.FormA
 		return nil, store.ResponseScope{}, false
 	}
 	if formID := r.PathValue("formId"); formID != "" && formID != key.FormID {
-		s.logAPIAccess(r, key, key.KeyPrefix, clientIP(r), http.StatusNotFound, 0, "formId di luar cakupan key")
+		s.logAPIAccess(r, key, key.KeyPrefix, s.clientIP(r), http.StatusNotFound, 0, "formId di luar cakupan key")
 		writeErr(w, http.StatusNotFound, "kuesioner tidak ditemukan")
 		return nil, store.ResponseScope{}, false
 	}
@@ -71,7 +71,7 @@ func (s *Server) apiMe(w http.ResponseWriter, r *http.Request) {
 		"rateLimitPerMin":   key.RateLimitPerMin,
 		"expiresAt":         key.ExpiresAt,
 	}
-	s.logAPIAccess(r, key, key.KeyPrefix, clientIP(r), http.StatusOK, 0, "")
+	s.logAPIAccess(r, key, key.KeyPrefix, s.clientIP(r), http.StatusOK, 0, "")
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -96,22 +96,24 @@ func (s *Server) apiListResponses(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := s.st.ListScopedResponses(r.Context(), scope, f, limit, offset)
 	if err != nil {
-		s.logAPIAccess(r, key, key.KeyPrefix, clientIP(r), http.StatusInternalServerError, 0, err.Error())
+		s.logAPIAccess(r, key, key.KeyPrefix, s.clientIP(r), http.StatusInternalServerError, 0, err.Error())
 		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
 		return
 	}
 	total, err := s.st.CountScopedResponses(r.Context(), scope, f)
 	if err != nil {
-		s.logAPIAccess(r, key, key.KeyPrefix, clientIP(r), http.StatusInternalServerError, 0, err.Error())
+		s.logAPIAccess(r, key, key.KeyPrefix, s.clientIP(r), http.StatusInternalServerError, 0, err.Error())
 		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
 		return
 	}
 
 	data := make([]models.Response, 0, len(rows))
 	for _, rr := range rows {
-		data = append(data, apiPresent(rr, key.IncludeRespondent))
+		presented := apiPresent(rr, key.IncludeRespondent)
+		presented.Answers = s.signAnswerUploads(presented.Answers)
+		data = append(data, presented)
 	}
-	s.logAPIAccess(r, key, key.KeyPrefix, clientIP(r), http.StatusOK, len(data), "")
+	s.logAPIAccess(r, key, key.KeyPrefix, s.clientIP(r), http.StatusOK, len(data), "")
 	writeJSON(w, http.StatusOK, map[string]any{
 		"data":   data,
 		"total":  total,
@@ -128,17 +130,18 @@ func (s *Server) apiGetResponse(w http.ResponseWriter, r *http.Request) {
 	}
 	rr, err := s.st.GetScopedResponseByID(r.Context(), scope, r.PathValue("responseId"))
 	if errors.Is(err, store.ErrNotFound) {
-		s.logAPIAccess(r, key, key.KeyPrefix, clientIP(r), http.StatusNotFound, 0, "jawaban di luar cakupan")
+		s.logAPIAccess(r, key, key.KeyPrefix, s.clientIP(r), http.StatusNotFound, 0, "jawaban di luar cakupan")
 		writeErr(w, http.StatusNotFound, "jawaban tidak ditemukan")
 		return
 	}
 	if err != nil {
-		s.logAPIAccess(r, key, key.KeyPrefix, clientIP(r), http.StatusInternalServerError, 0, err.Error())
+		s.logAPIAccess(r, key, key.KeyPrefix, s.clientIP(r), http.StatusInternalServerError, 0, err.Error())
 		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
 		return
 	}
-	s.logAPIAccess(r, key, key.KeyPrefix, clientIP(r), http.StatusOK, 1, "")
-	writeJSON(w, http.StatusOK, apiPresent(*rr, key.IncludeRespondent))
+	s.logAPIAccess(r, key, key.KeyPrefix, s.clientIP(r), http.StatusOK, 1, "")
+	presented := apiPresent(*rr, key.IncludeRespondent)
+	writeJSON(w, http.StatusOK, s.signResponse(&presented))
 }
 
 // apiExportResponses men-stream seluruh jawaban dalam cakupan key sebagai CSV.
@@ -149,7 +152,7 @@ func (s *Server) apiExportResponses(w http.ResponseWriter, r *http.Request) {
 	}
 	cols, err := s.st.GetFormAnswerColumns(r.Context(), key.FormID)
 	if err != nil {
-		s.logAPIAccess(r, key, key.KeyPrefix, clientIP(r), http.StatusInternalServerError, 0, err.Error())
+		s.logAPIAccess(r, key, key.KeyPrefix, s.clientIP(r), http.StatusInternalServerError, 0, err.Error())
 		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
 		return
 	}
@@ -179,5 +182,5 @@ func (s *Server) apiExportResponses(w http.ResponseWriter, r *http.Request) {
 		n++
 		return nil
 	})
-	s.logAPIAccess(r, key, key.KeyPrefix, clientIP(r), http.StatusOK, n, "")
+	s.logAPIAccess(r, key, key.KeyPrefix, s.clientIP(r), http.StatusOK, n, "")
 }

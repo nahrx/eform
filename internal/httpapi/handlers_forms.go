@@ -546,7 +546,7 @@ func (s *Server) listResponses(w http.ResponseWriter, r *http.Request) {
 	if resp == nil {
 		resp = []models.Response{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"responses": resp, "total": count})
+	writeJSON(w, http.StatusOK, map[string]any{"responses": s.signResponses(resp), "total": count})
 }
 
 func (s *Server) getResponseDetail(w http.ResponseWriter, r *http.Request) {
@@ -566,7 +566,7 @@ func (s *Server) getResponseDetail(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
 		return
 	}
-	writeJSON(w, http.StatusOK, resp)
+	writeJSON(w, http.StatusOK, s.signResponse(resp))
 }
 
 func (s *Server) deleteResponse(w http.ResponseWriter, r *http.Request) {

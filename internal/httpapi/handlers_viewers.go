@@ -545,7 +545,7 @@ func (s *Server) viewerListResponses(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	count, _ := s.st.CountViewerResponses(r.Context(), viewerID, formID, f)
-	writeJSON(w, http.StatusOK, map[string]any{"responses": resp, "total": count})
+	writeJSON(w, http.StatusOK, map[string]any{"responses": s.signResponses(resp), "total": count})
 }
 
 // viewerExportResponses menghasilkan CSV jawaban yang boleh dilihat viewer, mengikuti pembatasan
@@ -610,5 +610,5 @@ func (s *Server) viewerGetResponse(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
 		return
 	}
-	writeJSON(w, http.StatusOK, resp)
+	writeJSON(w, http.StatusOK, s.signResponse(resp))
 }

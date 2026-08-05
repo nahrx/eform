@@ -20,6 +20,10 @@ type Config struct {
 	JWTRespondentSecret  []byte
 	JWTTTL               time.Duration
 	CORSOrigins          []string
+	// TrustedProxies: IP/CIDR reverse proxy yang boleh dipercaya header X-Forwarded-For-nya.
+	TrustedProxies []string
+	// LogRetentionDays: umur maksimum baris activity_logs & api_access_logs.
+	LogRetentionDays int
 	PublicBaseURL string // dipakai untuk membentuk URL share, mis. https://eform.bpskaltim.go.id
 	WebDir        string // folder berisi login.html, admin.html, public.html, builder.html
 	PublicDir     string // folder berisi landing page publik (index.html), disajikan di "/"
@@ -100,6 +104,19 @@ func Load() *Config {
 			c.CORSOrigins = append(c.CORSOrigins, o)
 		}
 	}
+	for _, p := range strings.Split(env("TRUSTED_PROXIES", ""), ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			c.TrustedProxies = append(c.TrustedProxies, p)
+		}
+	}
+
+	c.LogRetentionDays = 180
+	if v := os.Getenv("LOG_RETENTION_DAYS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			c.LogRetentionDays = n
+		}
+	}
+
 	if len(c.CORSOrigins) == 1 && c.CORSOrigins[0] == "*" {
 		log.Println("[WARN] CORS_ORIGINS=* mengizinkan semua origin — isi daftar origin secara eksplisit di produksi.")
 	}

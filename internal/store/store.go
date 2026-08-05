@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -2472,6 +2473,95 @@ func (s *Store) ListAPIAccessLogs(ctx context.Context, apiKeyID string, limit in
 		out = []models.APIAccessLog{}
 	}
 	return out, rows.Err()
+}
+
+// PruneLogs menghapus baris log yang lebih tua dari retensi yang ditentukan dan
+// mengembalikan jumlah baris terhapus per tabel.
+//
+// Riwayat perubahan jawaban (response_revisions) sengaja TIDAK ikut dipangkas: itu
+// bagian dari provenance data statistik, bukan log operasional.
+func (s *Store) PruneLogs(ctx context.Context, days int) (activity, apiAccess int64, err error) {
+	if days <= 0 {
+		return 0, 0, nil
+	}
+	cutoff := time.Now().AddDate(0, 0, -days)
+
+	ct, err := s.pool.Exec(ctx, `DELETE FROM activity_logs WHERE created_at < $1`, cutoff)
+	if err != nil {
+		return 0, 0, err
+	}
+	activity = ct.RowsAffected()
+
+	ct, err = s.pool.Exec(ctx, `DELETE FROM api_access_logs WHERE created_at < $1`, cutoff)
+	if err != nil {
+		return activity, 0, err
+	}
+	return activity, ct.RowsAffected(), nil
+}
+
+/* ---------------- riwayat perubahan jawaban ---------------- */
+
+// InsertResponseRevision menyimpan satu jejak perubahan jawaban.
+func (s *Store) InsertResponseRevision(ctx context.Context, rev *models.ResponseRevision) error {
+	_, err := s.pool.Exec(ctx,
+		`INSERT INTO response_revisions(response_id,form_id,editor_id,editor_name,answers_before,answers_after,ip)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+		rev.ResponseID, rev.FormID, rev.EditorID, rev.EditorName,
+		rev.AnswersBefore, rev.AnswersAfter, rev.IP)
+	return err
+}
+
+// ListResponseRevisions mengembalikan riwayat perubahan satu jawaban, terbaru dulu.
+// Daftar variabel yang berubah dihitung di sini agar UI tidak perlu membandingkan sendiri.
+func (s *Store) ListResponseRevisions(ctx context.Context, responseID string, limit int) ([]models.ResponseRevision, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	rows, err := s.pool.Query(ctx,
+		`SELECT id,response_id,form_id,editor_id,editor_name,answers_before,answers_after,ip,created_at
+		 FROM response_revisions WHERE response_id=$1 ORDER BY created_at DESC LIMIT $2`, responseID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []models.ResponseRevision
+	for rows.Next() {
+		rev := models.ResponseRevision{}
+		if err := rows.Scan(&rev.ID, &rev.ResponseID, &rev.FormID, &rev.EditorID, &rev.EditorName,
+			&rev.AnswersBefore, &rev.AnswersAfter, &rev.IP, &rev.CreatedAt); err != nil {
+			return nil, err
+		}
+		rev.ChangedFields = ChangedAnswerFields(rev.AnswersBefore, rev.AnswersAfter)
+		out = append(out, rev)
+	}
+	if out == nil {
+		out = []models.ResponseRevision{}
+	}
+	return out, rows.Err()
+}
+
+// ChangedAnswerFields membandingkan dua kumpulan jawaban dan mengembalikan nama variabel
+// yang nilainya berbeda (termasuk yang baru muncul atau hilang).
+func ChangedAnswerFields(before, after json.RawMessage) []string {
+	var a, b map[string]json.RawMessage
+	_ = json.Unmarshal(before, &a)
+	_ = json.Unmarshal(after, &b)
+	seen := map[string]bool{}
+	var out []string
+	for k, av := range a {
+		if bv, ok := b[k]; !ok || string(av) != string(bv) {
+			seen[k] = true
+			out = append(out, k)
+		}
+	}
+	for k := range b {
+		if _, ok := a[k]; !ok && !seen[k] {
+			seen[k] = true
+			out = append(out, k)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 /* ---------------- activity log ---------------- */

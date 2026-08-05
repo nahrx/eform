@@ -216,7 +216,7 @@ func ipAllowed(ip string, allowed []string) bool {
 // Setiap permintaan — termasuk yang ditolak — dicatat ke api_access_logs.
 func (s *Server) apiKeyMW(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ip := clientIP(r)
+		ip := s.clientIP(r)
 		raw := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		raw = strings.TrimSpace(raw)
 
@@ -311,7 +311,7 @@ func (s *Server) audit(r *http.Request, action, targetType, targetID, targetLabe
 		TargetType:  targetType,
 		TargetID:    targetID,
 		TargetLabel: targetLabel,
-		IP:          clientIP(r),
+		IP:          s.clientIP(r),
 		Detail:      detail,
 	}
 	if u := userFrom(r.Context()); u != nil {
@@ -419,7 +419,7 @@ var publicRL = newSlidingWindowLimiter()
 // batas per IP mencegah satu mesin memakai banyak akun sekaligus.
 func (s *Server) limitRespondent(next http.HandlerFunc, perRespondent, perIP int) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ip := clientIP(r)
+		ip := s.clientIP(r)
 		id := ""
 		if rc := respondentFrom(r.Context()); rc != nil {
 			id = rc.RespondentID

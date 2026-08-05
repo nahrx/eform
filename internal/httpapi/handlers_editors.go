@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -501,7 +502,7 @@ func (s *Server) editorListResponses(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	count, _ := s.st.CountEditorResponses(r.Context(), editorID, formID, f)
-	writeJSON(w, http.StatusOK, map[string]any{"responses": resp, "total": count})
+	writeJSON(w, http.StatusOK, map[string]any{"responses": s.signResponses(resp), "total": count})
 }
 
 // editorExportResponses menghasilkan CSV jawaban untuk form yang ditugaskan ke editor,
@@ -550,7 +551,7 @@ func (s *Server) editorGetResponse(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
 		return
 	}
-	writeJSON(w, http.StatusOK, resp)
+	writeJSON(w, http.StatusOK, s.signResponse(resp))
 }
 
 // editorUpdateResponse memperbarui jawaban satu respons oleh editor. Akses dicek terhadap
@@ -561,7 +562,10 @@ func (s *Server) editorUpdateResponse(w http.ResponseWriter, r *http.Request) {
 	formID := r.PathValue("id")
 	responseID := r.PathValue("responseId")
 
-	if _, err := s.st.GetEditorResponseByID(r.Context(), editorID, formID, responseID); err != nil {
+	// Nilai lama dipakai dua kali: memastikan editor memang berhak, dan disimpan
+	// sebagai pembanding di riwayat perubahan.
+	before, err := s.st.GetEditorResponseByID(r.Context(), editorID, formID, responseID)
+	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeErr(w, http.StatusNotFound, "respons tidak ditemukan atau akses tidak diizinkan")
 			return
@@ -594,5 +598,54 @@ func (s *Server) editorUpdateResponse(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "gagal menyimpan")
 		return
 	}
+
+	// Koreksi data harus bisa ditelusuri: simpan nilai sebelum & sesudah, lalu catat
+	// aksinya di riwayat admin. Kegagalan mencatat tidak membatalkan penyimpanan yang
+	// sudah berhasil, tapi tetap muncul di log server.
+	u := userFrom(r.Context())
+	rev := &models.ResponseRevision{
+		ResponseID:    responseID,
+		FormID:        formID,
+		EditorID:      &editorID,
+		EditorName:    u.Username,
+		AnswersBefore: before.Answers,
+		AnswersAfter:  in.Answers,
+		IP:            s.clientIP(r),
+	}
+	if err := s.st.InsertResponseRevision(r.Context(), rev); err != nil {
+		log.Printf("[revisi] gagal mencatat perubahan jawaban %s: %v", responseID, err)
+	}
+	changed := store.ChangedAnswerFields(before.Answers, in.Answers)
+	s.audit(r, "response.edit", "response", responseID, "", formID,
+		fmt.Sprintf("%d variabel diubah: %s", len(changed), strings.Join(changed, ", ")))
+
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+}
+
+// listResponseRevisions mengembalikan riwayat perubahan satu jawaban.
+// Dibuka untuk admin pemilik kuesioner dan untuk editor yang berhak atas jawaban itu.
+func (s *Server) listResponseRevisions(w http.ResponseWriter, r *http.Request) {
+	formID := r.PathValue("id")
+	responseID := r.PathValue("responseId")
+	u := userFrom(r.Context())
+
+	switch u.Role {
+	case "superadmin", "admin":
+		if _, ok := s.ensureFormAccess(w, r, formID); !ok {
+			return
+		}
+	default:
+		if _, err := s.st.GetEditorResponseByID(r.Context(), u.Subject, formID, responseID); err != nil {
+			writeErr(w, http.StatusNotFound, "respons tidak ditemukan atau akses tidak diizinkan")
+			return
+		}
+	}
+
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	revs, err := s.st.ListResponseRevisions(r.Context(), responseID, limit)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"revisions": revs})
 }

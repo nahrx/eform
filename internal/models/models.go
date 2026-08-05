@@ -187,6 +187,22 @@ type APIKeyAllowedRespondent struct {
 	CreatedAt    time.Time `json:"createdAt"`
 }
 
+// ResponseRevision menyimpan satu perubahan jawaban oleh editor, lengkap dengan nilai
+// sebelum dan sesudahnya, supaya koreksi data bisa ditelusuri.
+type ResponseRevision struct {
+	ID            string          `json:"id"`
+	ResponseID    string          `json:"responseId"`
+	FormID        string          `json:"formId"`
+	EditorID      *string         `json:"editorId,omitempty"`
+	EditorName    string          `json:"editorName"`
+	AnswersBefore json.RawMessage `json:"answersBefore"`
+	AnswersAfter  json.RawMessage `json:"answersAfter"`
+	IP            string          `json:"ip"`
+	CreatedAt     time.Time       `json:"createdAt"`
+	// Diisi saat listing: nama variabel yang berubah, agar UI tidak perlu membandingkan sendiri.
+	ChangedFields []string `json:"changedFields,omitempty"`
+}
+
 // ActivityLog mencatat satu aksi admin/superadmin yang mengubah data atau
 // mengeluarkan data dari sistem (mis. ekspor CSV).
 type ActivityLog struct {

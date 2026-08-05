@@ -402,7 +402,7 @@
       <div class="edit-row"><span class="edit-lbl">Alamat IP</span>
         <input id="akAllowedIps" placeholder="103.10.1.5, 103.10.2.0/24 — kosong = semua IP" style="flex:1">
       </div>
-      <div class="muted" style="font-size:11px;margin:2px 0 8px">⚠️ Bila aplikasi berjalan di belakang reverse proxy, semua permintaan terlihat berasal dari IP proxy sehingga pembatasan ini tidak berpengaruh.</div>
+      <div class="muted" style="font-size:11px;margin:2px 0 8px">Bila aplikasi berjalan di belakang reverse proxy, isi TRUSTED_PROXIES di server dengan alamat proxy tersebut — tanpa itu semua permintaan terlihat berasal dari IP proxy dan pembatasan ini tidak berpengaruh.</div>
       <div class="edit-row"><span class="edit-lbl">Kedaluwarsa</span>
         <input id="akExpiresAt" type="datetime-local" style="flex:1">
         <span class="muted" style="font-size:11px">Kosong = tanpa batas</span>

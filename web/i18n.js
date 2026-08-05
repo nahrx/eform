@@ -345,8 +345,8 @@
     "Key aktif": "Key active",
     "Sertakan identitas responden (nama, email, IP)": "Include respondent identity (name, email, IP)",
     "Biarkan mati bila penerima data cukup butuh jawabannya saja.": "Leave off if the recipient only needs the answers themselves.",
-    "⚠️ Bila aplikasi berjalan di belakang reverse proxy, semua permintaan terlihat berasal dari IP proxy sehingga pembatasan ini tidak berpengaruh.":
-      "⚠️ If the app runs behind a reverse proxy, every request appears to come from the proxy's IP, so this restriction has no effect.",
+    "Bila aplikasi berjalan di belakang reverse proxy, isi TRUSTED_PROXIES di server dengan alamat proxy tersebut — tanpa itu semua permintaan terlihat berasal dari IP proxy dan pembatasan ini tidak berpengaruh.":
+      "If the app runs behind a reverse proxy, set TRUSTED_PROXIES on the server to that proxy's address — without it every request appears to come from the proxy's IP and this restriction has no effect.",
     "Salin sekarang — key ini tidak akan ditampilkan lagi. Kalau hilang, buat key baru atau rotasi key ini. Perlakukan seperti password: jangan kirim lewat chat atau email biasa.":
       "Copy it now — this key will not be shown again. If you lose it, create a new key or rotate this one. Treat it like a password: don't send it over chat or plain email.",
     "Sudah disalin": "I've copied it",

@@ -56,6 +56,13 @@ func main() {
 		}
 	}()
 
+	// Pemangkasan log berkala. Tanpa ini activity_logs dan api_access_logs tumbuh
+	// selamanya — satu integrasi yang menarik data tiap menit saja sudah menambah
+	// ratusan ribu baris per tahun.
+	pruneCtx, stopPrune := context.WithCancel(context.Background())
+	defer stopPrune()
+	go runLogPruner(pruneCtx, st, cfg.LogRetentionDays)
+
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	<-stop
@@ -63,6 +70,37 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = httpServer.Shutdown(shutdownCtx)
+}
+
+// runLogPruner memangkas log lama sekali saat start lalu setiap 24 jam.
+func runLogPruner(ctx context.Context, st *store.Store, days int) {
+	if days <= 0 {
+		return
+	}
+	prune := func() {
+		c, cancel := context.WithTimeout(ctx, 2*time.Minute)
+		defer cancel()
+		act, api, err := st.PruneLogs(c, days)
+		if err != nil {
+			log.Printf("[prune] gagal memangkas log: %v", err)
+			return
+		}
+		if act > 0 || api > 0 {
+			log.Printf("[prune] log >%d hari dihapus: %d aktivitas, %d akses API", days, act, api)
+		}
+	}
+	prune()
+
+	t := time.NewTicker(24 * time.Hour)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			prune()
+		}
+	}
 }
 
 // seedSuperadmin membuat user superadmin pertama jika tabel users masih kosong.

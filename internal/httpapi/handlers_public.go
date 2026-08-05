@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/bpskaltim/eform-backend/internal/auth"
@@ -103,7 +104,7 @@ func (s *Server) myResponse(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "kesalahan server")
 		return
 	}
-	writeJSON(w, http.StatusOK, resp)
+	writeJSON(w, http.StatusOK, s.signResponse(resp))
 }
 
 // GET /api/public/forms/{token}/my-responses — semua jawaban respondent (untuk multi-response).
@@ -121,7 +122,7 @@ func (s *Server) myResponses(w http.ResponseWriter, r *http.Request) {
 	if resps == nil {
 		resps = []models.Response{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"responses": resps})
+	writeJSON(w, http.StatusOK, map[string]any{"responses": s.signResponses(resps)})
 }
 
 // GET /api/public/forms/{token}/check-access — cek apakah email respondent diizinkan (restricted mode).
@@ -180,7 +181,7 @@ func (s *Server) publicSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	meta := map[string]any{
-		"ip":         clientIP(r),
+		"ip":         s.clientIP(r),
 		"userAgent":  r.UserAgent(),
 		"receivedAt": time.Now().Format(time.RFC3339),
 		"email":      rc.Email,
@@ -285,6 +286,7 @@ func (s *Server) myDraft(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "kesalahan server")
 		return
 	}
+	draft.Answers = s.signAnswerUploads(draft.Answers)
 	writeJSON(w, http.StatusOK, draft)
 }
 
@@ -440,11 +442,59 @@ func (s *Server) optionsProxy(w http.ResponseWriter, r *http.Request) {
 	w.Write(body)
 }
 
-func clientIP(r *http.Request) string {
-	// Gunakan RemoteAddr langsung — X-Forwarded-For bisa dipalsukan client
+// clientIP mengembalikan alamat IP pemanggil sebenarnya.
+//
+// X-Forwarded-For hanya dipercaya kalau koneksinya memang datang dari proxy yang
+// terdaftar di TRUSTED_PROXIES — kalau tidak, header itu bisa dipalsukan siapa saja
+// dan pembatasan berbasis IP (mis. allowlist API key) jadi tak berarti.
+func (s *Server) clientIP(r *http.Request) string {
+	host := remoteHost(r)
+	if len(s.cfg.TrustedProxies) == 0 || !ipInAny(host, s.cfg.TrustedProxies) {
+		return host
+	}
+	// Ambil entri paling kanan yang BUKAN proxy tepercaya: itulah klien sebenarnya.
+	// Entri di sebelah kirinya bisa saja ditulis sendiri oleh klien.
+	parts := strings.Split(r.Header.Get("X-Forwarded-For"), ",")
+	for i := len(parts) - 1; i >= 0; i-- {
+		ip := strings.TrimSpace(parts[i])
+		if ip == "" {
+			continue
+		}
+		if !ipInAny(ip, s.cfg.TrustedProxies) {
+			return ip
+		}
+	}
+	return host
+}
+
+func remoteHost(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return r.RemoteAddr
 	}
 	return host
+}
+
+// ipInAny mengecek apakah ip termasuk salah satu entri (IP tunggal atau CIDR).
+func ipInAny(ip string, entries []string) bool {
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return false
+	}
+	for _, e := range entries {
+		e = strings.TrimSpace(e)
+		if e == "" {
+			continue
+		}
+		if strings.Contains(e, "/") {
+			if _, netw, err := net.ParseCIDR(e); err == nil && netw.Contains(parsed) {
+				return true
+			}
+			continue
+		}
+		if other := net.ParseIP(e); other != nil && other.Equal(parsed) {
+			return true
+		}
+	}
+	return false
 }

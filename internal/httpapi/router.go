@@ -100,6 +100,9 @@ func (s *Server) Routes() http.Handler {
 	// --- riwayat aksi admin (audit) ---
 	mux.Handle("GET /api/activity-logs", s.authMW(s.requireRole(s.listActivityLogs, "superadmin", "admin")))
 
+	// riwayat perubahan jawaban: admin pemilik kuesioner, atau editor yang berhak
+	mux.Handle("GET /api/forms/{id}/responses/{responseId}/revisions", s.authMW(s.requireRole(s.listResponseRevisions, "superadmin", "admin", "editor", "viewer")))
+
 	// --- API publik untuk sistem eksternal: autentikasi API key, read-only ---
 	// Seluruh pembatasan (aktif, kedaluwarsa, IP, kuota) ada di apiKeyMW; cakupan datanya
 	// di store.APIKeyScope. Tidak ada endpoint tulis di sini, dan tidak akan ditambahkan.
@@ -208,6 +211,14 @@ func (s *Server) page(name string) http.HandlerFunc {
 func (s *Server) uploadFileOnly(w http.ResponseWriter, r *http.Request) {
 	p := path.Clean("/" + strings.TrimPrefix(r.URL.Path, "/"))
 	if p == "/uploads" || strings.HasSuffix(r.URL.Path, "/") {
+		http.NotFound(w, r)
+		return
+	}
+
+	// Lampiran hanya bisa diambil lewat URL bertanda tangan yang diterbitkan saat
+	// jawaban disajikan ke pihak yang memang berhak (lihat uploads_sign.go).
+	// Sengaja 404, bukan 403, supaya tidak mengonfirmasi keberadaan berkasnya.
+	if !s.verifyUploadURL(p, r.URL.Query()) {
 		http.NotFound(w, r)
 		return
 	}

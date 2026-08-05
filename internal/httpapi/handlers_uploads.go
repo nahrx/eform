@@ -92,7 +92,7 @@ func (s *Server) publicUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, map[string]any{
-		"url":         relPath,
+		"url":         s.signUploadURL(relPath),
 		"contentType": contentType,
 		"size":        len(data),
 	})

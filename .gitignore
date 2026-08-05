@@ -4,3 +4,4 @@ perancangan/
 .claude
 bin/
 docker-compose.override.yml
+backups/
