@@ -312,6 +312,8 @@
     "Memuat jumlah jawaban…": "Loading response count…",
 
     // ---- riwayat aksi (audit) ----
+    "Ekspor": "Export",
+    "Riwayat Perubahan": "Change History",
     "Riwayat Aksi": "Activity Log",
     "Jejak aksi yang mengubah data atau mengeluarkan data dari sistem, termasuk unduhan CSV. Tercatat otomatis dan tidak dapat diubah dari aplikasi.":
       "A trail of actions that change data or take data out of the system, including CSV downloads. Recorded automatically and not editable from the app.",

@@ -733,9 +733,9 @@ func csvBaseHeader(includeRespondent bool) []string {
 	return []string{"id", "status", "waktu_kirim"}
 }
 
-// writeCSVRow menulis satu baris respons ke csv.Writer sesuai daftar kolom jawaban yang diberikan.
-// Dipakai bersama oleh ekspor CSV admin, viewer, editor, dan API key.
-func writeCSVRow(cw *csv.Writer, rr models.Response, cols []string, includeRespondent bool) {
+// responseRow merakit satu baris ekspor: kolom tetap diikuti kolom jawaban.
+// Dipakai bersama ekspor CSV dan Excel supaya isinya dijamin identik.
+func responseRow(rr models.Response, cols []string, includeRespondent bool) []string {
 	a := map[string]any{}
 	_ = json.Unmarshal(rr.Answers, &a)
 	waktu := ""
@@ -756,14 +756,47 @@ func writeCSVRow(cw *csv.Writer, rr models.Response, cols []string, includeRespo
 	}
 	for _, c := range cols {
 		v := a[c]
+		// Lampiran yang tertanam sebagai data URI tidak ada gunanya di lembar ekspor
+		// dan bisa berukuran megabyte — dikosongkan saja.
 		if sv, ok := v.(string); ok && len(sv) > 200 && (strings.HasPrefix(sv, "data:image") || strings.HasPrefix(sv, "data:application")) {
 			row = append(row, "")
 		} else {
 			row = append(row, toStr(v))
 		}
 	}
-	_ = cw.Write(row)
+	return row
+}
+
+// writeCSVRow menulis satu baris respons ke csv.Writer sesuai daftar kolom jawaban yang diberikan.
+// Dipakai bersama oleh ekspor CSV admin, viewer, editor, dan API key.
+func writeCSVRow(cw *csv.Writer, rr models.Response, cols []string, includeRespondent bool) {
+	_ = cw.Write(responseRow(rr, cols, includeRespondent))
 	cw.Flush()
+}
+
+// streamXLSX menulis jawaban sebagai berkas Excel dan mengembalikan jumlah baris data.
+//
+// Header HTTP dipasang sebelum satu byte pun ditulis, dan barisnya dialirkan langsung
+// ke koneksi — jadi ekspor besar tidak menumpuk di memori.
+func (s *Server) streamXLSX(w http.ResponseWriter, formID, sheetName string, cols []string, includeRespondent bool,
+	forEach func(func(models.Response) error) error) int {
+
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	w.Header().Set("Content-Disposition", "attachment; filename=\"responses-"+formID+".xlsx\"")
+
+	x, err := newXLSXWriter(w, sheetName)
+	if err != nil {
+		return 0
+	}
+	x.WriteRow(append(csvBaseHeader(includeRespondent), cols...))
+	n := 0
+	_ = forEach(func(rr models.Response) error {
+		x.WriteRow(responseRow(rr, cols, includeRespondent))
+		n++
+		return nil
+	})
+	_ = x.Close()
+	return n
 }
 
 // ensureResultAccess membatasi akses hasil/jawaban: editor tidak boleh mengakses.
@@ -885,4 +918,27 @@ func toStr(v any) string {
 		b, _ := json.Marshal(v)
 		return string(b)
 	}
+}
+
+// exportResponsesXLSX mengunduh jawaban sebagai berkas Excel (.xlsx).
+// Isinya persis sama dengan ekspor CSV; bedanya hanya format berkasnya, yang
+// menghindari masalah encoding dan pemisah kolom saat dibuka di Excel.
+func (s *Server) exportResponsesXLSX(w http.ResponseWriter, r *http.Request) {
+	if !s.ensureResultAccess(w, r) {
+		return
+	}
+	formID := r.PathValue("id")
+	f, ok := s.ensureFormAccess(w, r, formID)
+	if !ok {
+		return
+	}
+	cols, err := s.st.GetFormAnswerColumns(r.Context(), formID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		return
+	}
+	n := s.streamXLSX(w, formID, f.Title, cols, true, func(fn func(models.Response) error) error {
+		return s.st.ForEachResponseByForm(r.Context(), formID, fn)
+	})
+	s.audit(r, "export.xlsx", "form", formID, f.Title, formID, fmt.Sprintf("%d baris (admin)", n))
 }

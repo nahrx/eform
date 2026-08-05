@@ -46,7 +46,8 @@ func (s *Server) Routes() http.Handler {
 	mux.Handle("GET /api/forms/{id}/responses/{responseId}", s.authMW(s.getResponseDetail))
 	mux.Handle("PATCH /api/forms/{id}/responses/{responseId}", s.authMW(s.requireRole(s.updateResponse, "superadmin", "admin")))
 	mux.Handle("DELETE /api/forms/{id}/responses/{responseId}", s.authMW(s.requireRole(s.deleteResponse, "superadmin", "admin")))
-	mux.Handle("GET /api/forms/{id}/responses.csv", s.authMW(s.exportResponses))
+	mux.Handle("GET /api/forms/{id}/responses.csv", s.authMW(s.exportResponses))
+	mux.Handle("GET /api/forms/{id}/responses.xlsx", s.authMW(s.exportResponsesXLSX))
 	mux.Handle("GET /api/forms/{id}/fields/{fieldName}/suggested-values", s.authMW(s.requireRole(s.suggestedFieldValues, "superadmin", "admin")))
 
 	// --- users (khusus superadmin) ---
@@ -120,7 +121,8 @@ func (s *Server) Routes() http.Handler {
 	mux.Handle("GET /api/viewer/forms/{id}/permission", s.authMW(s.requireRole(s.viewerMyFormPermission, "viewer", "editor")))
 	mux.Handle("GET /api/viewer/forms/{id}/responses", s.authMW(s.requireRole(s.viewerListResponses, "viewer", "editor")))
 	mux.Handle("GET /api/viewer/forms/{id}/responses/{responseId}", s.authMW(s.requireRole(s.viewerGetResponse, "viewer", "editor")))
-	mux.Handle("GET /api/viewer/forms/{id}/responses.csv", s.authMW(s.requireRole(s.viewerExportResponses, "viewer", "editor")))
+	mux.Handle("GET /api/viewer/forms/{id}/responses.csv", s.authMW(s.requireRole(s.viewerExportResponses, "viewer", "editor")))
+	mux.Handle("GET /api/viewer/forms/{id}/responses.xlsx", s.authMW(s.requireRole(s.viewerExportResponsesXLSX, "viewer", "editor")))
 
 	// --- editor portal (akses editor yang sudah login) ---
 	mux.Handle("GET /api/editor/my-forms", s.authMW(s.requireRole(s.editorMyForms, "editor", "viewer")))
@@ -128,7 +130,8 @@ func (s *Server) Routes() http.Handler {
 	mux.Handle("GET /api/editor/forms/{id}/responses", s.authMW(s.requireRole(s.editorListResponses, "editor", "viewer")))
 	mux.Handle("GET /api/editor/forms/{id}/responses/{responseId}", s.authMW(s.requireRole(s.editorGetResponse, "editor", "viewer")))
 	mux.Handle("PATCH /api/editor/forms/{id}/responses/{responseId}", s.authMW(s.requireRole(s.editorUpdateResponse, "editor", "viewer")))
-	mux.Handle("GET /api/editor/forms/{id}/responses.csv", s.authMW(s.requireRole(s.editorExportResponses, "editor", "viewer")))
+	mux.Handle("GET /api/editor/forms/{id}/responses.csv", s.authMW(s.requireRole(s.editorExportResponses, "editor", "viewer")))
+	mux.Handle("GET /api/editor/forms/{id}/responses.xlsx", s.authMW(s.requireRole(s.editorExportResponsesXLSX, "editor", "viewer")))
 
 	// --- publik: data referensi (tanpa login) ---
 	mux.HandleFunc("GET /api/wilayah", s.wilayahList)
@@ -181,7 +184,7 @@ func (s *Server) Routes() http.Handler {
 		"manage.css", "manage.js",
 		"responses.css", "responses-ui.js", "responses-core.js",
 		"builder.css", "builder.js", "builder-bridge.js",
-		"searchable-select.js", "geo-map.js",
+		"searchable-select.js", "geo-map.js", "revision-history.js",
 		"i18n.js", "responsive-tables.js",
 	} {
 		mux.HandleFunc("GET /"+f, s.page(f))

@@ -612,3 +612,50 @@ func (s *Server) viewerGetResponse(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, s.signResponse(resp))
 }
+
+// viewerExportResponsesXLSX mengunduh jawaban sebagai Excel, mengikuti pembatasan
+// permission viewer persis seperti ekspor CSV-nya.
+func (s *Server) viewerExportResponsesXLSX(w http.ResponseWriter, r *http.Request) {
+	viewerID := userFrom(r.Context()).Subject
+	formID := r.PathValue("id")
+
+	perm, err := s.st.GetViewerPermission(r.Context(), viewerID, formID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusForbidden, "tidak memiliki akses ke kuesioner ini")
+		} else {
+			writeErr(w, http.StatusInternalServerError, "gagal memeriksa akses")
+		}
+		return
+	}
+	cols, err := s.st.GetFormAnswerColumns(r.Context(), formID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		return
+	}
+	cols = keepVisibleColumns(cols, perm.VisibleFields)
+
+	n := s.streamXLSX(w, formID, "Jawaban", cols, true, func(fn func(models.Response) error) error {
+		return s.st.ForEachViewerResponse(r.Context(), viewerID, formID, fn)
+	})
+	s.audit(r, "export.xlsx", "form", formID, "", formID, fmt.Sprintf("%d baris (viewer)", n))
+}
+
+// keepVisibleColumns menyaring daftar kolom agar hanya memuat variabel yang boleh
+// dilihat. Daftar kosong berarti semua kolom boleh.
+func keepVisibleColumns(cols, visible []string) []string {
+	if len(visible) == 0 {
+		return cols
+	}
+	allowed := make(map[string]bool, len(visible))
+	for _, f := range visible {
+		allowed[f] = true
+	}
+	out := make([]string, 0, len(cols))
+	for _, c := range cols {
+		if allowed[c] {
+			out = append(out, c)
+		}
+	}
+	return out
+}

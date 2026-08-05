@@ -123,7 +123,16 @@ table.resp-tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:600p
       <svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><line x1="3" y1="6" x2="17" y2="6"/><line x1="6" y1="10" x2="14" y2="10"/><line x1="9" y1="14" x2="11" y2="14"/></svg>
       Filter<span class="filter-count" id="filterCount" hidden></span>
     </button>
-    <button class="btn primary" id="btnCsv" hidden>↓ CSV</button>
+    <div class="export-wrap" id="exportWrap" hidden>
+      <button class="btn primary" id="btnExport" aria-haspopup="true" aria-expanded="false">
+        <svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3v9"/><polyline points="6.5,8.5 10,12 13.5,8.5"/><path d="M4 15h12"/></svg>
+        Ekspor<span class="export-caret">▾</span>
+      </button>
+      <div class="export-menu" id="exportMenu" hidden>
+        <button type="button" class="export-item" data-ext="xlsx">Excel<span class="export-ext">xlsx</span></button>
+        <button type="button" class="export-item" data-ext="csv">CSV<span class="export-ext">csv</span></button>
+      </div>
+    </div>
   </header>
 
   <!-- Ringkasan filter aktif; tersembunyi selama belum ada filter dipakai -->
@@ -231,8 +240,9 @@ async function init(){
     SCHEMA=form.schema;
     document.title="Jawaban · "+(form.title||"Kuesioner");
     document.getElementById("formTitle").textContent=form.title||"Kuesioner";
-    document.getElementById("btnCsv").hidden=false;
-    document.getElementById("btnCsv").addEventListener("click",downloadCsv);
+    // Tombol Ekspor baru muncul setelah kuesionernya berhasil dimuat; menu
+    // pilihan formatnya diurus responses-ui.js.
+    document.getElementById("exportWrap").hidden=false;
 
     ALL_FIELDS=extractFields(SCHEMA);
     // Preferensi kolom: dari server (column_config) jika ada, fallback ke localStorage
@@ -551,16 +561,17 @@ function openView(id){
 }
 
 /* ---- helpers ---- */
-async function downloadCsv(){
+// Ekspor CSV & Excel memakai jalur yang sama; hanya ekstensinya berbeda.
+window.downloadExport = async function(ext){
   try{
-    const r=await fetch("/api/forms/"+FORM_ID+"/responses.csv",{headers:H});
+    const r=await fetch("/api/forms/"+FORM_ID+"/responses."+ext,{headers:H});
     if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.error||"Gagal");}
     const blob=await r.blob();
     const url=URL.createObjectURL(blob);
-    const a=document.createElement("a");a.href=url;a.download="responses-"+FORM_ID+".csv";a.click();
+    const a=document.createElement("a");a.href=url;a.download="responses-"+FORM_ID+"."+ext;a.click();
     URL.revokeObjectURL(url);
   }catch(e){alert(e.message);}
-}
+};
 
 init();
 </script>

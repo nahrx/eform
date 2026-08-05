@@ -649,3 +649,27 @@ func (s *Server) listResponseRevisions(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"revisions": revs})
 }
+
+// editorExportResponsesXLSX mengunduh jawaban sebagai Excel untuk editor.
+func (s *Server) editorExportResponsesXLSX(w http.ResponseWriter, r *http.Request) {
+	editorID := userFrom(r.Context()).Subject
+	formID := r.PathValue("id")
+
+	if _, err := s.st.GetEditorPermissionByEditorAndForm(r.Context(), editorID, formID); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusForbidden, "tidak memiliki akses ke kuesioner ini")
+		} else {
+			writeErr(w, http.StatusInternalServerError, "gagal memeriksa akses")
+		}
+		return
+	}
+	cols, err := s.st.GetFormAnswerColumns(r.Context(), formID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		return
+	}
+	n := s.streamXLSX(w, formID, "Jawaban", cols, true, func(fn func(models.Response) error) error {
+		return s.st.ForEachEditorResponse(r.Context(), editorID, formID, fn)
+	})
+	s.audit(r, "export.xlsx", "form", formID, "", formID, fmt.Sprintf("%d baris (editor)", n))
+}
