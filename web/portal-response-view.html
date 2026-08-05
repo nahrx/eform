@@ -34,6 +34,22 @@ button,input,select,textarea{font-family:inherit}
 .btn.danger{background:var(--panel);border-color:#fca5a5;color:var(--danger)}
 .btn.danger:hover{background:var(--danger-soft)}
 .btn[disabled]{opacity:.5;cursor:default;pointer-events:none}
+/* display:inline-flex pada .btn mengalahkan gaya bawaan [hidden] milik browser,
+   sehingga atribut hidden tidak berpengaruh apa-apa. Tanpa aturan ini tombol
+   Simpan/Batal ikut tampil di luar mode edit. */
+.btn[hidden]{display:none}
+/* tombol ikon menu (daftar halaman) — hanya dipakai di layar HP, tempat sidebar
+   berubah jadi laci geser */
+.icon-btn{display:none;padding:6px 8px;flex:none}
+.nav-backdrop{position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:299;
+  background:rgba(19,23,30,.38);opacity:0;visibility:hidden;
+  transition:opacity .2s ease,visibility .2s ease}
+.nav-backdrop.open{opacity:1;visibility:visible}
+@supports(height:100dvh){.nav-backdrop{height:100dvh}}
+/* Kalau laci sedang terbuka lalu layar melebar (rotasi tablet, jendela
+   diperbesar), sidebar kembali menetap tapi kelas .open masih menempel di latar —
+   tanpa aturan ini latar gelapnya ikut menutupi halaman desktop. */
+@media(min-width:681px){.nav-backdrop{display:none}}
 
 /* badge */
 .st-badge{font-size:11.5px;padding:4px 10px;border-radius:999px;font-weight:700;flex:none}
@@ -45,7 +61,12 @@ button,input,select,textarea{font-family:inherit}
 /* layout */
 .shell{display:flex;min-height:calc(100vh - 52px)}
 .sidebar{width:200px;flex:none;padding:14px 10px;background:var(--panel);border-right:1px solid var(--line);position:sticky;top:52px;height:calc(100vh - 52px);overflow-y:auto}
-.sidebar-h{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);padding:0 6px;margin-bottom:8px}
+.sidebar-h{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);padding:0 6px;margin-bottom:8px;
+  display:flex;align-items:center;justify-content:space-between;gap:8px}
+/* tombol tutup laci — di desktop sidebar selalu tampil, jadi tak perlu */
+.nav-close{display:none;border:none;background:none;color:var(--muted);cursor:pointer;
+  font-size:20px;line-height:1;padding:2px 6px;border-radius:var(--radius-s)}
+.nav-close:hover{background:var(--line-2);color:var(--ink)}
 .pg-item{padding:8px 10px;border-radius:var(--radius-s);font-size:12.5px;font-weight:500;cursor:pointer;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pg-item:hover{background:var(--panel-2)}
 .pg-item.active{background:var(--accent-soft);color:var(--accent-ink)}
@@ -129,7 +150,39 @@ button,input,select,textarea{font-family:inherit}
 .toast.err{background:var(--danger)}
 @keyframes slideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 
-@media(max-width:680px){.sidebar{display:none}.content{padding:16px 14px 80px}.pg-foot{left:0}}
+/* Sidebar tidak lagi disembunyikan di HP, tapi berubah jadi laci geser yang
+   dibuka lewat tombol menu — supaya lompat antar-halaman tetap bisa dilakukan,
+   bukan hanya lewat tombol Sebelumnya/Selanjutnya. DOM-nya sama persis dengan
+   versi desktop, jadi #pgList cukup dirender sekali oleh renderPage(). */
+@media(max-width:680px){
+  .icon-btn,.nav-close{display:inline-flex}
+  .sidebar{position:fixed;top:0;left:0;bottom:0;z-index:300;width:260px;max-width:82vw;
+    height:auto;padding-top:18px;border-right:1px solid var(--line);
+    box-shadow:10px 0 34px rgba(19,23,30,.16);
+    /* visibility mengeluarkan isi laci dari urutan Tab selama tertutup */
+    transform:translateX(-100%);visibility:hidden;
+    transition:transform .22s ease,visibility .22s ease}
+  .sidebar.open{transform:none;visibility:visible}
+  .content{padding:16px 14px 80px}
+  .pg-foot{left:0}
+}
+@media(prefers-reduced-motion:reduce){.sidebar,.nav-backdrop{transition:none}}
+/* ---- layar HP ----
+   Topbar sudah membungkus sendiri (flex-wrap di .topbar); di sini isinya
+   dirapatkan supaya tidak memakan terlalu banyak tinggi, dan navigasi bawah
+   dibuat muat di layar 360px tanpa menggeser halaman ke samping. */
+@media(max-width:640px){
+  .topbar{gap:6px;padding:8px 12px}
+  .topbar-title{font-size:14px}
+  .btn{padding:6px 10px;font-size:12.5px}
+  .content{padding:14px 12px 76px}
+  .meta-card{padding:12px 14px;gap:8px}
+  .pg-foot{padding:0 12px}
+  .pg-foot-in{gap:8px;padding:9px 0 10px}
+  /* kedua tombol berbagi sisa ruang merata; teks progres pakai lebar seadanya */
+  .pg-foot-in .btn{flex:1 1 0;min-width:0;justify-content:center;padding:8px 6px}
+  .pg-prog{flex:none;font-size:11.5px;text-align:center}
+}
 .photo-modal{display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);align-items:center;justify-content:center;cursor:zoom-out}
 .photo-modal.open{display:flex}
 .photo-modal img{max-width:92vw;max-height:92vh;object-fit:contain;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,.5)}
@@ -140,6 +193,11 @@ button,input,select,textarea{font-family:inherit}
   <img id="photoModalImg" src="" alt="">
 </div>
 <header class="topbar">
+  <button class="btn icon-btn" id="btnMenu" hidden aria-label="Daftar halaman" aria-expanded="false"
+          onclick="toggleNav()">
+    <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor"
+         stroke-width="1.9" stroke-linecap="round"><path d="M3 5.5h14M3 10h14M3 14.5h14"/></svg>
+  </button>
   <span id="modeBadge" class="ro-badge">Hanya Baca</span>
   <span class="topbar-title" id="topTitle">Memuat…</span>
   <span class="st-badge" id="statusBadge" hidden></span>
@@ -148,9 +206,13 @@ button,input,select,textarea{font-family:inherit}
   <button class="btn danger" id="btnCancel" hidden>Batal</button>
   <button class="btn" onclick="window.close()">✕ Tutup</button>
 </header>
+<div class="nav-backdrop" id="navBackdrop" onclick="toggleNav(false)"></div>
 <div class="shell">
   <nav class="sidebar" id="sidebar" hidden>
-    <div class="sidebar-h">Halaman</div>
+    <div class="sidebar-h">Halaman
+      <button class="nav-close" type="button" aria-label="Tutup daftar halaman"
+              onclick="toggleNav(false)">&times;</button>
+    </div>
     <div id="pgList"></div>
   </nav>
   <div class="content" id="content">
@@ -164,6 +226,7 @@ button,input,select,textarea{font-family:inherit}
 <script src="/vendor/leaflet/leaflet.js"></script>
 <script src="/geo-map.js"></script>
 <script src="/revision-history.js"></script>
+<script src="/response-validation.js"></script>
 <script>
 const TOKEN=localStorage.getItem("eform_token");
 if(!TOKEN){document.getElementById("content").innerHTML='<p style="padding:40px;text-align:center;color:#b91c1c">Sesi habis. Silakan login ulang.</p>';}
@@ -386,6 +449,21 @@ function collectFieldValue(c,rp,out){
 }
 
 /* ---- render page ---- */
+/* ---- validasi jawaban ----
+   Seluruh evaluasi diserahkan ke fungsi halaman ini sendiri, supaya penilaian
+   validasi memakai skema, visibleWhen, dan skip-state yang sama persis dengan
+   yang dipakai untuk merender jawaban.
+
+   canSee menyaring variabel di luar jatah viewer: jawabannya sudah disamarkan
+   server, jadi menilainya pasti keliru — dan labelnya pun tidak boleh bocor
+   lewat daftar temuan. */
+const DV_HELPERS={
+  evalVisible,computePageSkipState,computeRosterRowSkipState,
+  getRosterCount,rosterRowPrefix,txt,
+  canSee:name=>!VISIBLE_FIELDS||VISIBLE_FIELDS.has(name),
+};
+let DV_ISSUES=new Map();  // kunci jawaban → temuan, dibaca renderNode
+
 function renderPage(){
   const answers=EDIT_MODE?editedAnswers:parseAnswers(RESP.answers);
   const meta=parseAnswers(RESP.meta);
@@ -398,9 +476,25 @@ function renderPage(){
   // Sidebar — hanya halaman yang benar-benar dilalui responden
   if(visited.length>1){
     document.getElementById("sidebar").hidden=false;
+    // Tombol menu hanya berguna kalau memang ada lebih dari satu halaman;
+    // CSS yang memutuskan tampil/tidaknya menurut lebar layar.
+    document.getElementById("btnMenu").hidden=false;
     document.getElementById("pgList").innerHTML=visited.map(i=>
       `<div class="pg-item${i===CUR_PG?" active":""}" onclick="goPage(${i})">${esc(txt(pages[i].title)||pages[i].name||"Hal "+(i+1))}</div>`
     ).join("");
+  }
+
+  // Draf maupun jawaban terkirim sama-sama diperiksa: aturan validasi di
+  // kuesioner bisa berubah setelah jawaban dikirim, sehingga jawaban yang dulu
+  // lolos bisa melanggar aturan yang berlaku sekarang. Dihitung sebelum kartu
+  // meta (yang memuat tombolnya) dan sebelum body (renderNode membaca DV_ISSUES
+  // untuk menandai field yang bermasalah).
+  let dvBtn="";
+  DV_ISSUES=new Map();
+  if(pages.length&&window.ResponseValidation){
+    const found=ResponseValidation.collect(SCHEMA,answers,{...DV_HELPERS,visitedPages:visited});
+    DV_ISSUES=ResponseValidation.indexByKey(found);
+    dvBtn=ResponseValidation.prepare(found,SCHEMA,DV_HELPERS);
   }
 
   const who=meta.name?`<span class="meta-who">${esc(meta.name)}</span>`:""
@@ -408,7 +502,7 @@ function renderPage(){
   const timeStr=formatDate(RESP.submittedAt);
   const metaCard=`<div class="meta-card">
     <span class="st-badge ${RESP.status==="draft"?"st-draft":"st-submitted"}">${RESP.status==="draft"?"Draf":"Terkirim"}</span>
-    ${who}${email}<span class="meta-time">${timeStr}</span>
+    ${who}${email}<span class="meta-time">${timeStr}</span>${dvBtn}
   </div>`;
 
   let body="";
@@ -472,9 +566,30 @@ async function resolveEditOptions(){
 
 function goPage(idx){
   if(EDIT_MODE)collectCurrentPageAnswers();
+  toggleNav(false);  // tutup laci kalau halaman dipilih dari daftar
   CUR_PG=idx;
   renderPage();
 }
+
+/* ---- laci daftar halaman (layar HP) ----
+   Di desktop sidebar selalu tampil dan tombol menunya disembunyikan CSS, jadi
+   fungsi ini hanya berdampak di layar sempit. */
+function toggleNav(open){
+  const sb=document.getElementById("sidebar"),bd=document.getElementById("navBackdrop");
+  if(!sb||sb.hidden)return;
+  if(open===undefined)open=!sb.classList.contains("open");
+  sb.classList.toggle("open",open);
+  bd.classList.toggle("open",open);
+  const btn=document.getElementById("btnMenu");
+  if(btn)btn.setAttribute("aria-expanded",open?"true":"false");
+  if(open){
+    const aktif=sb.querySelector(".pg-item.active")||sb.querySelector(".pg-item");
+    if(aktif)aktif.scrollIntoView({block:"nearest"});
+  }else if(btn&&!btn.hidden){
+    btn.focus({preventScroll:true});
+  }
+}
+document.addEventListener("keydown",e=>{if(e.key==="Escape")toggleNav(false);});
 
 /* ---- render nodes (read + edit mode) ---- */
 function renderNodes(comps,answers,rp,hiddenNames){
@@ -489,7 +604,10 @@ function renderNode(c,answers,rp,hiddenNames){
   if(c.kind==="section")
     return`<div class="rv-section">${c.title?`<div class="rv-section-title">${esc(rowInterp(txt(c.title),answers,rp))}</div>`:""}${renderNodes(c.components||[],answers,rp,hiddenNames)}</div>`;
   if(c.kind==="roster")return renderRoster(c,answers,rp);
-  return EDIT_MODE?renderEditField(c,answers,rp):renderReadField(c,answers,rp);
+  const html=EDIT_MODE?renderEditField(c,answers,rp):renderReadField(c,answers,rp);
+  // Satu-satunya titik yang dilewati semua jenis field, jadi penandaan temuan
+  // validasi cukup dipasang di sini.
+  return DV_ISSUES.size?ResponseValidation.wrapField(html,DV_ISSUES.get(rp+c.name)):html;
 }
 
 /* ---- expression engine (untuk evalVisible visibleWhen) ---- */
