@@ -69,6 +69,10 @@ services:
       WEB_DIR: /app/web
       PUBLIC_DIR: /app/public
 
+      # Identitas instansi yang tampil di halaman
+      ORGANISATION_NAME: ${ORGANISATION_NAME:-BPS Provinsi Kalimantan Timur}
+      ORGANISATION_NICKNAME: ${ORGANISATION_NICKNAME:-BPS Kaltim}
+
       # Superadmin awal (hanya dibuat jika tabel users masih kosong)
       SUPERADMIN_USERNAME: ${SUPERADMIN_USERNAME:-admin}
       SUPERADMIN_EMAIL: ${SUPERADMIN_EMAIL:-admin@bps.go.id}

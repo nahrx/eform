@@ -199,6 +199,12 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("HEAD /uploads/", s.uploadFileOnly)
 
 	// halaman depan publik: sajikan folder PublicDir (index.html di "/").
+	// Pola "GET /{$}" hanya cocok untuk "/" persis, sehingga index.html bisa
+	// lewat serveHTML (placeholder identitas instansi terisi) sementara aset
+	// lain di PublicDir tetap ditangani FileServer.
+	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+		s.serveHTML(w, r, filepath.Join(s.cfg.PublicDir, "index.html"))
+	})
 	// Pola "GET /" bersifat catch-all; rute lebih spesifik di atas tetap menang.
 	fileServer := http.FileServer(http.Dir(s.cfg.PublicDir))
 	mux.Handle("GET /", fileServer)
@@ -208,7 +214,14 @@ func (s *Server) Routes() http.Handler {
 
 func (s *Server) page(name string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, filepath.Join(s.cfg.WebDir, name))
+		path := filepath.Join(s.cfg.WebDir, name)
+		// Berkas HTML lewat serveHTML supaya placeholder identitas instansi
+		// terisi; aset lain (CSS/JS) tidak memuat placeholder apa pun.
+		if strings.HasSuffix(name, ".html") {
+			s.serveHTML(w, r, path)
+			return
+		}
+		http.ServeFile(w, r, path)
 	}
 }
 

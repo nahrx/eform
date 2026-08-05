@@ -14,20 +14,27 @@ import (
 )
 
 type Config struct {
-	Port                 string
-	DatabaseURL          string
-	JWTSecret            []byte
-	JWTRespondentSecret  []byte
-	JWTTTL               time.Duration
-	CORSOrigins          []string
+	Port                string
+	DatabaseURL         string
+	JWTSecret           []byte
+	JWTRespondentSecret []byte
+	JWTTTL              time.Duration
+	CORSOrigins         []string
 	// TrustedProxies: IP/CIDR reverse proxy yang boleh dipercaya header X-Forwarded-For-nya.
 	TrustedProxies []string
 	// LogRetentionDays: umur maksimum baris activity_logs & api_access_logs.
 	LogRetentionDays int
-	PublicBaseURL string // dipakai untuk membentuk URL share, mis. https://eform.bpskaltim.go.id
-	WebDir        string // folder berisi login.html, admin.html, public.html, builder.html
-	PublicDir     string // folder berisi landing page publik (index.html), disajikan di "/"
-	Seed          SeedConfig
+	PublicBaseURL    string // dipakai untuk membentuk URL share, mis. https://eform.bpskaltim.go.id
+	WebDir           string // folder berisi login.html, admin.html, public.html, builder.html
+	PublicDir        string // folder berisi landing page publik (index.html), disajikan di "/"
+
+	// Identitas instansi yang tampil di halaman. Nilainya disuntikkan ke berkas
+	// HTML saat disajikan (lihat httpapi/pages.go), sehingga instansi lain bisa
+	// memakai aplikasi ini tanpa menyunting satu berkas pun.
+	OrganisationName     string // nama lengkap, mis. "BPS Provinsi Kalimantan Timur"
+	OrganisationNickname string // nama pendek untuk judul tab, mis. "BPS Kaltim"
+
+	Seed SeedConfig
 
 	// Google OAuth (untuk responden publik)
 	GoogleClientID     string
@@ -54,11 +61,16 @@ func Load() *Config {
 	loadDotEnv(env("ENV_FILE", ".env"))
 
 	c := &Config{
-		Port:        env("PORT", "8080"),
-		DatabaseURL: resolveDBURL(),
+		Port:          env("PORT", "8080"),
+		DatabaseURL:   resolveDBURL(),
 		PublicBaseURL: strings.TrimRight(env("PUBLIC_BASE_URL", "http://localhost:8080"), "/"),
 		WebDir:        env("WEB_DIR", "web"),
 		PublicDir:     env("PUBLIC_DIR", "public"),
+		// Default sengaja diisi nilai yang selama ini tertulis di HTML, supaya
+		// pemasangan yang sudah berjalan tidak berubah tampilannya saat env
+		// belum disetel.
+		OrganisationName:     env("ORGANISATION_NAME", "BPS Provinsi Kalimantan Timur"),
+		OrganisationNickname: env("ORGANISATION_NICKNAME", "BPS Kaltim"),
 		Seed: SeedConfig{
 			Username: env("SUPERADMIN_USERNAME", "admin"),
 			Email:    env("SUPERADMIN_EMAIL", "admin@bps.go.id"),
@@ -134,7 +146,7 @@ func resolveDBURL() string {
 	user := env("POSTGRES_USER", "postgres")
 	pass := env("POSTGRES_PASSWORD", "postgres")
 	name := env("POSTGRES_DB", "eform")
-	ssl  := env("POSTGRES_SSLMODE", "disable")
+	ssl := env("POSTGRES_SSLMODE", "disable")
 	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s", user, pass, host, port, name, ssl)
 }
 

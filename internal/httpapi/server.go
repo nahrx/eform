@@ -18,6 +18,8 @@ type Server struct {
 	cfg  *config.Config
 	st   *store.Store
 	auth *auth.Manager
+	// pages menyimpan HTML yang placeholder instansinya sudah diganti (pages.go)
+	pages pageCache
 }
 
 func New(cfg *config.Config, st *store.Store, am *auth.Manager) *Server {

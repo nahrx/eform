@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>eForm · BPS Provinsi Kalimantan Timur</title>
+<title>eForm · {{ORG_NAME}}</title>
 <style>
   :root{--accent:#0e7490;--accent2:#155e75;--ink:#0f172a;--line:#e2e8f0;--muted:#64748b}
   *{box-sizing:border-box} body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--ink);background:#f8fafc}
@@ -26,12 +26,11 @@
   .open input{flex:1;min-width:200px;padding:11px 12px;border:1px solid var(--line);border-radius:9px;font-size:14px}
   .open input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(14,116,144,.15)}
   .open button{padding:11px 18px;background:var(--accent);color:#fff;border:none;border-radius:9px;font-weight:700;cursor:pointer}
-  footer{text-align:center;color:var(--muted);font-size:12.5px;padding:30px 20px 40px}
 </style>
 </head>
 <body>
   <section class="hero">
-    <span class="badge">BPS Provinsi Kalimantan Timur</span>
+    <span class="badge">{{ORG_NAME}}</span>
     <h1>eForm · Builder</h1>
     <p>Platform penyusun dan distribusi kuesioner digital — rancang instrumen secara drag-and-drop, publikasikan, dan bagikan ke responden lewat tautan.</p>
     <div class="cta">
@@ -58,10 +57,7 @@
     </div>
   </div>
 
-  <footer>© <span id="yr"></span> Badan Pusat Statistik Provinsi Kalimantan Timur · Bidang Pengolahan & Teknologi Informasi</footer>
-
 <script>
-  document.getElementById("yr").textContent=new Date().getFullYear();
   document.getElementById("go").addEventListener("click",function(){
     var v=document.getElementById("tok").value.trim();
     if(!v)return;
