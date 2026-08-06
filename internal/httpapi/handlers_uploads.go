@@ -21,7 +21,7 @@ func (s *Server) publicUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !sh.AllowResponses {
-		writeErr(w, http.StatusForbidden, "tautan ini tidak menerima upload")
+		writeErr(w, http.StatusForbidden, "this link does not accept uploads")
 		return
 	}
 	rc := respondentFrom(r.Context())
@@ -29,18 +29,18 @@ func (s *Server) publicUpload(w http.ResponseWriter, r *http.Request) {
 	if sh.AccessMode == "restricted" {
 		allowed, err := s.st.IsEmailAllowed(r.Context(), sh.ID, rc.Email)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, "kesalahan server")
+			writeErr(w, http.StatusInternalServerError, "server error")
 			return
 		}
 		if !allowed {
-			writeErr(w, http.StatusForbidden, "email Anda tidak terdaftar dalam daftar akses kuesioner ini")
+			writeErr(w, http.StatusForbidden, "your email is not on the access list for this form")
 			return
 		}
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, maxPublicUploadSize+1024)
 	if err := r.ParseMultipartForm(maxPublicUploadSize); err != nil {
-		writeErr(w, http.StatusBadRequest, "ukuran file terlalu besar atau format upload salah")
+		writeErr(w, http.StatusBadRequest, "file is too large or the upload format is invalid")
 		return
 	}
 
@@ -51,35 +51,35 @@ func (s *Server) publicUpload(w http.ResponseWriter, r *http.Request) {
 
 	src, header, err := r.FormFile("file")
 	if err != nil {
-		writeErr(w, http.StatusBadRequest, "file upload tidak ditemukan")
+		writeErr(w, http.StatusBadRequest, "uploaded file not found")
 		return
 	}
 	defer src.Close()
 
 	data, err := io.ReadAll(io.LimitReader(src, maxPublicUploadSize+1))
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal membaca file")
+		writeErr(w, http.StatusInternalServerError, "failed to read file")
 		return
 	}
 	if len(data) == 0 {
-		writeErr(w, http.StatusBadRequest, "file kosong")
+		writeErr(w, http.StatusBadRequest, "empty file")
 		return
 	}
 	if len(data) > maxPublicUploadSize {
-		writeErr(w, http.StatusBadRequest, "ukuran file maksimal 10 MB")
+		writeErr(w, http.StatusBadRequest, "maximum file size is 10 MB")
 		return
 	}
 
 	contentType := http.DetectContentType(data)
 	if (fieldType == "photo" || fieldType == "signature") && !strings.HasPrefix(contentType, "image/") {
-		writeErr(w, http.StatusBadRequest, "file harus berupa gambar")
+		writeErr(w, http.StatusBadRequest, "the file must be an image")
 		return
 	}
 
 	relDir := filepath.ToSlash(filepath.Join("uploads", time.Now().Format("2006/01/02"), rc.RespondentID))
 	absDir := filepath.Join(s.cfg.PublicDir, filepath.FromSlash(relDir))
 	if err := os.MkdirAll(absDir, 0o755); err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal menyiapkan folder upload")
+		writeErr(w, http.StatusInternalServerError, "failed to prepare the upload folder")
 		return
 	}
 
@@ -87,7 +87,7 @@ func (s *Server) publicUpload(w http.ResponseWriter, r *http.Request) {
 	relPath := "/" + strings.TrimLeft(filepath.ToSlash(filepath.Join(relDir, filename)), "/")
 	absPath := filepath.Join(s.cfg.PublicDir, filepath.FromSlash(strings.TrimPrefix(relPath, "/")))
 	if err := os.WriteFile(absPath, data, 0o644); err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal menyimpan file")
+		writeErr(w, http.StatusInternalServerError, "failed to save file")
 		return
 	}
 

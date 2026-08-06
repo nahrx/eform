@@ -1,13 +1,13 @@
-// cmd/seeder/main.go — CLI untuk memasukkan data wilayah dari CSV ke database.
+// cmd/seeder/main.go — CLI that loads region data from a CSV into the database.
 //
 // Penggunaan:
 //
 //	go run ./cmd/seeder -file data/wilayah_indonesia.csv
 //
 // Idempoten: INSERT ... ON CONFLICT (kode_wilayah) DO NOTHING,
-// sehingga aman dijalankan ulang tanpa duplikasi data.
-// Jika kode_parent tidak ditemukan (data tidak konsisten), baris tetap
-// dimasukkan dengan kode_parent = NULL dan dicetak sebagai peringatan.
+// so it is safe to re-run without duplicating data.
+// When kode_parent is missing (inconsistent data), the row is still inserted
+// with kode_parent = NULL and reported as a warning.
 package main
 
 import (
@@ -36,10 +36,10 @@ const sqlInsertNoParent = `INSERT INTO wilayah (kode_wilayah, nama_wilayah, leve
                            VALUES ($1, $2, $3) ON CONFLICT (kode_wilayah) DO NOTHING`
 
 type wilayahRow struct {
-	kode   string
-	nama   string
+	code   string
+	name   string
 	level  string
-	parent any // nil untuk provinsi, string untuk level di bawahnya
+	parent any // nil for provinces, string for the levels below
 }
 
 func main() {
@@ -51,7 +51,7 @@ func main() {
 
 	pool, err := db.Connect(ctx, cfg.DatabaseURL)
 	if err != nil {
-		log.Fatalf("koneksi DB gagal: %v", err)
+		log.Fatalf("DB connection failed: %v", err)
 	}
 	defer pool.Close()
 
@@ -59,24 +59,24 @@ func main() {
 	if err != nil {
 		log.Fatalf("baca CSV: %v", err)
 	}
-	log.Printf("CSV dibaca: %d baris ditemukan", len(rows))
+	log.Printf("CSV read: %d rows found", len(rows))
 
-	// Urutkan berdasarkan panjang kode: provinsi(2) → kabupaten/kota(4) → kecamatan(7) → desa(10+)
-	// agar FK kode_parent selalu tersedia sebelum child-nya diinsert.
+	// Urutkan berdasarkan panjang code: provinsi(2) → kabupaten/kota(4) → kecamatan(7) → desa(10+)
+	// so the kode_parent foreign key always exists before its children are inserted.
 	sort.Slice(rows, func(i, j int) bool {
-		return len(rows[i].kode) < len(rows[j].kode)
+		return len(rows[i].code) < len(rows[j].code)
 	})
 
 	inserted, skipped, orphaned := seedWilayah(ctx, pool, rows)
 
-	fmt.Printf("\n✓ Selesai — %d baris baru, %d sudah ada, %d tanpa-parent\n",
+	fmt.Printf("\n✓ Done — %d new rows, %d already present, %d without parent\n",
 		inserted, skipped, orphaned)
 }
 
 func readCSV(path string) ([]wilayahRow, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("buka file %q: %w", path, err)
+		return nil, fmt.Errorf("open file %q: %w", path, err)
 	}
 	defer f.Close()
 
@@ -105,16 +105,16 @@ func readCSV(path string) ([]wilayahRow, error) {
 		}
 		lineNum++
 		if err != nil {
-			return nil, fmt.Errorf("baris %d: %w", lineNum, err)
+			return nil, fmt.Errorf("row %d: %w", lineNum, err)
 		}
 		if len(rec) <= colKode || len(rec) <= colNama || len(rec) <= colLevel {
-			log.Printf("[WARN] baris %d dilewati: kolom tidak lengkap", lineNum)
+			log.Printf("[WARN] row %d skipped: incomplete columns", lineNum)
 			continue
 		}
-		kode  := strings.TrimSpace(rec[colKode])
-		nama  := strings.TrimSpace(rec[colNama])
+		code  := strings.TrimSpace(rec[colKode])
+		name  := strings.TrimSpace(rec[colNama])
 		level := strings.TrimSpace(rec[colLevel])
-		if kode == "" || nama == "" || level == "" {
+		if code == "" || name == "" || level == "" {
 			continue
 		}
 		var parent any
@@ -123,7 +123,7 @@ func readCSV(path string) ([]wilayahRow, error) {
 				parent = p
 			}
 		}
-		rows = append(rows, wilayahRow{kode, nama, level, parent})
+		rows = append(rows, wilayahRow{code, name, level, parent})
 	}
 	return rows, nil
 }
@@ -135,9 +135,9 @@ func colIndex(idx map[string]int, name string, fallback int) int {
 	return fallback
 }
 
-// seedWilayah memasukkan data dalam batch. Jika satu batch gagal (misal FK violation
-// karena data tidak konsisten), setiap baris dalam batch itu di-retry satu per satu.
-// Baris yang masih gagal FK dimasukkan dengan kode_parent = NULL dan dicatat sebagai orphan.
+// seedWilayah inserts rows in batches. If a batch fails (an FK violation from inconsistent
+// data, for instance), every row in that batch is retried individually.
+// Rows that still fail the FK check are inserted with kode_parent = NULL and recorded as orphans.
 func seedWilayah(ctx context.Context, pool *pgxpool.Pool, rows []wilayahRow) (inserted, skipped, orphaned int) {
 	total := len(rows)
 
@@ -153,7 +153,7 @@ func seedWilayah(ctx context.Context, pool *pgxpool.Pool, rows []wilayahRow) (in
 			inserted += ins
 			skipped += skip
 		} else {
-			// Batch gagal → retry satu per satu
+			// Batch failed → retry row by row
 			for _, row := range chunk {
 				ins, orp := insertOne(ctx, pool, row)
 				inserted += ins
@@ -162,17 +162,17 @@ func seedWilayah(ctx context.Context, pool *pgxpool.Pool, rows []wilayahRow) (in
 			}
 		}
 
-		log.Printf("progress: %d/%d (%d baru, %d lewati, %d tanpa-parent)",
+		log.Printf("progress: %d/%d (%d new, %d skipped, %d without parent)",
 			end, total, inserted, skipped, orphaned)
 	}
 	return
 }
 
-// tryBatch mencoba memasukkan satu batch sekaligus. Mengembalikan false jika ada error.
+// tryBatch attempts to insert one whole batch. It returns false if anything fails.
 func tryBatch(ctx context.Context, pool *pgxpool.Pool, chunk []wilayahRow) (inserted, skipped int, ok bool) {
 	batch := &pgx.Batch{}
 	for _, row := range chunk {
-		batch.Queue(sqlInsert, row.kode, row.nama, row.level, row.parent)
+		batch.Queue(sqlInsert, row.code, row.name, row.level, row.parent)
 	}
 
 	br := pool.SendBatch(ctx, batch)
@@ -192,26 +192,26 @@ func tryBatch(ctx context.Context, pool *pgxpool.Pool, chunk []wilayahRow) (inse
 	return inserted, skipped, true
 }
 
-// insertOne memasukkan satu baris. Jika FK violation, dicoba lagi tanpa parent.
-// Mengembalikan (inserted=1, orphaned=0) normal, (1,1) orphan, (0,0) sudah ada.
+// insertOne inserts a single row. On an FK violation it retries without the parent.
+// Returns (inserted=1, orphaned=0) normally, (1,1) for an orphan, (0,0) if it already exists.
 func insertOne(ctx context.Context, pool *pgxpool.Pool, row wilayahRow) (inserted, orphaned int) {
-	tag, err := pool.Exec(ctx, sqlInsert, row.kode, row.nama, row.level, row.parent)
+	tag, err := pool.Exec(ctx, sqlInsert, row.code, row.name, row.level, row.parent)
 	if err == nil {
 		if tag.RowsAffected() > 0 {
 			return 1, 0
 		}
-		return 0, 0 // sudah ada (conflict)
+		return 0, 0 // already exists (conflict)
 	}
 
-	// Coba tanpa parent
-	tag, err2 := pool.Exec(ctx, sqlInsertNoParent, row.kode, row.nama, row.level)
+	// Retry without the parent
+	tag, err2 := pool.Exec(ctx, sqlInsertNoParent, row.code, row.name, row.level)
 	if err2 != nil {
-		log.Printf("[WARN] lewati %s (%s): %v", row.kode, row.nama, err2)
+		log.Printf("[WARN] lewati %s (%s): %v", row.code, row.name, err2)
 		return 0, 0
 	}
 	if tag.RowsAffected() > 0 {
-		log.Printf("[WARN] orphan %s (%s): parent %v tidak ditemukan", row.kode, row.nama, row.parent)
+		log.Printf("[WARN] orphan %s (%s): parent %v not found", row.code, row.name, row.parent)
 		return 1, 1
 	}
-	return 0, 0 // sudah ada
+	return 0, 0 // already exists
 }

@@ -15,56 +15,56 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// ResponseFilter parameter untuk filter dan sort daftar jawaban admin.
+// ResponseFilter carries the filter and sort parameters for the admin response list.
 type ResponseFilter struct {
-	Status            string              // 'submitted'|'draft'|'' (kosong = semua)
-	ShareID           string              // uuid string atau '' (kosong = semua)
-	Search            string              // pencarian parsial pada meta.name / meta.email
-	SortBy            string              // 'waktu'|'status'|'share'|'who'|nama_field_schema
+	Status            string              // 'submitted'|'draft'|'' (empty = all)
+	ShareID           string              // uuid string or '' (empty = all)
+	Search            string              // partial search over meta.name / meta.email
+	SortBy            string              // 'waktu'|'status'|'share'|'who'|schema field name
 	SortDir           string              // 'asc'|'desc'
-	FieldFilters      map[string]string   // fieldName â†’ nilai teks (ILIKE, untuk field bebas)
-	FieldExactFilters map[string]string   // fieldName â†’ nilai pasti (=, untuk dropdown/radio/tanggal)
-	FieldAnyFilters   map[string][]string // fieldName â†’ daftar nilai (array berisi salah satu, untuk checkbox/multiselect)
-	FieldRangeFilters map[string][2]string // fieldName â†’ [min,max] (rentang angka; salah satu boleh kosong)
+	FieldFilters      map[string]string   // fieldName → text value (ILIKE, for free-text fields)
+	FieldExactFilters map[string]string   // fieldName → exact value (=, for dropdown/radio/date)
+	FieldAnyFilters   map[string][]string // fieldName → list of values (array contains any of them, for checkbox/multiselect)
+	FieldRangeFilters map[string][2]string // fieldName → [min,max] (numeric range; either bound may be empty)
 }
 
-// Tabel daftar responden yang diizinkan, per jenis pemegang akses. Hanya kedua nilai
-// inilah yang boleh masuk ResponseScope.AllowedTable — lihat ResponseScope.clauses.
+// Allowed-respondent tables, one per kind of access holder. These are the only two
+// values that may reach ResponseScope.AllowedTable — see ResponseScope.clauses.
 const (
 	AllowedTableViewer = "viewer_allowed_respondents"
 	AllowedTableAPIKey = "api_key_allowed_respondents"
 )
 
-// ResponseScope adalah pembatasan data yang dipakai bersama oleh akses viewer dan
-// akses API key: baris mana yang boleh terlihat (responden terpilih & filter nilai
-// variabel) dan kolom mana yang boleh terbaca (VisibleFields).
+// ResponseScope is the data restriction shared by viewer access and API-key access:
+// which rows may be seen (selected respondents & field-value filters) and which
+// columns may be read (VisibleFields).
 //
-// Sengaja satu bentuk untuk keduanya supaya aturan masking dan pembatasan baris tidak
-// bisa lepas sinkron antar jalur akses.
+// Deliberately a single shape for both, so the masking and row-restriction rules
+// cannot drift apart between the two access paths.
 type ResponseScope struct {
 	FormID           string
 	RespondentAccess string // 'all' | 'selected'
-	PermissionID     string // dipakai saat RespondentAccess=='selected'
+	PermissionID     string // used when RespondentAccess=='selected'
 	AllowedTable     string // AllowedTableViewer | AllowedTableAPIKey
 	FieldFilters     map[string]string
-	VisibleFields    []string // nil/kosong = semua kolom jawaban
-	IncludeDrafts    bool     // false = hanya jawaban yang sudah dikirim
+	VisibleFields    []string // nil/empty = every answer column
+	IncludeDrafts    bool     // false = submitted responses only
 }
 
-// clauses menyusun klausa WHERE tambahan dari scope, melanjutkan penomoran argumen
-// yang sudah terpakai.
+// clauses builds the extra WHERE clauses from the scope, continuing the argument
+// numbering already in use.
 func (sc ResponseScope) clauses(args []any) (string, []any) {
 	clause := ""
-	// Jawaban yang belum dikirim ada di dua tempat: tabel response_drafts (dikecualikan
-	// lewat source()) dan baris form_responses yang status-nya masih 'draft'. Keduanya
-	// harus ditutup di sini, bukan lewat filter dari pemanggil — kalau tidak, jalur yang
-	// tidak memakai filter (mis. ekspor CSV) akan ikut membocorkan draft.
+	// Unsubmitted answers live in two places: the response_drafts table (excluded via
+	// source()) and form_responses rows still marked 'draft'. Both must be closed off
+	// here rather than through a caller-supplied filter — otherwise a path that applies
+	// no filter (CSV export, for instance) would leak drafts.
 	if !sc.IncludeDrafts {
 		clause += " AND status='submitted'"
 	}
 	if sc.RespondentAccess == "selected" {
 		if sc.AllowedTable != AllowedTableViewer && sc.AllowedTable != AllowedTableAPIKey {
-			// Jangan pernah menyusun SQL dari nama tabel yang tak dikenal — tutup total.
+			// Never build SQL from an unrecognised table name — deny outright.
 			return " AND false", args
 		}
 		n := len(args) + 1
@@ -76,7 +76,7 @@ func (sc ResponseScope) clauses(args []any) (string, []any) {
 	return clause + permClause, args
 }
 
-// source menyusun sumber baris: jawaban terkirim, ditambah draft bila scope mengizinkan.
+// source builds the row source: submitted responses, plus drafts when the scope allows it.
 // $1 selalu formID.
 func (sc ResponseScope) source() string {
 	base := `SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at
@@ -93,8 +93,8 @@ func (sc ResponseScope) source() string {
 		    WHERE rd.form_id=$1`
 }
 
-// isSafeIdentifier memvalidasi nama field schema agar aman diinterpolasi ke SQL.
-// Hanya huruf, angka, dan underscore diizinkan.
+// isSafeIdentifier validates a schema field name so it is safe to interpolate into SQL.
+// Only letters, digits, and underscores are allowed.
 func isSafeIdentifier(s string) bool {
 	if s == "" || len(s) > 64 {
 		return false
@@ -107,14 +107,14 @@ func isSafeIdentifier(s string) bool {
 	return true
 }
 
-// buildResponseWhere membangun klausa WHERE dan slice args untuk query daftar/count jawaban.
-// args dimulai dari $2 (karena $1 selalu formID).
+// buildResponseWhere builds the WHERE clause and args slice for the response list/count
+// queries. Arguments start at $2, because $1 is always formID.
 func buildResponseWhere(f ResponseFilter) (string, []any) {
 	var args []any
 	where := ""
 	add := func(v any) int {
 		args = append(args, v)
-		return len(args) + 1 // +1 karena $1=formID sudah di luar
+		return len(args) + 1 // +1 because $1=formID sits outside this slice
 	}
 	if f.Status != "" {
 		n := add(f.Status)
@@ -143,8 +143,8 @@ func buildResponseWhere(f ResponseFilter) (string, []any) {
 	for fieldName, vals := range f.FieldAnyFilters {
 		if isSafeIdentifier(fieldName) && len(vals) > 0 {
 			n := add(vals)
-			// answers->'field' berisi array JSON (checkbox/multiselect) — cocok bila
-			// mengandung SALAH SATU dari nilai yang dipilih di filter (semantik OR).
+			// answers->'field' holds a JSON array (checkbox/multiselect) — it matches when it
+			// contains ANY of the values selected in the filter (OR semantics).
 			where += fmt.Sprintf(" AND answers->'%s' ?| $%d::text[]", fieldName, n)
 		}
 	}
@@ -153,17 +153,17 @@ func buildResponseWhere(f ResponseFilter) (string, []any) {
 			continue
 		}
 		minV, maxV := strings.TrimSpace(bounds[0]), strings.TrimSpace(bounds[1])
-		// Validasi angka di sisi Go dulu — nilai ini dikirim sebagai parameter dengan
-		// cast eksplisit ::numeric, jadi kalau bukan angka, query akan error saat
-		// dieksekusi bila tidak disaring lebih dulu di sini.
+		// Validate the number on the Go side first — the value is passed as a parameter
+		// with an explicit ::numeric cast, so a non-numeric value would fail at execution
+		// time unless it is filtered out here.
 		_, minErr := strconv.ParseFloat(minV, 64)
 		_, maxErr := strconv.ParseFloat(maxV, 64)
 		minOk, maxOk := minV != "" && minErr == nil, maxV != "" && maxErr == nil
 		if !minOk && !maxOk {
 			continue
 		}
-		// answers->>'field' bisa berisi teks bukan-angka (jawaban kosong/tak valid) —
-		// pola regex jadi penjaga supaya cast ::numeric tidak pernah gagal di tengah query.
+		// answers->>'field' may hold non-numeric text (empty or invalid answers) — the regex
+		// guard keeps the ::numeric cast from ever failing mid-query.
 		numGuard := fmt.Sprintf("answers->>'%s' ~ '^-?[0-9]+(\\.[0-9]+)?$'", fieldName)
 		if minOk {
 			n := add(minV)
@@ -177,7 +177,7 @@ func buildResponseWhere(f ResponseFilter) (string, []any) {
 	return where, args
 }
 
-var ErrNotFound = errors.New("data tidak ditemukan")
+var ErrNotFound = errors.New("data not found")
 
 type Store struct{ pool *pgxpool.Pool }
 
@@ -255,17 +255,17 @@ func (s *Store) GetUser(ctx context.Context, id string) (*models.User, error) {
 	return u, nil
 }
 
-// AuthSnapshot adalah data seminimal mungkin yang dibutuhkan authMW untuk memutuskan
-// apakah sebuah token masih boleh dipakai.
+// AuthSnapshot is the minimum data authMW needs to decide whether a token may still
+// be used.
 type AuthSnapshot struct {
 	IsActive     bool
 	Role         string
 	TokenVersion int
 }
 
-// GetAuthSnapshot dipanggil di tiap permintaan ber-JWT. Sengaja satu baris lookup
-// lewat primary key supaya penonaktifan akun, penghapusan, penggantian password, dan
-// perubahan role langsung berlaku — bukan menunggu token kedaluwarsa.
+// GetAuthSnapshot runs on every JWT-bearing request. Deliberately a single-row lookup
+// by primary key, so account deactivation, deletion, password changes, and
+// a role change takes effect immediately — rather than waiting for the token to expire.
 func (s *Store) GetAuthSnapshot(ctx context.Context, id string) (*AuthSnapshot, error) {
 	a := &AuthSnapshot{}
 	err := s.pool.QueryRow(ctx,
@@ -277,7 +277,7 @@ func (s *Store) GetAuthSnapshot(ctx context.Context, id string) (*AuthSnapshot, 
 	return a, err
 }
 
-// BumpTokenVersion mencabut seluruh sesi milik satu user.
+// BumpTokenVersion revokes every session belonging to one user.
 func (s *Store) BumpTokenVersion(ctx context.Context, id string) error {
 	_, err := s.pool.Exec(ctx, `UPDATE users SET token_version=token_version+1 WHERE id=$1`, id)
 	return err
@@ -306,9 +306,9 @@ func (s *Store) ListUsers(ctx context.Context) ([]models.User, error) {
 	return out, rows.Err()
 }
 
-// UpdateAdminUser mengupdate username, email, dan role user — hanya untuk admin/superadmin.
-// Perubahan role menaikkan token_version supaya hak pada sesi yang sedang berjalan
-// tidak tertinggal di level lama.
+// UpdateAdminUser updates a user's username, email, and role — admin/superadmin only.
+// A role change bumps token_version so the privileges on in-flight sessions do not
+// linger at the old level.
 func (s *Store) UpdateAdminUser(ctx context.Context, id, username, email, role string) error {
 	var emailArg any
 	if email != "" {
@@ -329,7 +329,7 @@ func (s *Store) UpdateAdminUser(ctx context.Context, id, username, email, role s
 }
 
 // UpdateUserPassword mengupdate password hash user. token_version ikut dinaikkan
-// supaya sesi yang masih memakai password lama langsung terputus.
+// so sessions still using the old password are cut off immediately.
 func (s *Store) UpdateUserPassword(ctx context.Context, id, hash string) error {
 	ct, err := s.pool.Exec(ctx,
 		`UPDATE users SET password_hash=$1, token_version=token_version+1, updated_at=now() WHERE id=$2`,
@@ -374,7 +374,7 @@ func (s *Store) GetForm(ctx context.Context, id string) (*models.Form, error) {
 	return f, err
 }
 
-// SaveFormColumnConfig menyimpan konfigurasi kolom tabel jawaban (dipilih admin/superadmin).
+// SaveFormColumnConfig stores the response-table column configuration chosen by an admin/superadmin.
 func (s *Store) SaveFormColumnConfig(ctx context.Context, formID string, config json.RawMessage) error {
 	ct, err := s.pool.Exec(ctx,
 		`UPDATE forms SET column_config=$2 WHERE id=$1`, formID, config)
@@ -387,14 +387,14 @@ func (s *Store) SaveFormColumnConfig(ctx context.Context, formID string, config 
 	return nil
 }
 
-// ListForms tidak mengembalikan schema (hemat payload untuk daftar).
-// listFormsQuery adalah bentuk baku daftar kuesioner: kolom form + jumlah jawaban
-// terkirim, dihitung sekaligus lewat sub-query.
+// ListForms does not return the schema (keeps the list payload small).
+// listFormsQuery is the canonical form-list shape: the form columns plus a response count
+// submitted, counted in the same sub-query.
 //
-// Jumlah mencakup jawaban terkirim DAN draf — sama seperti angka di halaman kelola
-// kuesioner, supaya kedua halaman tidak menampilkan angka berbeda.
-// Ikut di query ini supaya dashboard tidak perlu memanggil endpoint jumlah satu per
-// satu untuk tiap kuesioner (dulu N+1 permintaan HTTP dari browser).
+// The count covers submitted responses AND drafts — matching the number on the form
+// management page, so the two pages never disagree.
+// It rides along in this query so the dashboard need not call a count endpoint once
+// per form (previously N+1 HTTP requests from the browser).
 const listFormsQuery = `SELECT f.id,f.slug,f.title,f.description,f.status,f.version,f.owner_id,
 	       f.created_at,f.updated_at,
 	       (SELECT count(*) FROM form_responses fr WHERE fr.form_id=f.id)
@@ -423,7 +423,7 @@ func (s *Store) ListForms(ctx context.Context) ([]models.Form, error) {
 	return scanFormRows(rows)
 }
 
-// ListFormsByOwner mengembalikan daftar form milik owner tertentu.
+// ListFormsByOwner returns the forms belonging to a given owner.
 func (s *Store) ListFormsByOwner(ctx context.Context, ownerID string) ([]models.Form, error) {
 	rows, err := s.pool.Query(ctx, listFormsQuery+` WHERE f.owner_id=$1 ORDER BY f.updated_at DESC`, ownerID)
 	if err != nil {
@@ -432,7 +432,7 @@ func (s *Store) ListFormsByOwner(ctx context.Context, ownerID string) ([]models.
 	return scanFormRows(rows)
 }
 
-// ListFormsByEditor mengembalikan daftar form yang ditugaskan ke editor.
+// ListFormsByEditor returns the forms assigned to an editor.
 func (s *Store) ListFormsByEditor(ctx context.Context, editorID string) ([]models.Form, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT f.id,f.slug,f.title,f.description,f.status,f.version,f.owner_id,f.created_at,f.updated_at
@@ -583,7 +583,7 @@ func (s *Store) RevokeShare(ctx context.Context, id string) error {
 	return nil
 }
 
-// ReactivateShare mengaktifkan kembali share yang sebelumnya dicabut.
+// ReactivateShare re-enables a share that was previously revoked.
 func (s *Store) ReactivateShare(ctx context.Context, id string) error {
 	ct, err := s.pool.Exec(ctx, `UPDATE form_shares SET is_active=true WHERE id=$1`, id)
 	if err != nil {
@@ -595,9 +595,9 @@ func (s *Store) ReactivateShare(ctx context.Context, id string) error {
 	return nil
 }
 
-// UpdateShare memperbarui konfigurasi share yang masih aktif.
-// updatePassword=true  â†’ password_hash diubah ke passwordHash (nil berarti hapus password).
-// updateExpiry=true    â†’ expires_at diubah ke expiresAt (nil berarti hapus expiry).
+// UpdateShare updates the configuration of a still-active share.
+// updatePassword=true  → password_hash is set to passwordHash (nil removes the password).
+// updateExpiry=true    → expires_at is set to expiresAt (nil removes the expiry).
 func (s *Store) UpdateShare(ctx context.Context, id, label string, allowResponses, multiResponse bool, accessMode string, updatePassword bool, passwordHash *string, updateExpiry bool, expiresAt *time.Time) (*models.Share, error) {
 	if accessMode != "public" && accessMode != "restricted" {
 		accessMode = "public"
@@ -632,7 +632,7 @@ func (s *Store) IncrementShareView(ctx context.Context, id string) {
 	_, _ = s.pool.Exec(ctx, `UPDATE form_shares SET view_count = view_count + 1 WHERE id=$1`, id)
 }
 
-// DeleteShare menghapus permanen share yang sudah dicabut (is_active=false).
+// DeleteShare permanently removes a share that has already been revoked (is_active=false).
 func (s *Store) DeleteShare(ctx context.Context, id string) error {
 	ct, err := s.pool.Exec(ctx, `DELETE FROM form_shares WHERE id=$1 AND is_active=false`, id)
 	if err != nil {
@@ -675,7 +675,7 @@ func (s *Store) ListShareAllowedEmails(ctx context.Context, shareID string) ([]m
 	return out, rows.Err()
 }
 
-// GetShareAllowedEmailByID mengambil data allowlist email per ID.
+// GetShareAllowedEmailByID fetches one email-allowlist entry by ID.
 func (s *Store) GetShareAllowedEmailByID(ctx context.Context, id string) (*models.ShareAllowedEmail, error) {
 	e := &models.ShareAllowedEmail{}
 	err := s.pool.QueryRow(ctx,
@@ -728,7 +728,7 @@ func (s *Store) CreateResponse(ctx context.Context, formID string, shareID *stri
 	return r, err
 }
 
-// CreateMultiResponseRow menyimpan baris baru di form_responses dengan status tertentu ('submitted' atau 'draft').
+// CreateMultiResponseRow inserts a new form_responses row with a given status ('submitted' or 'draft').
 func (s *Store) CreateMultiResponseRow(ctx context.Context, formID string, shareID *string, respondentID, status string, answers, meta json.RawMessage) (*models.Response, error) {
 	if len(answers) == 0 {
 		answers = json.RawMessage(`{}`)
@@ -746,7 +746,7 @@ func (s *Store) CreateMultiResponseRow(ctx context.Context, formID string, share
 }
 
 // GetResponseByID mengambil satu respons berdasarkan ID-nya.
-// Jika tidak ditemukan di form_responses, cari di response_drafts (draf single-response).
+// If it is not in form_responses, look in response_drafts (the single-response draft).
 func (s *Store) GetResponseByID(ctx context.Context, id string) (*models.Response, error) {
 	r := &models.Response{}
 	err := s.pool.QueryRow(ctx,
@@ -759,8 +759,8 @@ func (s *Store) GetResponseByID(ctx context.Context, id string) (*models.Respons
 		}
 		return r, nil
 	}
-	// Fallback: cari di response_drafts (draf form single-response). response_drafts tidak
-	// punya kolom meta sendiri, jadi email/nama responden diambil dari tabel respondents.
+	// Fallback: look in response_drafts (single-response form drafts). response_drafts has
+	// no meta column of its own, so the respondent's email/name come from the respondents table.
 	err2 := s.pool.QueryRow(ctx,
 		`SELECT rd.id,rd.form_id,rd.share_id,rd.respondent_id,rd.answers,
 		        jsonb_strip_nulls(jsonb_build_object('email',resp.email,'name',resp.name)),rd.saved_at
@@ -778,8 +778,8 @@ func (s *Store) GetResponseByID(ctx context.Context, id string) (*models.Respons
 	return r, nil
 }
 
-// GetFormAnswerColumns mengembalikan semua nama kunci JSONB dari kolom answers untuk satu form.
-// Digunakan untuk membangun header CSV sebelum streaming baris.
+// GetFormAnswerColumns returns every JSONB key present in the answers column for a form.
+// Used to build the CSV header before streaming rows.
 func (s *Store) GetFormAnswerColumns(ctx context.Context, formID string) ([]string, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT DISTINCT jsonb_object_keys(answers)
@@ -805,9 +805,10 @@ func (s *Store) GetFormAnswerColumns(ctx context.Context, formID string) ([]stri
 	return cols, rows.Err()
 }
 
-// GetDistinctFieldValues mengembalikan nilai unik yang benar-benar pernah terisi untuk satu
-// variabel di satu form (dipakai sebagai saran nilai filter saat tambah/kelola akses massal).
-// Nama field dilewatkan sebagai parameter biasa ke operator jsonb ->> sehingga aman dari injeksi.
+// GetDistinctFieldValues returns the distinct values that have actually been recorded for
+// one field of one form (used to suggest filter values in the bulk access dialogs).
+// The field name is passed as an ordinary parameter to the jsonb ->> operator, so it is
+// safe from injection.
 func (s *Store) GetDistinctFieldValues(ctx context.Context, formID, fieldName string) ([]string, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT DISTINCT val FROM (
@@ -833,7 +834,7 @@ func (s *Store) GetDistinctFieldValues(ctx context.Context, formID, fieldName st
 	return vals, rows.Err()
 }
 
-// ForEachResponseByForm memanggil fn untuk setiap respons tanpa batasan jumlah (streaming).
+// ForEachResponseByForm calls fn for every response with no row limit (streaming).
 func (s *Store) ForEachResponseByForm(ctx context.Context, formID string, fn func(models.Response) error) error {
 	q := `SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at FROM (
 		  SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at
@@ -862,13 +863,14 @@ func (s *Store) ForEachResponseByForm(ctx context.Context, formID string, fn fun
 	return rows.Err()
 }
 
-// ListAllResponsesByForm mengembalikan semua respons (form_responses + response_drafts) untuk tampilan admin.
-// Mendukung filter status/shareId/search/per-field dan sort dinamis termasuk field schema.
+// ListAllResponsesByForm returns every response (form_responses + response_drafts) for the
+// admin view. It supports status/shareId/search/per-field filters and dynamic sorting,
+// including by schema field.
 func (s *Store) ListAllResponsesByForm(ctx context.Context, formID string, f ResponseFilter, limit, offset int) ([]models.Response, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 50
 	}
-	// Sort column: cek fixed allowlist dulu, lalu coba sebagai nama field schema
+	// Sort column: check the fixed allowlist first, then try it as a schema field name
 	sortDir := "DESC"
 	if f.SortDir == "asc" {
 		sortDir = "ASC"
@@ -887,7 +889,7 @@ func (s *Store) ListAllResponsesByForm(ctx context.Context, formID string, f Res
 	}
 
 	where, wArgs := buildResponseWhere(f)
-	// args: $1=formID, lalu wArgs sebagai $2â€¦$N, lalu limit=$N+1, offset=$N+2
+	// args: $1=formID, then wArgs as $2…$N, then limit=$N+1, offset=$N+2
 	args := append([]any{formID}, wArgs...)
 	args = append(args, limit, offset)
 	limitN, offsetN := len(args)-1, len(args)
@@ -923,7 +925,7 @@ func (s *Store) ListAllResponsesByForm(ctx context.Context, formID string, f Res
 	return out, rows.Err()
 }
 
-// CountAllResponsesByForm menghitung semua respons (semua status + response_drafts) sesuai filter.
+// CountAllResponsesByForm counts every response (all statuses + response_drafts) matching the filter.
 func (s *Store) CountAllResponsesByForm(ctx context.Context, formID string, f ResponseFilter) (int64, error) {
 	where, wArgs := buildResponseWhere(f)
 	args := append([]any{formID}, wArgs...)
@@ -944,7 +946,7 @@ func (s *Store) CountAllResponsesByForm(ctx context.Context, formID string, f Re
 	return n, err
 }
 
-// HasDraftResponse mengembalikan true jika responden masih memiliki draf aktif untuk form ini.
+// HasDraftResponse reports whether the respondent still has an active draft for this form.
 func (s *Store) HasDraftResponse(ctx context.Context, formID, respondentID string) (bool, error) {
 	var exists bool
 	err := s.pool.QueryRow(ctx,
@@ -954,10 +956,10 @@ func (s *Store) HasDraftResponse(ctx context.Context, formID, respondentID strin
 	return exists, err
 }
 
-// UpdateMultiResponseDraft memperbarui jawaban draf yang ada.
-// newStatus='draft'     â†’ update jawaban saja.
-// newStatus='submitted' â†’ update jawaban + submitted_at=now().
-// Hanya berhasil jika baris masih berstatus 'draft' dan milik respondentID pada formID yang sama.
+// UpdateMultiResponseDraft updates an existing draft response.
+// newStatus='draft'     → update the answers only.
+// newStatus='submitted' → update the answers and set submitted_at=now().
+// Succeeds only if the row is still 'draft' and belongs to respondentID on the same formID.
 func (s *Store) UpdateMultiResponseDraft(ctx context.Context, id, respondentID, formID, newStatus string, answers, meta json.RawMessage) (*models.Response, error) {
 	if len(answers) == 0 {
 		answers = json.RawMessage(`{}`)
@@ -980,8 +982,8 @@ func (s *Store) UpdateMultiResponseDraft(ctx context.Context, id, respondentID, 
 	return r, err
 }
 
-// UnsubmitResponse mengubah status respons dari 'submitted' kembali ke 'draft' sehingga bisa diedit.
-// Gagal jika sudah ada draf lain dari responden yang sama untuk form yang sama.
+// UnsubmitResponse moves a response from 'submitted' back to 'draft' so it can be edited.
+// It fails if the same respondent already has another draft for the same form.
 func (s *Store) UnsubmitResponse(ctx context.Context, id, respondentID, formID string) (*models.Response, error) {
 	var draftExists bool
 	_ = s.pool.QueryRow(ctx,
@@ -989,7 +991,7 @@ func (s *Store) UnsubmitResponse(ctx context.Context, id, respondentID, formID s
 		formID, respondentID, id,
 	).Scan(&draftExists)
 	if draftExists {
-		return nil, errors.New("sudah ada draf lain â€” selesaikan atau batalkan draf tersebut terlebih dahulu")
+		return nil, errors.New("another draft already exists — please finish or discard it first")
 	}
 	r := &models.Response{}
 	err := s.pool.QueryRow(ctx,
@@ -1004,7 +1006,7 @@ func (s *Store) UnsubmitResponse(ctx context.Context, id, respondentID, formID s
 	return r, err
 }
 
-// ListResponsesByFormAndRespondent mengembalikan semua jawaban responden untuk form ini (multi-response).
+// ListResponsesByFormAndRespondent returns all of a respondent's answers for this form (multi-response).
 func (s *Store) ListResponsesByFormAndRespondent(ctx context.Context, formID, respondentID string) ([]models.Response, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at
@@ -1026,8 +1028,8 @@ func (s *Store) ListResponsesByFormAndRespondent(ctx context.Context, formID, re
 	return out, rows.Err()
 }
 
-// UpsertResponse menyimpan jawaban yang terikat ke respondent.
-// Jika sudah ada jawaban untuk (form_id, respondent_id), maka di-update.
+// UpsertResponse stores an answer bound to a respondent.
+// If an answer already exists for (form_id, respondent_id), it is updated.
 func (s *Store) UpsertResponse(ctx context.Context, formID string, shareID *string, respondentID string, answers, meta json.RawMessage) (*models.Response, error) {
 	if len(answers) == 0 {
 		answers = json.RawMessage(`{}`)
@@ -1067,9 +1069,9 @@ func (s *Store) UpsertResponse(ctx context.Context, formID string, shareID *stri
 	return r, err
 }
 
-// GetResponseByFormAndRespondent mengembalikan jawaban responden untuk form ini (single-response).
-// Menyertakan status 'draft' agar respons yang baru dibatalkan pengirimannya (unsubmit)
-// tetap bisa dimuat kembali untuk diedit.
+// GetResponseByFormAndRespondent returns a respondent's answer for this form (single-response).
+// It includes 'draft' status so a response that was just unsubmitted can still be loaded
+// again for editing.
 func (s *Store) GetResponseByFormAndRespondent(ctx context.Context, formID, respondentID string) (*models.Response, error) {
 	r := &models.Response{}
 	err := s.pool.QueryRow(ctx,
@@ -1085,7 +1087,7 @@ func (s *Store) GetResponseByFormAndRespondent(ctx context.Context, formID, resp
 	return r, err
 }
 
-// UpsertRespondent membuat atau memperbarui data responden berdasarkan google_id.
+// UpsertRespondent creates or updates a respondent record keyed by google_id.
 func (s *Store) UpsertRespondent(ctx context.Context, googleID, email, name, picture string) (*models.Respondent, error) {
 	r := &models.Respondent{}
 	err := s.pool.QueryRow(ctx,
@@ -1166,7 +1168,7 @@ func (s *Store) DeleteDraft(ctx context.Context, formID, respondentID string) er
 	return err
 }
 
-// GetUserByEmail mencari user berdasarkan alamat email (dipakai untuk Google OAuth viewer).
+// GetUserByEmail looks a user up by email address (used for viewer Google OAuth).
 func (s *Store) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
 	u := &models.User{}
 	var em *string
@@ -1188,7 +1190,7 @@ func (s *Store) GetUserByEmail(ctx context.Context, email string) (*models.User,
 
 /* ---------------- viewers ---------------- */
 
-// UpdateUserNote mengupdate kolom catatan (note) pada user viewer/editor.
+// UpdateUserNote updates the note column on a viewer/editor user.
 func (s *Store) UpdateUserNote(ctx context.Context, id, note string) error {
 	ct, err := s.pool.Exec(ctx,
 		`UPDATE users SET note=$1, updated_at=now() WHERE id=$2`,
@@ -1202,7 +1204,7 @@ func (s *Store) UpdateUserNote(ctx context.Context, id, note string) error {
 	return nil
 }
 
-// UpdateUserLanguage menyimpan preferensi bahasa UI (builder/dashboard) milik akun sendiri.
+// UpdateUserLanguage stores the account's own UI language preference (builder/dashboard).
 func (s *Store) UpdateUserLanguage(ctx context.Context, id, lang string) error {
 	ct, err := s.pool.Exec(ctx,
 		`UPDATE users SET preferred_language=$1, updated_at=now() WHERE id=$2`,
@@ -1216,7 +1218,7 @@ func (s *Store) UpdateUserLanguage(ctx context.Context, id, lang string) error {
 	return nil
 }
 
-// DeleteAdminUser menghapus user admin/superadmin — tidak bisa hapus viewer/editor.
+// DeleteAdminUser deletes an admin/superadmin user — it cannot delete viewers/editors.
 func (s *Store) DeleteAdminUser(ctx context.Context, id string) error {
 	ct, err := s.pool.Exec(ctx, `DELETE FROM users WHERE id=$1 AND role IN ('admin','superadmin')`, id)
 	if err != nil {
@@ -1228,7 +1230,7 @@ func (s *Store) DeleteAdminUser(ctx context.Context, id string) error {
 	return nil
 }
 
-// DeleteUser menghapus user secara permanen (dimaksudkan untuk viewer).
+// DeleteUser permanently deletes a user (intended for viewers).
 func (s *Store) DeleteUser(ctx context.Context, id string) error {
 	ct, err := s.pool.Exec(ctx, `DELETE FROM users WHERE id=$1`, id)
 	if err != nil {
@@ -1240,7 +1242,8 @@ func (s *Store) DeleteUser(ctx context.Context, id string) error {
 	return nil
 }
 
-// buildPermissionFieldFilter membuat klausa SQL AND untuk membatasi answers berdasarkan field_filters permission.
+// buildPermissionFieldFilter builds the AND clause that restricts answers according to a
+// permission's field_filters.
 // Digunakan di ListViewerResponses, CountViewerResponses, editorListResponses, dll.
 func buildPermissionFieldFilter(filters map[string]string, args []any) (string, []any) {
 	clause := ""
@@ -1268,7 +1271,7 @@ func scanViewerPerm(p *models.ViewerFormPermission, row interface {
 	return nil
 }
 
-// CreateViewerPermission memberikan akses viewer ke satu kuesioner.
+// CreateViewerPermission grants a viewer access to one form.
 func (s *Store) CreateViewerPermission(ctx context.Context, viewerID, formID, respondentAccess string, visibleFields []string, fieldFilters map[string]string, createdBy *string) (*models.ViewerFormPermission, error) {
 	p := &models.ViewerFormPermission{}
 	ffBytes, _ := json.Marshal(fieldFilters)
@@ -1284,7 +1287,7 @@ func (s *Store) CreateViewerPermission(ctx context.Context, viewerID, formID, re
 	return p, err
 }
 
-// GetViewerPermission mengambil permission viewer-form, atau ErrNotFound.
+// GetViewerPermission fetches a viewer-form permission, or ErrNotFound.
 func (s *Store) GetViewerPermission(ctx context.Context, viewerID, formID string) (*models.ViewerFormPermission, error) {
 	p := &models.ViewerFormPermission{}
 	err := scanViewerPerm(p,
@@ -1330,7 +1333,7 @@ func (s *Store) GetViewerAllowedRespondentByID(ctx context.Context, id string) (
 	return ar, err
 }
 
-// ListFormViewerPermissions mengembalikan semua permission viewer untuk satu kuesioner (dengan join username).
+// ListFormViewerPermissions returns every viewer permission for one form (joined with the username).
 func (s *Store) ListFormViewerPermissions(ctx context.Context, formID string) ([]models.ViewerFormPermission, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT p.id, p.viewer_id, p.form_id, p.respondent_access, p.visible_fields,
@@ -1364,7 +1367,7 @@ func (s *Store) ListFormViewerPermissions(ctx context.Context, formID string) ([
 	return out, rows.Err()
 }
 
-// ListViewerForms mengembalikan semua kuesioner yang bisa diakses viewer (dengan join judul form).
+// ListViewerForms returns every form a viewer can access (joined with the form title).
 func (s *Store) ListViewerForms(ctx context.Context, viewerID string) ([]models.ViewerFormPermission, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT p.id, p.viewer_id, p.form_id, p.respondent_access, p.visible_fields,
@@ -1396,7 +1399,7 @@ func (s *Store) ListViewerForms(ctx context.Context, viewerID string) ([]models.
 	return out, rows.Err()
 }
 
-// UpdateViewerPermission memperbarui respondent_access, visible_fields, dan field_filters.
+// UpdateViewerPermission updates respondent_access, visible_fields, and field_filters.
 func (s *Store) UpdateViewerPermission(ctx context.Context, permID, respondentAccess string, visibleFields []string, fieldFilters map[string]string) (*models.ViewerFormPermission, error) {
 	p := &models.ViewerFormPermission{}
 	ffBytes, _ := json.Marshal(fieldFilters)
@@ -1415,7 +1418,7 @@ func (s *Store) UpdateViewerPermission(ctx context.Context, permID, respondentAc
 	return p, err
 }
 
-// DeleteViewerPermission mencabut akses viewer ke kuesioner.
+// DeleteViewerPermission revokes a viewer's access to a form.
 func (s *Store) DeleteViewerPermission(ctx context.Context, permID string) error {
 	ct, err := s.pool.Exec(ctx, `DELETE FROM viewer_form_permissions WHERE id=$1`, permID)
 	if err != nil {
@@ -1427,7 +1430,7 @@ func (s *Store) DeleteViewerPermission(ctx context.Context, permID string) error
 	return nil
 }
 
-// AddViewerAllowedRespondent menambahkan satu responden ke daftar yang diizinkan.
+// AddViewerAllowedRespondent adds one respondent to the allowed list.
 func (s *Store) AddViewerAllowedRespondent(ctx context.Context, permID, respondentID string) (*models.ViewerAllowedRespondent, error) {
 	ar := &models.ViewerAllowedRespondent{}
 	err := s.pool.QueryRow(ctx,
@@ -1443,7 +1446,7 @@ func (s *Store) AddViewerAllowedRespondent(ctx context.Context, permID, responde
 	return ar, err
 }
 
-// RemoveViewerAllowedRespondent menghapus satu responden dari daftar yang diizinkan.
+// RemoveViewerAllowedRespondent removes one respondent from the allowed list.
 func (s *Store) RemoveViewerAllowedRespondent(ctx context.Context, id string) error {
 	ct, err := s.pool.Exec(ctx, `DELETE FROM viewer_allowed_respondents WHERE id=$1`, id)
 	if err != nil {
@@ -1455,7 +1458,7 @@ func (s *Store) RemoveViewerAllowedRespondent(ctx context.Context, id string) er
 	return nil
 }
 
-// ListViewerAllowedRespondents mengembalikan semua responden yang diizinkan (dengan join email/nama).
+// ListViewerAllowedRespondents returns every allowed respondent (joined with email/name).
 func (s *Store) ListViewerAllowedRespondents(ctx context.Context, permID string) ([]models.ViewerAllowedRespondent, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT ar.id, ar.permission_id, ar.respondent_id, r.email, r.name, ar.created_at
@@ -1481,7 +1484,7 @@ func (s *Store) ListViewerAllowedRespondents(ctx context.Context, permID string)
 	return out, rows.Err()
 }
 
-// ListFormRespondents mengembalikan semua responden yang pernah mengirim jawaban ke kuesioner ini.
+// ListFormRespondents returns every respondent who has ever submitted an answer to this form.
 func (s *Store) ListFormRespondents(ctx context.Context, formID string) ([]models.Respondent, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT DISTINCT r.id, r.google_id, r.email, r.name, r.picture, r.created_at, r.updated_at
@@ -1507,8 +1510,8 @@ func (s *Store) ListFormRespondents(ctx context.Context, formID string) ([]model
 	return out, rows.Err()
 }
 
-// ListScopedResponses mengembalikan jawaban yang masuk dalam scope, dengan masking
-// VisibleFields. Dipakai jalur viewer dan jalur API key.
+// ListScopedResponses returns the answers that fall inside the scope, with VisibleFields
+// masking applied. Used by both the viewer path and the API-key path.
 func (s *Store) ListScopedResponses(ctx context.Context, sc ResponseScope, f ResponseFilter, limit, offset int) ([]models.Response, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 50
@@ -1563,7 +1566,7 @@ func (s *Store) ListScopedResponses(ctx context.Context, sc ResponseScope, f Res
 	return out, rows.Err()
 }
 
-// CountScopedResponses menghitung jawaban yang masuk dalam scope.
+// CountScopedResponses counts the answers that fall inside the scope.
 func (s *Store) CountScopedResponses(ctx context.Context, sc ResponseScope, f ResponseFilter) (int64, error) {
 	where, wArgs := buildResponseWhere(f)
 	args := append([]any{sc.FormID}, wArgs...)
@@ -1580,8 +1583,8 @@ func (s *Store) CountScopedResponses(ctx context.Context, sc ResponseScope, f Re
 	return n, err
 }
 
-// ForEachScopedResponse men-stream semua jawaban dalam scope (tanpa limit/offset dan
-// tanpa filter query — sama seperti ekspor CSV admin), dengan masking VisibleFields.
+// ForEachScopedResponse streams every answer in scope (no limit/offset and no query
+// filter — just like the admin CSV export), with VisibleFields masking applied.
 func (s *Store) ForEachScopedResponse(ctx context.Context, sc ResponseScope, fn func(models.Response) error) error {
 	args := []any{sc.FormID}
 	scopeClause, args := sc.clauses(args)
@@ -1611,8 +1614,9 @@ func (s *Store) ForEachScopedResponse(ctx context.Context, sc ResponseScope, fn 
 	return rows.Err()
 }
 
-// GetScopedResponseByID mengambil satu jawaban dalam scope. Jawaban di luar scope
-// dilaporkan ErrNotFound, bukan error otorisasi, supaya tidak membocorkan keberadaannya.
+// GetScopedResponseByID fetches one answer within the scope. An answer outside the scope
+// is reported as ErrNotFound rather than an authorisation error, so its existence is not
+// disclosed.
 func (s *Store) GetScopedResponseByID(ctx context.Context, sc ResponseScope, responseID string) (*models.Response, error) {
 	resp, err := s.GetResponseByFormAndID(ctx, sc.FormID, responseID)
 	if err != nil {
@@ -1634,7 +1638,7 @@ func (s *Store) GetScopedResponseByID(ctx context.Context, sc ResponseScope, res
 	return resp, nil
 }
 
-// ViewerScope menyusun ResponseScope dari permission viewer.
+// ViewerScope builds a ResponseScope from a viewer permission.
 func (s *Store) ViewerScope(ctx context.Context, viewerID, formID string) (ResponseScope, error) {
 	perm, err := s.GetViewerPermission(ctx, viewerID, formID)
 	if err != nil {
@@ -1651,8 +1655,8 @@ func (s *Store) ViewerScope(ctx context.Context, viewerID, formID string) (Respo
 	}, nil
 }
 
-// ListViewerResponses mengembalikan jawaban yang boleh dilihat viewer.
-// Jika respondent_access='selected', hanya tampilkan responden dalam daftar yang diizinkan.
+// ListViewerResponses returns the answers a viewer is allowed to see.
+// When respondent_access='selected', only respondents on the allowed list are shown.
 func (s *Store) ListViewerResponses(ctx context.Context, viewerID, formID string, f ResponseFilter, limit, offset int) ([]models.Response, error) {
 	sc, err := s.ViewerScope(ctx, viewerID, formID)
 	if err != nil {
@@ -1661,7 +1665,7 @@ func (s *Store) ListViewerResponses(ctx context.Context, viewerID, formID string
 	return s.ListScopedResponses(ctx, sc, f, limit, offset)
 }
 
-// CountViewerResponses menghitung jawaban yang boleh dilihat viewer.
+// CountViewerResponses counts the answers a viewer is allowed to see.
 func (s *Store) CountViewerResponses(ctx context.Context, viewerID, formID string, f ResponseFilter) (int64, error) {
 	sc, err := s.ViewerScope(ctx, viewerID, formID)
 	if err != nil {
@@ -1670,8 +1674,8 @@ func (s *Store) CountViewerResponses(ctx context.Context, viewerID, formID strin
 	return s.CountScopedResponses(ctx, sc, f)
 }
 
-// ForEachViewerResponse men-stream semua respons yang boleh dilihat viewer.
-// Dipakai untuk ekspor CSV viewer.
+// ForEachViewerResponse streams every response a viewer may see.
+// Used for the viewer CSV export.
 func (s *Store) ForEachViewerResponse(ctx context.Context, viewerID, formID string, fn func(models.Response) error) error {
 	sc, err := s.ViewerScope(ctx, viewerID, formID)
 	if err != nil {
@@ -1680,8 +1684,9 @@ func (s *Store) ForEachViewerResponse(ctx context.Context, viewerID, formID stri
 	return s.ForEachScopedResponse(ctx, sc, fn)
 }
 
-// ForEachEditorResponse men-stream semua respons untuk form yang ditugaskan ke editor (tanpa
-// limit/offset), dibatasi field_filters permission editor. Dipakai untuk ekspor CSV editor.
+// ForEachEditorResponse streams every response for a form assigned to an editor (no
+// limit/offset), restricted by the editor permission's field_filters. Used for the editor
+// CSV export.
 func (s *Store) ForEachEditorResponse(ctx context.Context, editorID, formID string, fn func(models.Response) error) error {
 	perm, err := s.GetEditorPermissionByEditorAndForm(ctx, editorID, formID)
 	if err != nil {
@@ -1728,7 +1733,8 @@ func (s *Store) ForEachEditorResponse(ctx context.Context, editorID, formID stri
 	return rows.Err()
 }
 
-// GetViewerResponseByID mengambil satu respons untuk viewer, dengan masking visibleFields dan cek respondentAccess.
+// GetViewerResponseByID fetches one response for a viewer, applying visibleFields masking
+// and the respondentAccess check.
 func (s *Store) GetViewerResponseByID(ctx context.Context, viewerID, formID, responseID string) (*models.Response, error) {
 	sc, err := s.ViewerScope(ctx, viewerID, formID)
 	if err != nil {
@@ -1737,8 +1743,9 @@ func (s *Store) GetViewerResponseByID(ctx context.Context, viewerID, formID, res
 	return s.GetScopedResponseByID(ctx, sc, responseID)
 }
 
-// GetResponseByFormAndID mengambil satu respons (submitted atau draft) dari form tertentu.
-// Dipakai oleh detail viewer (GetViewerResponseByID) dan editor (GetEditorResponseByID).
+// GetResponseByFormAndID fetches one response (submitted or draft) from a given form.
+// Used by the viewer detail path (GetViewerResponseByID) and the editor one
+// (GetEditorResponseByID).
 func (s *Store) GetResponseByFormAndID(ctx context.Context, formID, responseID string) (*models.Response, error) {
 	r := &models.Response{}
 	err := s.pool.QueryRow(ctx, `
@@ -1760,13 +1767,13 @@ func (s *Store) GetResponseByFormAndID(ctx context.Context, formID, responseID s
 	return r, err
 }
 
-// IsRespondentAllowedForViewer mengecek apakah responden tertentu ada dalam daftar izin viewer.
+// IsRespondentAllowedForViewer reports whether a given respondent is on the viewer's allowed list.
 func (s *Store) IsRespondentAllowedForViewer(ctx context.Context, permID, respondentID string) (bool, error) {
 	return s.isRespondentAllowedIn(ctx, AllowedTableViewer, permID, respondentID)
 }
 
-// isRespondentAllowedIn mengecek keanggotaan responden di salah satu tabel daftar izin.
-// table hanya boleh salah satu konstanta AllowedTable* — selain itu selalu false.
+// isRespondentAllowedIn checks a respondent's membership in one of the allowed-list tables.
+// table must be one of the AllowedTable* constants — anything else always returns false.
 func (s *Store) isRespondentAllowedIn(ctx context.Context, table, permID, respondentID string) (bool, error) {
 	if table != AllowedTableViewer && table != AllowedTableAPIKey {
 		return false, nil
@@ -1779,8 +1786,9 @@ func (s *Store) isRespondentAllowedIn(ctx context.Context, table, permID, respon
 	return exists, err
 }
 
-// UpdateResponseAnswers memperbarui jawaban respons (submitted atau draft) oleh editor.
-// Tabel target ditentukan dari DB (bukan dari klien) untuk mencegah manipulasi status.
+// UpdateResponseAnswers updates a response's answers (submitted or draft) on behalf of an
+// editor. The target table is decided from the database, never from the client, to prevent
+// status tampering.
 func (s *Store) UpdateResponseAnswers(ctx context.Context, formID, responseID string, answers json.RawMessage) error {
 	res, err := s.pool.Exec(ctx,
 		`UPDATE form_responses SET answers=$1 WHERE id=$2 AND form_id=$3`,
@@ -1803,7 +1811,7 @@ func (s *Store) UpdateResponseAnswers(ctx context.Context, formID, responseID st
 	return nil
 }
 
-// DeleteResponseByID menghapus satu jawaban (submitted maupun draft) berdasarkan ID dan formID.
+// DeleteResponseByID deletes one answer (submitted or draft) by ID and formID.
 func (s *Store) DeleteResponseByID(ctx context.Context, formID, responseID string) error {
 	res, err := s.pool.Exec(ctx,
 		`DELETE FROM form_responses WHERE id=$1 AND form_id=$2`,
@@ -1812,7 +1820,7 @@ func (s *Store) DeleteResponseByID(ctx context.Context, formID, responseID strin
 		return err
 	}
 	if res.RowsAffected() == 0 {
-		// Coba di response_drafts
+		// Try response_drafts
 		res2, err2 := s.pool.Exec(ctx,
 			`DELETE FROM response_drafts WHERE id=$1 AND form_id=$2`,
 			responseID, formID)
@@ -1828,7 +1836,7 @@ func (s *Store) DeleteResponseByID(ctx context.Context, formID, responseID strin
 
 /* ---------------- editors ---------------- */
 
-// CreateEditorPermission memberikan akses editor ke satu kuesioner.
+// CreateEditorPermission grants an editor access to one form.
 func (s *Store) CreateEditorPermission(ctx context.Context, editorID, formID, respondentAccess string, fieldFilters map[string]string, createdBy *string) (*models.EditorFormPermission, error) {
 	p := &models.EditorFormPermission{}
 	ffBytes, _ := json.Marshal(fieldFilters)
@@ -1863,7 +1871,7 @@ func (s *Store) GetEditorPermissionByID(ctx context.Context, permID string) (*mo
 }
 
 
-// ListFormEditorPermissions mengembalikan semua editor yang punya akses ke satu kuesioner.
+// ListFormEditorPermissions returns every editor with access to one form.
 func (s *Store) ListFormEditorPermissions(ctx context.Context, formID string) ([]models.EditorFormPermission, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT p.id, p.editor_id, p.form_id, p.respondent_access, p.created_by, p.created_at, u.username,
@@ -1896,7 +1904,7 @@ func (s *Store) ListFormEditorPermissions(ctx context.Context, formID string) ([
 	return out, rows.Err()
 }
 
-// GetEditorPermissionByEditorAndForm mengambil permission editor berdasarkan editorID dan formID.
+// GetEditorPermissionByEditorAndForm fetches an editor permission by editorID and formID.
 func (s *Store) GetEditorPermissionByEditorAndForm(ctx context.Context, editorID, formID string) (*models.EditorFormPermission, error) {
 	p := &models.EditorFormPermission{}
 	var ffRaw json.RawMessage
@@ -1914,7 +1922,7 @@ func (s *Store) GetEditorPermissionByEditorAndForm(ctx context.Context, editorID
 	return p, err
 }
 
-// UpdateEditorPermission memperbarui respondent_access dan field_filters permission editor.
+// UpdateEditorPermission updates an editor permission's respondent_access and field_filters.
 func (s *Store) UpdateEditorPermission(ctx context.Context, permID, respondentAccess string, fieldFilters map[string]string) (*models.EditorFormPermission, error) {
 	p := &models.EditorFormPermission{}
 	ffBytes, _ := json.Marshal(fieldFilters)
@@ -1934,7 +1942,8 @@ func (s *Store) UpdateEditorPermission(ctx context.Context, permID, respondentAc
 	return p, err
 }
 
-// GetEditorResponseByID mengambil satu respons untuk editor, dengan cek respondentAccess dan field_filters permission.
+// GetEditorResponseByID fetches one response for an editor, applying the permission's
+// respondentAccess and field_filters checks.
 func (s *Store) GetEditorResponseByID(ctx context.Context, editorID, formID, responseID string) (*models.Response, error) {
 	perm, err := s.GetEditorPermissionByEditorAndForm(ctx, editorID, formID)
 	if err != nil {
@@ -1969,7 +1978,7 @@ func (s *Store) GetEditorAllowedRespondentByID(ctx context.Context, id string) (
 	return ar, err
 }
 
-// AddEditorAllowedRespondent menambahkan satu responden ke daftar yang diizinkan untuk editor.
+// AddEditorAllowedRespondent adds one respondent to an editor's allowed list.
 func (s *Store) AddEditorAllowedRespondent(ctx context.Context, permID, respondentID string) (*models.EditorAllowedRespondent, error) {
 	ar := &models.EditorAllowedRespondent{}
 	err := s.pool.QueryRow(ctx,
@@ -1985,7 +1994,7 @@ func (s *Store) AddEditorAllowedRespondent(ctx context.Context, permID, responde
 	return ar, err
 }
 
-// RemoveEditorAllowedRespondent menghapus satu responden dari daftar yang diizinkan untuk editor.
+// RemoveEditorAllowedRespondent removes one respondent from an editor's allowed list.
 func (s *Store) RemoveEditorAllowedRespondent(ctx context.Context, id string) error {
 	ct, err := s.pool.Exec(ctx, `DELETE FROM editor_allowed_respondents WHERE id=$1`, id)
 	if err != nil {
@@ -1997,7 +2006,7 @@ func (s *Store) RemoveEditorAllowedRespondent(ctx context.Context, id string) er
 	return nil
 }
 
-// ListEditorAllowedRespondents mengembalikan semua responden yang diizinkan (dengan join email/nama).
+// ListEditorAllowedRespondents returns every allowed respondent (joined with email/name).
 func (s *Store) ListEditorAllowedRespondents(ctx context.Context, permID string) ([]models.EditorAllowedRespondent, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT ar.id, ar.permission_id, ar.respondent_id, r.email, r.name, ar.created_at
@@ -2023,7 +2032,7 @@ func (s *Store) ListEditorAllowedRespondents(ctx context.Context, permID string)
 	return out, rows.Err()
 }
 
-// IsRespondentAllowedForEditor mengecek apakah responden tertentu ada dalam daftar izin editor.
+// IsRespondentAllowedForEditor reports whether a given respondent is on the editor's allowed list.
 func (s *Store) IsRespondentAllowedForEditor(ctx context.Context, permID, respondentID string) (bool, error) {
 	var exists bool
 	err := s.pool.QueryRow(ctx,
@@ -2033,7 +2042,8 @@ func (s *Store) IsRespondentAllowedForEditor(ctx context.Context, permID, respon
 	return exists, err
 }
 
-// ListEditorResponses mengembalikan jawaban yang boleh dikelola editor (dibatasi respondentAccess dan field_filters).
+// ListEditorResponses returns the answers an editor may manage (restricted by respondentAccess
+// and field_filters).
 func (s *Store) ListEditorResponses(ctx context.Context, editorID, formID string, f ResponseFilter, limit, offset int) ([]models.Response, error) {
 	perm, err := s.GetEditorPermissionByEditorAndForm(ctx, editorID, formID)
 	if err != nil {
@@ -2107,7 +2117,7 @@ func (s *Store) ListEditorResponses(ctx context.Context, editorID, formID string
 	return out, rows.Err()
 }
 
-// CountEditorResponses menghitung jawaban yang boleh dikelola editor.
+// CountEditorResponses counts the answers an editor may manage.
 func (s *Store) CountEditorResponses(ctx context.Context, editorID, formID string, f ResponseFilter) (int64, error) {
 	perm, err := s.GetEditorPermissionByEditorAndForm(ctx, editorID, formID)
 	if err != nil {
@@ -2143,7 +2153,7 @@ func (s *Store) CountEditorResponses(ctx context.Context, editorID, formID strin
 	return n, err
 }
 
-// DeleteEditorPermission mencabut akses editor dari kuesioner.
+// DeleteEditorPermission revokes an editor's access to a form.
 func (s *Store) DeleteEditorPermission(ctx context.Context, permID string) error {
 	ct, err := s.pool.Exec(ctx, `DELETE FROM editor_form_permissions WHERE id=$1`, permID)
 	if err != nil {
@@ -2155,7 +2165,7 @@ func (s *Store) DeleteEditorPermission(ctx context.Context, permID string) error
 	return nil
 }
 
-// HasEditorFormPermission mengecek apakah editor punya akses kelola ke form tertentu.
+// HasEditorFormPermission reports whether an editor has management access to a given form.
 func (s *Store) HasEditorFormPermission(ctx context.Context, editorID, formID string) (bool, error) {
 	var exists bool
 	err := s.pool.QueryRow(ctx,
@@ -2165,7 +2175,7 @@ func (s *Store) HasEditorFormPermission(ctx context.Context, editorID, formID st
 	return exists, err
 }
 
-// matchesFieldFilters memeriksa bahwa answers memenuhi semua batasan field_filters (exact match).
+// matchesFieldFilters verifies that the answers satisfy every field_filters restriction (exact match).
 func matchesFieldFilters(answers json.RawMessage, filters map[string]string) bool {
 	if len(filters) == 0 {
 		return true
@@ -2182,7 +2192,7 @@ func matchesFieldFilters(answers json.RawMessage, filters map[string]string) boo
 	return true
 }
 
-// maskAnswers menyaring kunci answers JSONB agar hanya field yang diizinkan terlihat.
+// maskAnswers filters the JSONB answer keys so only permitted fields remain visible.
 func maskAnswers(raw json.RawMessage, visible []string) json.RawMessage {
 	if len(visible) == 0 {
 		return raw
@@ -2207,8 +2217,8 @@ func maskAnswers(raw json.RawMessage, visible []string) json.RawMessage {
 
 /* ---------------- api keys ---------------- */
 
-// apiKeyCols adalah daftar kolom baku untuk SELECT satu API key, urutannya harus sama
-// dengan scanAPIKey.
+// apiKeyCols is the canonical column list for selecting one API key; its order must match
+// scanAPIKey.
 const apiKeyCols = `id,form_id,label,key_prefix,key_hash,respondent_access,visible_fields,
 	field_filters,include_respondent,allowed_ips,rate_limit_per_min,is_active,expires_at,
 	last_used_at,last_used_ip,request_count,created_by,created_at`
@@ -2231,8 +2241,8 @@ func scanAPIKey(k *models.FormAPIKey, row interface{ Scan(...any) error }) error
 	return nil
 }
 
-// CreateAPIKey menyimpan API key baru. keyHash adalah SHA-256 hex dari key aslinya —
-// key aslinya sendiri tidak pernah masuk ke DB.
+// CreateAPIKey stores a new API key. keyHash is the SHA-256 hex digest of the real key —
+// the key itself never reaches the database.
 func (s *Store) CreateAPIKey(ctx context.Context, k *models.FormAPIKey, keyPrefix, keyHash string, createdBy *string) (*models.FormAPIKey, error) {
 	ffBytes, _ := json.Marshal(k.FieldFilters)
 	out := &models.FormAPIKey{}
@@ -2247,7 +2257,7 @@ func (s *Store) CreateAPIKey(ctx context.Context, k *models.FormAPIKey, keyPrefi
 	return out, err
 }
 
-// ListAPIKeysByForm mengembalikan semua API key satu kuesioner beserta jumlah responden terpilih.
+// ListAPIKeysByForm returns every API key for one form, along with its selected-respondent count.
 func (s *Store) ListAPIKeysByForm(ctx context.Context, formID string) ([]models.FormAPIKey, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT `+apiKeyCols+`,
@@ -2292,8 +2302,8 @@ func (s *Store) GetAPIKeyByID(ctx context.Context, id string) (*models.FormAPIKe
 	return k, err
 }
 
-// GetAPIKeyByHash adalah jalur lookup saat autentikasi: key yang dikirim klien di-hash
-// lalu dicari lewat index unik key_hash.
+// GetAPIKeyByHash is the authentication lookup path: the key sent by the client is hashed
+// and then found through the unique key_hash index.
 func (s *Store) GetAPIKeyByHash(ctx context.Context, keyHash string) (*models.FormAPIKey, error) {
 	k := &models.FormAPIKey{}
 	err := scanAPIKey(k, s.pool.QueryRow(ctx, `SELECT `+apiKeyCols+` FROM form_api_keys WHERE key_hash=$1`, keyHash))
@@ -2303,8 +2313,8 @@ func (s *Store) GetAPIKeyByHash(ctx context.Context, keyHash string) (*models.Fo
 	return k, err
 }
 
-// UpdateAPIKey memperbarui label dan seluruh pengaturan cakupan/keamanan satu key.
-// key_hash tidak pernah ikut berubah di sini — itu urusan RotateAPIKey.
+// UpdateAPIKey updates a key's label and all of its scope/security settings.
+// key_hash never changes here — that is RotateAPIKey's job.
 func (s *Store) UpdateAPIKey(ctx context.Context, id string, k *models.FormAPIKey) (*models.FormAPIKey, error) {
 	ffBytes, _ := json.Marshal(k.FieldFilters)
 	out := &models.FormAPIKey{}
@@ -2321,8 +2331,8 @@ func (s *Store) UpdateAPIKey(ctx context.Context, id string, k *models.FormAPIKe
 	return out, err
 }
 
-// RotateAPIKey mengganti kredensial satu key tanpa mengubah cakupannya. Key lama
-// langsung tidak berlaku karena key_hash-nya ditimpa.
+// RotateAPIKey replaces a key's credential without changing its scope. The old key stops
+// working immediately because its key_hash is overwritten.
 func (s *Store) RotateAPIKey(ctx context.Context, id, keyPrefix, keyHash string) (*models.FormAPIKey, error) {
 	out := &models.FormAPIKey{}
 	err := scanAPIKey(out, s.pool.QueryRow(ctx,
@@ -2337,7 +2347,7 @@ func (s *Store) RotateAPIKey(ctx context.Context, id, keyPrefix, keyHash string)
 	return out, err
 }
 
-// DeleteAPIKey menghapus API key beserta daftar respondennya (ON DELETE CASCADE).
+// DeleteAPIKey removes an API key along with its respondent list (ON DELETE CASCADE).
 func (s *Store) DeleteAPIKey(ctx context.Context, id string) error {
 	ct, err := s.pool.Exec(ctx, `DELETE FROM form_api_keys WHERE id=$1`, id)
 	if err != nil {
@@ -2349,8 +2359,8 @@ func (s *Store) DeleteAPIKey(ctx context.Context, id string) error {
 	return nil
 }
 
-// TouchAPIKey mencatat pemakaian terakhir sebuah key. Kegagalan di sini sengaja tidak
-// menggagalkan permintaan — pemanggilnya cukup mengabaikan error.
+// TouchAPIKey records a key's most recent use. A failure here deliberately does not fail
+// the request — the caller simply ignores the error.
 func (s *Store) TouchAPIKey(ctx context.Context, id, ip string) error {
 	_, err := s.pool.Exec(ctx,
 		`UPDATE form_api_keys SET last_used_at=now(), last_used_ip=$2, request_count=request_count+1
@@ -2358,8 +2368,8 @@ func (s *Store) TouchAPIKey(ctx context.Context, id, ip string) error {
 	return err
 }
 
-// APIKeyScope menyusun ResponseScope dari sebuah API key. Draft tidak pernah ikut:
-// API hanya membagikan jawaban yang sudah dikirim.
+// APIKeyScope builds a ResponseScope from an API key. Drafts are never included: the API
+// shares submitted responses only.
 func APIKeyScope(k *models.FormAPIKey) ResponseScope {
 	return ResponseScope{
 		FormID:           k.FormID,
@@ -2372,7 +2382,7 @@ func APIKeyScope(k *models.FormAPIKey) ResponseScope {
 	}
 }
 
-// ListAPIKeyAllowedRespondents mengembalikan responden yang diizinkan (dengan join email/nama).
+// ListAPIKeyAllowedRespondents returns the allowed respondents (joined with email/name).
 func (s *Store) ListAPIKeyAllowedRespondents(ctx context.Context, permID string) ([]models.APIKeyAllowedRespondent, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT ar.id, ar.permission_id, ar.respondent_id, r.email, r.name, ar.created_at
@@ -2398,7 +2408,7 @@ func (s *Store) ListAPIKeyAllowedRespondents(ctx context.Context, permID string)
 	return out, rows.Err()
 }
 
-// AddAPIKeyAllowedRespondent menambahkan satu responden ke daftar yang diizinkan.
+// AddAPIKeyAllowedRespondent adds one respondent to the allowed list.
 func (s *Store) AddAPIKeyAllowedRespondent(ctx context.Context, permID, respondentID string) (*models.APIKeyAllowedRespondent, error) {
 	ar := &models.APIKeyAllowedRespondent{}
 	err := s.pool.QueryRow(ctx,
@@ -2414,7 +2424,7 @@ func (s *Store) AddAPIKeyAllowedRespondent(ctx context.Context, permID, responde
 	return ar, err
 }
 
-// GetAPIKeyAllowedRespondentByID dipakai untuk mengecek kepemilikan sebelum menghapus.
+// GetAPIKeyAllowedRespondentByID is used to verify ownership before deleting.
 func (s *Store) GetAPIKeyAllowedRespondentByID(ctx context.Context, id string) (*models.APIKeyAllowedRespondent, error) {
 	ar := &models.APIKeyAllowedRespondent{}
 	err := s.pool.QueryRow(ctx,
@@ -2426,7 +2436,7 @@ func (s *Store) GetAPIKeyAllowedRespondentByID(ctx context.Context, id string) (
 	return ar, err
 }
 
-// RemoveAPIKeyAllowedRespondent menghapus satu responden dari daftar yang diizinkan.
+// RemoveAPIKeyAllowedRespondent removes one respondent from the allowed list.
 func (s *Store) RemoveAPIKeyAllowedRespondent(ctx context.Context, id string) error {
 	ct, err := s.pool.Exec(ctx, `DELETE FROM api_key_allowed_respondents WHERE id=$1`, id)
 	if err != nil {
@@ -2438,8 +2448,8 @@ func (s *Store) RemoveAPIKeyAllowedRespondent(ctx context.Context, id string) er
 	return nil
 }
 
-// InsertAPIAccessLog mencatat satu panggilan /api/v1. Dipanggil juga untuk permintaan
-// yang ditolak — apiKeyID/formID boleh nil kalau key-nya tidak dikenal.
+// InsertAPIAccessLog records one /api/v1 call. It is also called for rejected requests —
+// apiKeyID/formID may be nil when the key is unknown.
 func (s *Store) InsertAPIAccessLog(ctx context.Context, l *models.APIAccessLog) error {
 	_, err := s.pool.Exec(ctx,
 		`INSERT INTO api_access_logs(api_key_id,key_prefix,form_id,ip,path,query,status,row_count,error)
@@ -2448,7 +2458,7 @@ func (s *Store) InsertAPIAccessLog(ctx context.Context, l *models.APIAccessLog) 
 	return err
 }
 
-// ListAPIAccessLogs mengembalikan riwayat panggilan satu key, terbaru dulu.
+// ListAPIAccessLogs returns one key's call history, newest first.
 func (s *Store) ListAPIAccessLogs(ctx context.Context, apiKeyID string, limit int) ([]models.APIAccessLog, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 100
@@ -2475,11 +2485,11 @@ func (s *Store) ListAPIAccessLogs(ctx context.Context, apiKeyID string, limit in
 	return out, rows.Err()
 }
 
-// PruneLogs menghapus baris log yang lebih tua dari retensi yang ditentukan dan
-// mengembalikan jumlah baris terhapus per tabel.
+// PruneLogs deletes log rows older than the configured retention and returns the number of
+// rows removed per table.
 //
-// Riwayat perubahan jawaban (response_revisions) sengaja TIDAK ikut dipangkas: itu
-// bagian dari provenance data statistik, bukan log operasional.
+// The answer change history (response_revisions) is deliberately NOT pruned: it is part of
+// the statistical data's provenance, not an operational log.
 func (s *Store) PruneLogs(ctx context.Context, days int) (activity, apiAccess int64, err error) {
 	if days <= 0 {
 		return 0, 0, nil
@@ -2499,9 +2509,9 @@ func (s *Store) PruneLogs(ctx context.Context, days int) (activity, apiAccess in
 	return activity, ct.RowsAffected(), nil
 }
 
-/* ---------------- riwayat perubahan jawaban ---------------- */
+/* ---------------- answer change history ---------------- */
 
-// InsertResponseRevision menyimpan satu jejak perubahan jawaban.
+// InsertResponseRevision stores one answer-change record.
 func (s *Store) InsertResponseRevision(ctx context.Context, rev *models.ResponseRevision) error {
 	_, err := s.pool.Exec(ctx,
 		`INSERT INTO response_revisions(response_id,form_id,editor_id,editor_name,answers_before,answers_after,ip)
@@ -2511,8 +2521,8 @@ func (s *Store) InsertResponseRevision(ctx context.Context, rev *models.Response
 	return err
 }
 
-// ListResponseRevisions mengembalikan riwayat perubahan satu jawaban, terbaru dulu.
-// Daftar variabel yang berubah dihitung di sini agar UI tidak perlu membandingkan sendiri.
+// ListResponseRevisions returns one answer's change history, newest first.
+// The list of changed fields is computed here so the UI does not have to diff them itself.
 func (s *Store) ListResponseRevisions(ctx context.Context, responseID string, limit int) ([]models.ResponseRevision, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
@@ -2540,8 +2550,8 @@ func (s *Store) ListResponseRevisions(ctx context.Context, responseID string, li
 	return out, rows.Err()
 }
 
-// ChangedAnswerFields membandingkan dua kumpulan jawaban dan mengembalikan nama variabel
-// yang nilainya berbeda (termasuk yang baru muncul atau hilang).
+// ChangedAnswerFields compares two sets of answers and returns the names of the fields whose
+// values differ (including those newly added or removed).
 func ChangedAnswerFields(before, after json.RawMessage) []string {
 	var a, b map[string]json.RawMessage
 	_ = json.Unmarshal(before, &a)
@@ -2566,8 +2576,8 @@ func ChangedAnswerFields(before, after json.RawMessage) []string {
 
 /* ---------------- activity log ---------------- */
 
-// InsertActivityLog mencatat satu aksi admin. Kegagalan mencatat tidak boleh
-// menggagalkan aksinya — pemanggil cukup mencatat errornya ke stdout.
+// InsertActivityLog records one admin action. A logging failure must not fail the action —
+// the caller simply writes the error to stdout.
 func (s *Store) InsertActivityLog(ctx context.Context, l *models.ActivityLog) error {
 	_, err := s.pool.Exec(ctx,
 		`INSERT INTO activity_logs(actor_id,actor_name,actor_role,action,target_type,target_id,target_label,form_id,ip,detail)
@@ -2576,7 +2586,7 @@ func (s *Store) InsertActivityLog(ctx context.Context, l *models.ActivityLog) er
 	return err
 }
 
-// ListActivityLogs mengembalikan riwayat aksi, terbaru dulu. formID kosong = semua.
+// ListActivityLogs returns the action history, newest first. An empty formID means all forms.
 func (s *Store) ListActivityLogs(ctx context.Context, formID string, limit, offset int) ([]models.ActivityLog, int64, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 100
@@ -2620,12 +2630,12 @@ func (s *Store) ListActivityLogs(ctx context.Context, formID string, limit, offs
 
 /* ---------------- wilayah ---------------- */
 
-// GetWilayahByParent mengembalikan daftar wilayah anak dari kodeParent.
-// Jika kodeParent kosong, mengembalikan semua wilayah tingkat provinsi (kode_parent IS NULL).
-func (s *Store) GetWilayahByParent(ctx context.Context, kodeParent string) ([]models.WilayahItem, error) {
+// GetWilayahByParent returns the child regions of parentCode.
+// When parentCode is empty it returns every province-level region (kode_parent IS NULL).
+func (s *Store) GetWilayahByParent(ctx context.Context, parentCode string) ([]models.WilayahItem, error) {
 	var rows pgx.Rows
 	var err error
-	if kodeParent == "" {
+	if parentCode == "" {
 		rows, err = s.pool.Query(ctx,
 			`SELECT kode_wilayah, nama_wilayah FROM wilayah
 			 WHERE kode_parent IS NULL ORDER BY kode_wilayah`)
@@ -2633,7 +2643,7 @@ func (s *Store) GetWilayahByParent(ctx context.Context, kodeParent string) ([]mo
 		rows, err = s.pool.Query(ctx,
 			`SELECT kode_wilayah, nama_wilayah FROM wilayah
 			 WHERE kode_parent = $1 ORDER BY kode_wilayah`,
-			kodeParent)
+			parentCode)
 	}
 	if err != nil {
 		return nil, err
@@ -2649,7 +2659,7 @@ func (s *Store) GetWilayahByParent(ctx context.Context, kodeParent string) ([]mo
 		items = append(items, it)
 	}
 	if items == nil {
-		items = []models.WilayahItem{} // kembalikan [] bukan null
+		items = []models.WilayahItem{} // return [] rather than null
 	}
 	return items, rows.Err()
 }

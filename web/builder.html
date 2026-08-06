@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="id">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,14 +10,14 @@
 <div class="app">
   <header class="topbar">
     <div class="brand"><div class="mark">eForm<span> · Builder</span></div></div>
-    <input id="instTitle" class="ttl" placeholder="Judul instrumen…" aria-label="Judul instrumen">
+    <input id="instTitle" class="ttl" placeholder="Instrument title…" aria-label="Instrument title">
     <div id="health" class="health ok"><span class="dot"></span><span id="healthTxt">Valid</span></div>
     <div class="actions">
-      <button class="btn ghost" id="btnImport">Impor JSON</button>
-      <button class="btn" id="btnPreview">Lihat Kuesioner</button>
-      <button class="btn ghost" id="btnExport">Ekspor JSON</button>
+      <button class="btn ghost" id="btnImport">Import JSON</button>
+      <button class="btn" id="btnPreview">Preview Form</button>
+      <button class="btn ghost" id="btnExport">Export JSON</button>
       <input type="file" id="fileInput" accept=".json,application/json" hidden>
-      <button class="btn primary" id="btnSave">Simpan</button>
+      <button class="btn primary" id="btnSave">Save</button>
       <div class="topbar-sep"></div>
       <div class="user-menu" id="userMenu">
         <button class="user-btn" id="userBtn">
@@ -33,15 +33,15 @@
           </div>
           <div class="udd-sep"></div>
           <div class="udd-lang">
-            <span class="udd-lang-label">Bahasa</span>
+            <span class="udd-lang-label">Language</span>
             <div class="udd-lang-seg">
               <button type="button" class="udd-lang-opt" data-lang-btn="id">ID</button>
               <button type="button" class="udd-lang-opt" data-lang-btn="en">EN</button>
             </div>
           </div>
           <div class="udd-sep"></div>
-          <a class="udd-item" href="/admin">← Kembali ke Admin</a>
-          <button class="udd-item danger" id="btnLogout">Keluar</button>
+          <a class="udd-item" href="/admin">← Back to Admin</a>
+          <button class="udd-item danger" id="btnLogout">Log out</button>
         </div>
       </div>
     </div>
@@ -51,19 +51,19 @@
     <!-- SIDEBAR 1 — komponen/builder -->
     <aside class="sb" id="sb1">
       <div class="full">
-        <div class="sb-head"><span class="t">Builder · Komponen</span><button class="collapse" id="col1" title="Tutup">‹</button></div>
+        <div class="sb-head"><span class="t">Builder · Components</span><button class="collapse" id="col1" title="Close">‹</button></div>
         <div class="sb-body" id="palette"></div>
       </div>
-      <div class="rail"><button class="collapse" id="exp1" title="Buka">›</button><span class="rlabel">Komponen</span></div>
+      <div class="rail"><button class="collapse" id="exp1" title="Open">›</button><span class="rlabel">Components</span></div>
     </aside>
 
-    <!-- SIDEBAR 2 — halaman/kuesioner -->
+    <!-- SIDEBAR 2 — pages/form -->
     <aside class="sb" id="sb2">
       <div class="full">
-        <div class="sb-head"><span class="t">Kuesioner · Halaman</span><button class="collapse" id="col2" title="Tutup">‹</button></div>
-        <div class="sb-body"><div id="pageList"></div><button class="addpage" id="addPage">+ Tambah halaman</button></div>
+        <div class="sb-head"><span class="t">Form · Pages</span><button class="collapse" id="col2" title="Close">‹</button></div>
+        <div class="sb-body"><div id="pageList"></div><button class="addpage" id="addPage">+ Add page</button></div>
       </div>
-      <div class="rail"><button class="collapse" id="exp2" title="Buka">›</button><span class="rlabel">Halaman</span></div>
+      <div class="rail"><button class="collapse" id="exp2" title="Open">›</button><span class="rlabel">Page</span></div>
     </aside>
 
     <!-- CANVAS -->
@@ -75,8 +75,8 @@
     <!-- INSPECTOR -->
     <aside class="inspector">
       <div class="tabs">
-        <button class="tab on" data-tab="props">Properti</button>
-        <button class="tab" data-tab="json">JSON &amp; Validasi <span class="n" id="tabN" hidden></span></button>
+        <button class="tab on" data-tab="props">Properties</button>
+        <button class="tab" data-tab="json">JSON &amp; Validation <span class="n" id="tabN" hidden></span></button>
       </div>
       <div class="pane" id="paneProps"></div>
       <div class="pane" id="paneJson" hidden></div>
@@ -86,14 +86,14 @@
 
 <div id="preview" class="pv" hidden>
   <div class="pv-bar">
-    <button class="pv-side-tog" id="pvSideTog" title="Daftar halaman">☰</button>
-    <span class="pv-title" id="pvTitle">Kuesioner</span>
+    <button class="pv-side-tog" id="pvSideTog" title="Page list">☰</button>
+    <span class="pv-title" id="pvTitle">Form</span>
     <span class="pv-badge">PREVIEW</span>
-    <select class="pv-modesel" id="pvMode" title="Mode navigasi">
-      <option value="section">Per halaman</option>
+    <select class="pv-modesel" id="pvMode" title="Navigation mode">
+      <option value="section">Per page</option>
       <option value="scroll">Scroll</option>
     </select>
-    <button class="btn" id="pvClose" style="margin-left:auto">Tutup ✕</button>
+    <button class="btn" id="pvClose" style="margin-left:auto">Close ✕</button>
   </div>
   <div id="pvSideBd" class="pv-side-bd"></div>
   <div class="pv-main">

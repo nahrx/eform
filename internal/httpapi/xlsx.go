@@ -8,15 +8,15 @@ import (
 	"strings"
 )
 
-/* Penulis XLSX minimal untuk ekspor jawaban.
+/* A minimal XLSX writer for exporting responses.
 
-   Sengaja ditulis sendiri, bukan memakai pustaka spreadsheet, karena yang dibutuhkan
-   hanya satu lembar berisi teks dan angka — sementara pustaka semacam itu menarik
-   banyak dependensi transitif ke dalam sistem yang memuat data rahasia.
+   Deliberately hand-written rather than using a spreadsheet library, because all that
+   is needed is a single sheet of text and numbers — while such a library would pull a
+   long tail of transitive dependencies into a system that holds confidential data.
 
-   Bentuknya streaming: baris ditulis langsung ke dalam entri zip di response writer,
-   jadi ekspor puluhan ribu jawaban tidak perlu ditampung di memori lebih dulu.
-   Semua teks memakai inlineStr sehingga tidak perlu tabel sharedStrings. */
+   It streams: rows are written straight into a zip entry on the response writer, so
+   exporting tens of thousands of responses never has to be buffered in memory first.
+   All text uses inlineStr, which removes the need for a sharedStrings table. */
 
 type xlsxWriter struct {
 	zw    *zip.Writer
@@ -32,9 +32,9 @@ func newXLSXWriter(w io.Writer, sheetName string) (*xlsxWriter, error) {
 	x := &xlsxWriter{zw: zw}
 
 	if sheetName == "" {
-		sheetName = "Jawaban"
+		sheetName = "Responses"
 	}
-	// Excel menolak beberapa karakter pada nama lembar dan membatasi 31 karakter.
+	// Excel rejects certain characters in sheet names and caps them at 31 characters.
 	sheetName = strings.Map(func(r rune) rune {
 		if strings.ContainsRune(`:\/?*[]`, r) {
 			return '-'
@@ -82,17 +82,17 @@ func newXLSXWriter(w io.Writer, sheetName string) (*xlsxWriter, error) {
 		return nil, err
 	}
 	x.sheet = sheet
-	// <dimension> sengaja tidak ditulis: ukurannya belum diketahui saat streaming,
-	// dan elemen itu memang opsional.
+	// <dimension> is deliberately omitted: the extent is unknown while streaming,
+	// and the element is optional anyway.
 	_, err = io.WriteString(sheet,
 		`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`+
 			`<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>`)
 	return x, err
 }
 
-// numericRe cocok untuk angka yang aman ditulis sebagai bilangan.
-// Angka berawalan nol (mis. kode wilayah "0101") sengaja TIDAK cocok, karena kalau
-// ditulis sebagai bilangan nol depannya hilang dan datanya rusak.
+// numericRe matches numbers that are safe to write as numeric cells.
+// Leading-zero numbers (region codes such as "0101") deliberately do NOT match, because
+// writing them as numbers would drop the leading zero and corrupt the data.
 var numericRe = regexp.MustCompile(`^-?(0|[1-9]\d*)(\.\d+)?$`)
 
 func isSpreadsheetNumber(v string) bool {
@@ -102,8 +102,8 @@ func isSpreadsheetNumber(v string) bool {
 	return numericRe.MatchString(v)
 }
 
-// WriteRow menulis satu baris sel. Nilai yang berbentuk angka ditulis sebagai bilangan
-// agar bisa langsung dijumlahkan di Excel; sisanya ditulis sebagai teks apa adanya.
+// WriteRow writes one row of cells. Numeric-looking values are written as numbers so they
+// can be summed directly in Excel; everything else is written as text, verbatim.
 func (x *xlsxWriter) WriteRow(cells []string) {
 	if x.err != nil {
 		return
@@ -121,7 +121,7 @@ func (x *xlsxWriter) WriteRow(cells []string) {
 			continue
 		}
 		if c == "" {
-			continue // sel kosong tidak perlu ditulis
+			continue // empty cells need not be written
 		}
 		fmt.Fprintf(&b, `<c r="%s" t="inlineStr"><is><t xml:space="preserve">%s</t></is></c>`, ref, xmlEscape(c))
 	}
@@ -141,7 +141,7 @@ func (x *xlsxWriter) Close() error {
 	return x.zw.Close()
 }
 
-// columnName mengubah indeks kolom (0-based) jadi huruf ala Excel: A, B, ... Z, AA, AB, ...
+// columnName turns a 0-based column index into Excel-style letters: A, B, ... Z, AA, AB, ...
 func columnName(i int) string {
 	name := ""
 	for i >= 0 {
@@ -151,9 +151,9 @@ func columnName(i int) string {
 	return name
 }
 
-// xmlEscape membuang karakter kontrol yang tidak sah di XML 1.0 lalu meng-escape
-// karakter yang punya arti khusus. Tanpa pembuangan itu, satu karakter kontrol dalam
-// jawaban bisa membuat seluruh berkas ditolak Excel.
+// xmlEscape strips control characters that are illegal in XML 1.0 and then escapes the
+// characters with special meaning. Without that stripping, a single control character in
+// an answer could make Excel reject the whole file.
 func xmlEscape(s string) string {
 	var b strings.Builder
 	b.Grow(len(s) + 16)
@@ -173,7 +173,7 @@ func xmlEscape(s string) string {
 			b.WriteRune(r)
 		default:
 			if r < 0x20 || (r >= 0xD800 && r <= 0xDFFF) || r == 0xFFFE || r == 0xFFFF {
-				continue // tidak sah di XML 1.0 — buang
+				continue // illegal in XML 1.0 — drop it
 			}
 			b.WriteRune(r)
 		}

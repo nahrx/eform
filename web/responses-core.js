@@ -1,21 +1,21 @@
-/* Logika bersama ketiga halaman daftar jawaban:
+/* Logic shared by the three response-list pages:
    responses.html (admin), viewer-responses.html, editor-responses.html.
 
-   Sebelumnya kedelapan fungsi di bawah disalin di tiap halaman dan sudah mulai
-   menyimpang satu sama lain — mis. hanya dua halaman yang menangani waktu kosong
-   ("0001-01-01"), dan hanya halaman admin yang menerjemahkan kode wilayah jadi nama
-   pada ringkasan filter. Versi di sini adalah gabungan perilaku terbaik dari ketiganya.
+   These functions used to be copy-pasted into each page and had already started to
+   drift apart — only two pages handled the empty timestamp ("0001-01-01"), and only
+   the admin page translated region codes into names in the filter summary. What is
+   here is the best behaviour of all three, merged.
 
-   Berkas ini dimuat sebagai skrip klasik SEBELUM skrip inline tiap halaman, dan
-   membaca beberapa variabel global milik halaman (SCHEMA, SEL_COLS, ALL_FIELDS,
-   FIELD_*_FILTERS, dst.). Karena hanya dibaca saat fungsi dipanggil — bukan saat
-   dimuat — halaman tetap bebas mendeklarasikannya dengan let/const.
+   This file loads as a classic script BEFORE each page's inline script, and reads a
+   few of the page's global variables (SCHEMA, SEL_COLS, ALL_FIELDS, FIELD_*_FILTERS,
+   and so on). Because they are only read when a function runs — not at load time —
+   each page is still free to declare them with let/const.
 
-   Kait opsional yang dikenali:
-     canFieldFilter()         → kembalikan false untuk menyembunyikan filter per
-                                variabel; dipakai halaman admin yang baru tahu rolenya
-                                setelah /api/auth/me selesai (default: boleh)
-     FILTER_SHARE + SHARE_MAP → hanya ada di halaman admin */
+   Optional hooks that are recognised:
+     canFieldFilter()         → return false to hide the per-field filters; used by
+                                the admin page, which only learns its role
+                                once /api/auth/me has finished (default: allowed)
+     FILTER_SHARE + SHARE_MAP → only present on the admin page */
 
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const txt = v => v == null ? "" : (typeof v === "object" ? (v.id || Object.values(v)[0] || "") : String(v));
@@ -27,8 +27,8 @@ function parseAnswers(raw) {
   try { return JSON.parse(raw) || {}; } catch { return {}; }
 }
 
-// Waktu kosong dari Go dikirim sebagai "0001-01-01T00:00:00Z" — tampilkan sebagai
-// "—", bukan "01 Jan 1".
+// Go sends an empty timestamp as "0001-01-01T00:00:00Z" — render it as
+// "—" rather than "01 Jan 1".
 function formatDate(iso) {
   if (!iso || iso === "0001-01-01T00:00:00Z") return "—";
   try {
@@ -61,10 +61,10 @@ function findField(schema, name) {
   return found;
 }
 
-/* ---- menampilkan nilai jawaban ---- */
+/* ---- rendering answer values ---- */
 
-// getOptionLabel menerjemahkan nilai tersimpan (kode) jadi label yang dilihat
-// responden saat mengisi.
+// getOptionLabel turns a stored value (a code) into the label the respondent
+// saw while filling in the form.
 function getOptionLabel(c, val) {
   if (c.optionsRef && SCHEMA) {
     const t = (SCHEMA.referenceData || {})[c.optionsRef];
@@ -86,19 +86,19 @@ function formatFieldValue(c, val) {
     if (!val.length) return "";
     return val.map(v => getOptionLabel(c, v)).join(", ");
   }
-  if (c.type === "boolean") return (val === "true" || val === true) ? "Ya" : "Tidak";
+  if (c.type === "boolean") return (val === "true" || val === true) ? "Yes" : "No";
   if (c.type === "select" || c.type === "radio") return getOptionLabel(c, val);
   return String(val);
 }
 
-/* ---- jenis filter per variabel ---- */
+/* ---- filter kind per field ---- */
 
-// fieldFilterKind menentukan bentuk kontrol filter untuk satu variabel, sekaligus
-// dari mana opsinya diambil (inline, referenceData, atau API — termasuk API bertingkat).
+// fieldFilterKind decides which filter control a field gets, and where its options
+// come from (inline, referenceData, or an API — including cascading APIs).
 function fieldFilterKind(c) {
   if (!c) return { kind: "text" };
   if (c.type === "boolean")
-    return { kind: "select", opts: [{ value: "true", label: "Ya" }, { value: "false", label: "Tidak" }] };
+    return { kind: "select", opts: [{ value: "true", label: "Yes" }, { value: "false", label: "No" }] };
   if (c.type === "date") return { kind: "date" };
   if (c.type === "datetime") return { kind: "datetime" };
   if (c.type === "time") return { kind: "time" };
@@ -159,7 +159,7 @@ async function fetchApiOpts(src) {
   } catch { return []; }
 }
 
-/* ---- bilah filter per variabel (dirender ke #ffBar di dalam laci filter) ---- */
+/* ---- per-field filter bar (rendered into #ffBar inside the filter drawer) ---- */
 
 function renderFieldFilters() {
   const bar = document.getElementById("ffBar");
@@ -167,7 +167,7 @@ function renderFieldFilters() {
   const allowed = typeof canFieldFilter === "function" ? canFieldFilter() : true;
   if (!allowed || !SEL_COLS.length) { bar.innerHTML = ""; return; }
 
-  // Hapus nilai cascade yang dependensinya belum terpenuhi (termasuk transitif)
+  // Drop cascade values whose dependencies are not satisfied (transitively too)
   SEL_COLS.forEach(name => {
     const fk = fieldFilterKind(findField(SCHEMA, name));
     if (fk.kind === "cascade" && fk.deps.find(dep => !FIELD_EXACT_FILTERS[dep]))
@@ -184,7 +184,7 @@ function renderFieldFilters() {
 
     if (fk.kind === "select") {
       const curVal = FIELD_EXACT_FILTERS[name] || "";
-      const optHtml = `<option value="">Semua</option>` +
+      const optHtml = `<option value="">All</option>` +
         fk.opts.map(o => `<option value="${esc(o.value)}"${curVal === o.value ? " selected" : ""}>${esc(o.label)}</option>`).join("");
       return `${sep}<div class="ff-group">
         <span class="ff-lbl">${esc(label)}</span>
@@ -200,13 +200,13 @@ function renderFieldFilters() {
       </div>`;
     }
     if (fk.kind === "api" || fk.kind === "multiapi") {
-      // Render placeholder dulu, isi setelah fetch
+      // Render a placeholder first, fill it in after the fetch
       const multiAttr = fk.kind === "multiapi" ? " multiple" : "";
       return `${sep}<div class="ff-group">
         <span class="ff-lbl">${esc(label)}</span>
         <select class="ff-input"${multiAttr} data-field="${esc(name)}" data-api-src="${esc(JSON.stringify(fk))}"
                 onchange="${fk.kind === "multiapi" ? "onFieldMultiSelect(this)" : "onFieldSelect(this)"}" disabled>
-          <option value="">Memuat…</option>
+          <option value="">Loading…</option>
         </select>
       </div>`;
     }
@@ -218,7 +218,7 @@ function renderFieldFilters() {
         return `${sep}<div class="ff-group">
           <span class="ff-lbl">${esc(label)}</span>
           <select class="ff-input"${isMulti ? " multiple" : ""} data-field="${esc(name)}" disabled>
-            <option value="">— pilih ${esc(depLabel)} dahulu —</option>
+            <option value="">— select ${esc(depLabel)} first —</option>
           </select>
         </div>`;
       }
@@ -228,7 +228,7 @@ function renderFieldFilters() {
         <span class="ff-lbl">${esc(label)}</span>
         <select class="ff-input"${isMulti ? " multiple" : ""} data-field="${esc(name)}" data-api-src="${esc(JSON.stringify(src))}"
                 onchange="${isMulti ? "onFieldMultiSelect(this)" : "onFieldSelect(this)"}" disabled>
-          <option value="">Memuat…</option>
+          <option value="">Loading…</option>
         </select>
       </div>`;
     }
@@ -262,7 +262,7 @@ function renderFieldFilters() {
   });
   bar.innerHTML = parts.join("");
 
-  // Isi dropdown API secara async (single maupun multi-select)
+  // Populate API dropdowns asynchronously (both single and multi-select)
   bar.querySelectorAll("select[data-api-src]").forEach(async sel => {
     const src = JSON.parse(sel.dataset.apiSrc);
     const opts = await fetchApiOpts(src);
@@ -271,7 +271,7 @@ function renderFieldFilters() {
       sel.innerHTML = opts.map(o => `<option value="${esc(o.value)}"${curVals.includes(o.value) ? " selected" : ""}>${esc(o.label)}</option>`).join("");
     } else {
       const curVal = FIELD_EXACT_FILTERS[sel.dataset.field] || "";
-      sel.innerHTML = `<option value="">Semua</option>` +
+      sel.innerHTML = `<option value="">All</option>` +
         opts.map(o => `<option value="${esc(o.value)}"${curVal === o.value ? " selected" : ""}>${esc(o.label)}</option>`).join("");
     }
     sel.disabled = false;
@@ -280,8 +280,8 @@ function renderFieldFilters() {
 
 /* ---- ringkasan filter aktif ---- */
 
-// labelForValue menerjemahkan nilai filter jadi teks yang terbaca manusia — mis. kode
-// wilayah "6472" jadi "SAMARINDA" — dengan menengok opsi yang sudah pernah diambil.
+// labelForValue turns a filter value into human-readable text — region code "6472"
+// becomes "SAMARINDA" — by consulting the options already fetched.
 function labelForValue(fieldName, v) {
   const fk = fieldFilterKind(findField(SCHEMA, fieldName));
   if (fk.kind === "select" || fk.kind === "multiselect") {
@@ -307,8 +307,8 @@ function updateFilterUI() {
     return esc(f ? f.label : k);
   };
 
-  if (FILTER_STATUS) parts.push(FILTER_STATUS === "submitted" ? "Terkirim" : "Draf");
-  // Filter share hanya ada di halaman admin.
+  if (FILTER_STATUS) parts.push(FILTER_STATUS === "submitted" ? "Submitted" : "Draft");
+  // The share filter only exists on the admin page.
   if (typeof FILTER_SHARE !== "undefined" && FILTER_SHARE)
     parts.push(esc(SHARE_MAP[FILTER_SHARE] || "Share tertentu"));
   if (FILTER_SEARCH) parts.push(`"${esc(FILTER_SEARCH)}"`);
@@ -322,15 +322,15 @@ function updateFilterUI() {
     parts.push(`${labelOf(k)}: ${esc(text)}`);
   });
 
-  // Ditampilkan sebagai chip di bawah topbar + angka pada tombol Filter
-  // (lihat responses-ui.js).
+  // Shown as chips beneath the top bar plus a count on the Filter button
+  // (see responses-ui.js).
   applyFilterSummary(parts);
 }
 
 /* ---- header tabel ---- */
 
-// data-label dipakai responsive-tables.js sebagai label kolom saat tabel berubah
-// jadi kartu di layar HP — tanpa itu ikon urutan (↕) ikut terbawa ke labelnya.
+// responsive-tables.js uses data-label as the column label when the table turns into
+// cards on phones — without it the sort icon (↕) would end up in the label.
 function sortTh(col, label, cls) {
   const active = SORT_BY === col;
   const ic = active ? (SORT_DIR === "asc" ? "↑" : "↓") : "↕";

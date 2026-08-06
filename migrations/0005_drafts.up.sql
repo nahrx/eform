@@ -1,5 +1,5 @@
 -- 0005_drafts.up.sql
--- Tabel draf server: simpan progres pengisian yang belum final.
+-- Server-side draft table: stores in-progress answers that are not final yet.
 
 CREATE TABLE IF NOT EXISTS response_drafts (
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-// Memuat .env via godotenv: nilai terbaca, komentar inline & prefix export
-// ditangani, dan beberapa key di-set.
+// Loading .env via godotenv: values are read, inline comments & the export prefix
+// handled, and a few keys are set.
 func TestLoadDotEnv(t *testing.T) {
 	dir := t.TempDir()
 	envFile := filepath.Join(dir, ".env")
@@ -30,14 +30,14 @@ func TestLoadDotEnv(t *testing.T) {
 		t.Errorf("Port = %q; mau 9999", cfg.Port)
 	}
 	if cfg.PublicDir != "mypublic" {
-		t.Errorf("PublicDir = %q; mau mypublic (komentar inline harus dipangkas)", cfg.PublicDir)
+		t.Errorf("PublicDir = %q; want mypublic (the inline comment should be trimmed)", cfg.PublicDir)
 	}
 	if len(cfg.CORSOrigins) != 2 || cfg.CORSOrigins[0] != "https://a.test" {
 		t.Errorf("CORSOrigins = %v; mau [https://a.test https://b.test]", cfg.CORSOrigins)
 	}
 }
 
-// Env asli OS harus menang atas nilai di .env.
+// Real OS environment variables must win over values in .env.
 func TestOSEnvWinsOverDotEnv(t *testing.T) {
 	dir := t.TempDir()
 	envFile := filepath.Join(dir, ".env")
@@ -52,10 +52,10 @@ func TestOSEnvWinsOverDotEnv(t *testing.T) {
 	}
 }
 
-// File .env yang tidak ada tidak boleh bikin Load gagal.
+// A missing .env file must not make Load fail.
 func TestMissingDotEnvOK(t *testing.T) {
-	t.Setenv("ENV_FILE", filepath.Join(t.TempDir(), "tidak-ada.env"))
+	t.Setenv("ENV_FILE", filepath.Join(t.TempDir(), "does-not-exist.env"))
 	if cfg := Load(); cfg == nil {
-		t.Fatal("Load() nil padahal .env tidak ada")
+		t.Fatal("Load() returned nil even though .env is absent")
 	}
 }

@@ -1,31 +1,32 @@
-/* Pemeriksaan validasi jawaban, untuk halaman detail respons.
+/* Answer validation review, for the response detail pages.
 
-   Dipakai bersama response-view.html (admin) dan portal-response-view.html
-   (viewer/editor) supaya keduanya menilai jawaban dengan aturan yang sama.
+   Shared by response-view.html (admin) and portal-response-view.html
+   (viewer/editor) so both judge an answer by exactly the same rules.
 
-   Berkas ini sengaja tidak menyentuh DOM halaman dan tidak membaca variabel
-   global milik halaman. Semua yang dibutuhkannya — cara mengevaluasi ekspresi,
-   menghitung baris roster, menerjemahkan teks — diterima lewat objek `h` dari
-   pemanggil. Halaman detail sudah punya semua fungsi itu untuk merender jawaban,
-   jadi tidak ada mesin ekspresi kedua yang harus dirawat di sini.
+   This file deliberately never touches the page's DOM and never reads the page's
+   global variables. Everything it needs — how to evaluate an expression, how to
+   count roster rows, how to resolve localised text — arrives through the `h`
+   object supplied by the caller. The detail pages already have all of those
+   functions in order to render answers, so there is no second expression engine
+   to maintain here.
 
-   Aturannya dijaga sama persis dengan yang dipakai form pengisian
-   (collectAllErrors di public.html):
-     - field wajib (required / requiredWhen) yang masih kosong
-     - aturan di c.validations yang tidak terpenuhi
-     - roster requiredRows yang belum punya baris
-   Field yang tidak pernah tampil ke responden — karena visibleWhen, enableWhen,
-   atau dilompati skip-to — tidak dihitung, mengikuti perilaku form pengisian.
+   The rules are kept identical to the ones the respondent-facing form applies
+   (collectAllErrors in public.html):
+     - required fields (required / requiredWhen) that are still empty
+     - rules in c.validations that are not satisfied
+     - rosters with requiredRows that have no rows yet
+   Fields the respondent never saw — because of visibleWhen, enableWhen, or a
+   skip-to jump — are not counted, matching the form's own behaviour.
 
-   Diperiksa untuk draf MAUPUN jawaban terkirim. Aturan validasi di kuesioner
-   bisa berubah setelah jawaban dikirim, sehingga jawaban yang dulu lolos bisa
-   saja sekarang melanggar aturan yang baru — justru itu yang perlu terlihat. */
+   Both drafts AND submitted answers are checked. A form's validation rules can
+   change after an answer was submitted, so an answer that once passed may now
+   break a newer rule — which is precisely what needs to be visible. */
 (function () {
   if (window.ResponseValidation) return;
 
   const style = document.createElement("style");
   style.textContent = `
-/* ---- tombol pembuka di kartu meta ---- */
+/* ---- opening button on the meta card ---- */
 .vc-btn{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;
   border:1px solid var(--line,#dfe4ea);border-radius:8px;background:var(--panel,#fff);
   color:var(--ink,#13171e);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;
@@ -36,19 +37,19 @@
 .vc-badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;
   height:18px;padding:0 5px;border-radius:999px;background:#dc2626;color:#fff;
   font-size:10.5px;font-weight:700}
-/* display:inline-flex di atas mengalahkan gaya bawaan [hidden] milik browser,
-   jadi keadaan tersembunyinya harus dinyatakan sendiri. */
+/* The display:inline-flex above beats the browser's built-in [hidden] style,
+   so the hidden state has to be declared explicitly. */
 .vc-badge[hidden]{display:none}
 
 /* ---- modal ---- */
-/* Ukurannya dipatok ke 100vw/100vh, bukan inset:0. Kalau halaman di bawahnya
-   meluap ke samping, containing block untuk position:fixed ikut selebar luapan
-   itu — sehingga inset:0 membuat modal lebih lebar dari layar. Satuan vw/vh
-   selalu mengacu ke viewport awal, jadi modal tetap pas berapa pun luapannya. */
+/* The size is pinned to 100vw/100vh rather than inset:0. If the page underneath
+   overflows sideways, the containing block for position:fixed grows to match that
+   overflow — so inset:0 would make the modal wider than the screen. The vw/vh units
+   always refer to the initial viewport, so the modal fits whatever the overflow. */
 .vc-overlay{position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:400;
   display:flex;align-items:center;justify-content:center;padding:20px;
   background:rgba(19,23,30,.42)}
-/* dvh mengikuti bilah alamat browser HP yang muncul-hilang */
+/* dvh follows the mobile browser's address bar as it shows and hides */
 @supports(height:100dvh){.vc-overlay{height:100dvh}}
 .vc-overlay[hidden]{display:none}
 .vc-modal{display:flex;flex-direction:column;width:min(680px,100%);max-height:min(78vh,720px);
@@ -82,15 +83,15 @@
 .vc-ok{padding:26px 0;text-align:center;color:#15803d;font-size:13.5px;font-weight:600}
 .vc-ok span{display:block;margin-top:4px;color:#79828f;font-size:12.5px;font-weight:400}
 
-/* ---- penanda di tempat, pada field yang bermasalah ----
-   margin vertikal penting: tanpa itu beberapa field bermasalah yang berurutan
-   menyatu jadi satu blok merah panjang dan batas antar-pertanyaan hilang. */
+/* ---- in-place markers on the offending fields ----
+   The vertical margin matters: without it, several consecutive flagged fields merge
+   into one long red block and the boundary between questions disappears. */
 .rv-issue{position:relative;border-left:3px solid #dc2626;padding:8px 10px 6px 11px;
   margin:8px 0;background:#fef2f2;border-radius:0 7px 7px 0}
 .rv-issue-warning{border-left-color:#d97706;background:#fffbeb}
-/* Pesan diletakkan sesudah isi field, sehingga terbaca
-   "Provinsi / — / Wajib diisi" — bukan peringatan yang menggantung di atas label.
-   align-items:flex-start supaya ikon sejajar baris pertama pesan yang panjang. */
+/* The message sits after the field's content, so it reads
+   "Province / — / Required" rather than a warning dangling above the label.
+   align-items:flex-start keeps the icon level with the first line of a long message. */
 .rv-issue-msg{display:flex;align-items:flex-start;gap:5px;margin-top:5px;
   font-size:11.5px;font-weight:700;line-height:1.45;color:#b91c1c}
 .rv-issue-msg::before{content:"!";display:inline-flex;align-items:center;justify-content:center;
@@ -119,16 +120,16 @@
 
   const isEmpty = v => v == null || v === "" || (Array.isArray(v) && v.length === 0);
 
-  // Tipe yang tidak menyimpan jawaban, jadi tidak pernah punya error.
-  // `calculated` tanpa autofill ikut dikecualikan, sama seperti form pengisian.
+  // Types that store no answer, and therefore can never have an error.
+  // `calculated` without autofill is excluded too, matching the respondent form.
   function skipType(c) {
     return c.type === "note" || c.type === "markdown" || c.type === "hidden" ||
       (c.type === "calculated" && !c.autofill);
   }
 
-  /* Kumpulkan field yang benar-benar berlaku pada satu halaman, termasuk
-     menguraikan tiap baris roster jadi field tersendiri. Cerminan
-     pageValidationTargets + walkRosterComps di public.html. */
+  /* Collect the fields that genuinely apply on one page, expanding every roster row
+     into its own set of fields. Mirrors pageValidationTargets + walkRosterComps in
+     public.html. */
   function targetsOfPage(page, answers, hidden, h) {
     const out = [];
 
@@ -169,7 +170,7 @@
     return out;
   }
 
-  // Roster yang wajib berisi tapi belum punya baris sama sekali.
+  // Rosters that must contain rows but have none at all.
   function emptyRequiredRosters(page, answers, h) {
     const out = [];
     (function walk(comps, rp) {
@@ -185,14 +186,14 @@
     return out;
   }
 
-  // Id DOM yang stabil untuk satu temuan; kunci roster memuat "#" dan titik,
-  // yang tidak aman dipakai langsung sebagai id.
+  // A stable DOM id for one finding; roster keys contain "#" and dots,
+  // which are not safe to use directly as an id.
   let seq = 0;
   const nextId = () => "vc-i" + (++seq);
 
-  /* collect mengembalikan daftar temuan yang sudah urut halaman.
-     h wajib berisi: evalVisible, computePageSkipState, computeRosterRowSkipState,
-     getRosterCount, rosterRowPrefix, txt, visitedPages; opsional: canSee. */
+  /* collect returns the findings, already ordered by page.
+     h must provide: evalVisible, computePageSkipState, computeRosterRowSkipState,
+     getRosterCount, rosterRowPrefix, txt, visitedPages; canSee is optional. */
   function collect(schema, answers, h) {
     const pages = (schema && schema.pages) || [];
     const canSee = h.canSee || (() => true);
@@ -206,10 +207,10 @@
 
       for (const { c, rp } of targetsOfPage(page, answers, hidden, h)) {
         if (skipType(c)) continue;
-        // Variabel di luar jatah viewer: jawabannya sudah disamarkan server,
-        // jadi menilainya pasti keliru — dan labelnya pun tidak boleh tampil.
+        // Fields outside the viewer's allowance: the server already masked the answer,
+        // so judging it would be wrong — and its label must not be shown either.
         if (!canSee(c.name)) continue;
-        // enableWhen tidak terpenuhi berarti field terkunci; tidak dinilai.
+        // An unsatisfied enableWhen means the field is locked; it is not judged.
         if (!h.evalVisible(c.enableWhen, rp, answers)) continue;
 
         const key = rp + c.name;
@@ -220,7 +221,7 @@
         if (required && isEmpty(answers[key])) {
           issues.push({
             pageIdx: pi, key, id: nextId(), label,
-            why: "Wajib diisi", kind: "required", severity: "error",
+            why: "Required", kind: "required", severity: "error",
           });
           continue;
         }
@@ -228,12 +229,12 @@
 
         for (const v of c.validations || []) {
           if (!v.test) continue;
-          // evalVisible mengembalikan true saat ekspresi gagal diurai, sehingga
-          // aturan yang rusak tidak pernah menuduh datanya salah.
+          // evalVisible returns true when an expression fails to parse, so a
+          // broken rule never accuses the data of being wrong.
           if (h.evalVisible(v.test, rp, answers)) continue;
           issues.push({
             pageIdx: pi, key, id: nextId(), label,
-            why: h.txt(v.message) || "Tidak memenuhi aturan validasi",
+            why: h.txt(v.message) || "Does not meet the validation rule",
             kind: "rule",
             severity: v.severity === "warning" ? "warning" : "error",
           });
@@ -245,7 +246,7 @@
         issues.push({
           pageIdx: pi, key: "", id: nextId(),
           label: h.txt(r.title) || r.name,
-          why: "Belum ada baris yang ditambahkan",
+          why: "No rows have been added",
           kind: "roster", severity: "error",
         });
       }
@@ -253,16 +254,16 @@
     return issues;
   }
 
-  // Peta kunci → temuan, dipakai halaman untuk menandai field saat merender.
-  // Kalau satu field punya lebih dari satu temuan, yang pertama yang dipakai.
+  // A key → finding map, used by the page to mark fields as it renders.
+  // When one field has more than one finding, the first is used.
   function indexByKey(issues) {
     const m = new Map();
     for (const it of issues) if (it.key && !m.has(it.key)) m.set(it.key, it);
     return m;
   }
 
-  // Membungkus HTML satu field dengan penanda. Dipanggil halaman dari renderNode,
-  // satu-satunya titik yang dilewati semua jenis field.
+  // Wraps one field's HTML with a marker. The page calls this from renderNode,
+  // the single point every kind of field passes through.
   function wrapField(html, issue) {
     if (!html || !issue) return html;
     return `<div class="rv-issue rv-issue-${issue.severity}" id="${issue.id}">` +
@@ -276,25 +277,25 @@
 
   function pageTitle(i) {
     const p = ((state.schema && state.schema.pages) || [])[i];
-    if (!p) return "Halaman " + (i + 1);
-    return state.h.txt(p.title) || p.name || "Halaman " + (i + 1);
+    if (!p) return "Page " + (i + 1);
+    return state.h.txt(p.title) || p.name || "Page " + (i + 1);
   }
 
-  /* Temuan dipisah jadi tiga kelompok karena artinya berbeda: "tidak sesuai
-     aturan" berarti data yang sudah diisi memang bermasalah, sedangkan "belum
-     diisi" wajar untuk draf yang belum selesai. */
+  /* Findings are split into three groups because they mean different things: a
+     "rule violation" means data that was filled in is genuinely wrong, whereas
+     "not filled in" is expected for a draft that is not finished yet. */
   function bodyHTML() {
     const iss = state.issues;
     if (!iss.length) {
-      return `<div class="vc-ok">Tidak ada error validasi
-        <span>Semua jawaban yang tampil memenuhi aturan kuesioner.</span></div>`;
+      return `<div class="vc-ok">No validation errors
+        <span>Every answer shown satisfies the form's rules.</span></div>`;
     }
     const groups = [
-      { title: "Tidak sesuai aturan", cls: "",
+      { title: "Rule violations", cls: "",
         items: iss.filter(i => i.kind !== "required" && i.severity === "error") },
-      { title: "Perlu dicek", cls: "vc-warn",
+      { title: "Needs checking", cls: "vc-warn",
         items: iss.filter(i => i.severity === "warning") },
-      { title: "Belum diisi", cls: "",
+      { title: "Not filled in", cls: "",
         items: iss.filter(i => i.kind === "required") },
     ];
     return groups.filter(g => g.items.length).map(g => `
@@ -310,8 +311,8 @@
       </div>`).join("");
   }
 
-  // Modal dipasang di <body>, bukan di dalam #content — halaman merender ulang
-  // #content tiap ganti halaman, yang akan ikut menghapus modalnya.
+  // The modal is mounted on <body>, not inside #content — the page re-renders
+  // #content on every page change, which would take the modal with it.
   function ensureOverlay() {
     if (overlay) return overlay;
     overlay = document.createElement("div");
@@ -323,15 +324,15 @@
           <svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor"
             stroke-width="1.8" stroke-linecap="round"><path d="M10 3.5 1.8 16.5h16.4z"/>
             <path d="M10 8v3.6"/><path d="M10 14.2v.1"/></svg>
-          <span id="vcTitle">Daftar Error Validasi</span>
+          <span id="vcTitle">Validation Errors</span>
           <span class="vc-badge" id="vcModalCount"></span>
-          <button class="vc-x" type="button" aria-label="Tutup">&times;</button>
+          <button class="vc-x" type="button" aria-label="Close">&times;</button>
         </div>
         <div class="vc-body" id="vcBody"></div>
-        <div class="vc-foot"><button type="button">Tutup</button></div>
+        <div class="vc-foot"><button type="button">Close</button></div>
       </div>`;
     overlay.addEventListener("click", e => {
-      // klik latar (di luar kotak) menutup modal
+      // clicking the backdrop (outside the box) closes the modal
       if (e.target === overlay || e.target.closest(".vc-x, .vc-foot button")) close();
     });
     document.addEventListener("keydown", e => {
@@ -349,8 +350,8 @@
     badge.hidden = state.issues.length === 0;
     lastFocus = document.activeElement;
     ov.hidden = false;
-    // Daftar temuan bisa panjang; tanpa ini isi modal kadang muncul dalam
-    // keadaan tergulir, bukan dari temuan pertama.
+    // The findings list can be long; without this the modal sometimes opens
+    // already scrolled, rather than at the first finding.
     ov.querySelector("#vcBody").scrollTop = 0;
     ov.querySelector(".vc-x").focus({ preventScroll: true });
   }
@@ -358,33 +359,33 @@
   function close() {
     if (!overlay || overlay.hidden) return;
     overlay.hidden = true;
-    // Kembalikan fokus ke tombol pembuka, kecuali tombol itu sudah hilang
-    // karena halaman dirender ulang saat melompat ke temuan.
+    // Return focus to the opening button, unless that button is gone because
+    // the page re-rendered while jumping to a finding.
     if (lastFocus && lastFocus.isConnected) lastFocus.focus({ preventScroll: true });
     lastFocus = null;
   }
 
-  /* prepare menyimpan hasil pemeriksaan dan mengembalikan HTML tombol pembuka.
-     Dipanggil halaman tiap kali merender, sebelum isi jawaban dirakit. */
+  /* prepare stores the review result and returns the opening button's HTML.
+     The page calls it on every render, before the answer body is assembled. */
   function prepare(issues, schema, h) {
     state = { issues: issues || [], schema, h };
-    if (overlay && !overlay.hidden) open(); // segarkan isi modal yang sedang terbuka
+    if (overlay && !overlay.hidden) open(); // refresh the contents of an already-open modal
     const n = state.issues.length;
     return `<button type="button" class="vc-btn${n ? " has-err" : ""}"
       onclick="ResponseValidation.open()">
       <svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor"
         stroke-width="1.8" stroke-linecap="round"><path d="M10 3.5 1.8 16.5h16.4z"/>
         <path d="M10 8v3.6"/><path d="M10 14.2v.1"/></svg>
-      Daftar error${n ? `<span class="vc-badge">${n}</span>` : ""}
+      Error list${n ? `<span class="vc-badge">${n}</span>` : ""}
     </button>`;
   }
 
-  /* Lompat ke temuan. Kalau field-nya ada di halaman yang sedang tampil, cukup
-     digulir; kalau tidak, pindah halaman dulu lalu gulir setelah render.
+  /* Jump to a finding. If its field is on the page currently shown, just scroll to
+     it; otherwise switch pages first and scroll once the render is done.
 
-     Id temuan konsisten antar-render: collect() menomori ulang dari nol dengan
-     urutan penelusuran yang sama, jadi temuan yang sama selalu dapat id yang
-     sama — termasuk setelah goPage merender ulang halaman. */
+     Finding ids stay consistent across renders: collect() renumbers from zero using
+     the same traversal order, so the same finding always gets the same id —
+     including after goPage re-renders the page. */
   function jump(pageIdx, id) {
     close();
     const go = () => {
@@ -392,7 +393,7 @@
       if (!el) return;
       el.scrollIntoView({ behavior: "smooth", block: "center" });
       el.classList.remove("rv-issue-flash");
-      void el.offsetWidth; // paksa animasi diputar ulang saat diklik berkali-kali
+      void el.offsetWidth; // force the animation to replay on repeated clicks
       el.classList.add("rv-issue-flash");
     };
     if (document.getElementById(id)) { go(); return; }

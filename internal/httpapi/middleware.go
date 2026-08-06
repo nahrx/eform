@@ -99,42 +99,42 @@ func (s *Server) recoverMW(next http.Handler) http.Handler {
 		defer func() {
 			if rec := recover(); rec != nil {
 				log.Printf("[panic] %s %s: %v", r.Method, r.URL.Path, rec)
-				writeErr(w, http.StatusInternalServerError, "kesalahan server")
+				writeErr(w, http.StatusInternalServerError, "server error")
 			}
 		}()
 		next.ServeHTTP(w, r)
 	})
 }
 
-// authMW memverifikasi Bearer token admin dan menaruh claims di context.
+// authMW verifies the admin Bearer token and puts the claims into the context.
 func (s *Server) authMW(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		h := r.Header.Get("Authorization")
 		if !strings.HasPrefix(h, "Bearer ") {
-			writeErr(w, http.StatusUnauthorized, "perlu login")
+			writeErr(w, http.StatusUnauthorized, "login required")
 			return
 		}
 		claims, err := s.auth.Parse(strings.TrimPrefix(h, "Bearer "))
 		if err != nil {
-			writeErr(w, http.StatusUnauthorized, "sesi tidak valid atau kedaluwarsa")
+			writeErr(w, http.StatusUnauthorized, "session is invalid or has expired")
 			return
 		}
-		// Tolak token respondent yang salah endpoint
+		// Reject a respondent token used on the wrong endpoint
 		if claims.Username == "" {
-			writeErr(w, http.StatusUnauthorized, "token tidak valid untuk endpoint ini")
+			writeErr(w, http.StatusUnauthorized, "invalid token for this endpoint")
 			return
 		}
 
-		// Tanda tangan yang sah belum cukup: akun bisa saja sudah dinonaktifkan,
-		// dihapus, atau passwordnya diganti setelah token diterbitkan. Satu lookup
-		// primary key per permintaan membuat pencabutan berlaku seketika.
+		// A valid signature is not enough: the account may have been deactivated,
+		// deleted, or had its password changed since the token was issued. A single lookup
+		// by primary key on every request makes revocation take effect immediately.
 		snap, err := s.st.GetAuthSnapshot(r.Context(), claims.Subject)
 		if err != nil || !snap.IsActive || snap.TokenVersion != claims.TokenVersion {
-			writeErr(w, http.StatusUnauthorized, "sesi tidak valid atau kedaluwarsa")
+			writeErr(w, http.StatusUnauthorized, "session is invalid or has expired")
 			return
 		}
-		// Role diambil dari DB, bukan dari token, supaya penurunan hak juga langsung
-		// berlaku tanpa menunggu token baru.
+		// The role comes from the database, not the token, so a downgrade also takes effect
+		// applies without waiting for a new token.
 		claims.Role = snap.Role
 
 		ctx := context.WithValue(r.Context(), userKey, claims)
@@ -147,12 +147,12 @@ func (s *Server) respondentMW(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		h := r.Header.Get("Authorization")
 		if !strings.HasPrefix(h, "Bearer ") {
-			writeErr(w, http.StatusUnauthorized, "perlu login Google")
+			writeErr(w, http.StatusUnauthorized, "Google login required")
 			return
 		}
 		claims, err := s.auth.ParseRespondent(strings.TrimPrefix(h, "Bearer "))
 		if err != nil {
-			writeErr(w, http.StatusUnauthorized, "sesi tidak valid atau kedaluwarsa")
+			writeErr(w, http.StatusUnauthorized, "session is invalid or has expired")
 			return
 		}
 		ctx := context.WithValue(r.Context(), respondentKey, claims)
@@ -164,25 +164,25 @@ func (s *Server) respondentMW(next http.HandlerFunc) http.HandlerFunc {
 
 const apiKeyPrefix = "eform_"
 
-// hashAPIKey menghasilkan SHA-256 hex dari key yang dikirim klien.
+// hashAPIKey produces the SHA-256 hex digest of the key sent by the client.
 //
-// Sengaja berbeda dari password (bcrypt lewat auth.HashPassword). Bcrypt dibuat lambat
-// untuk melawan tebakan pada rahasia berentropi rendah buatan manusia; API key di sini
-// adalah 32 byte dari crypto/rand, jadi menebaknya mustahil dan biaya bcrypt hanya jadi
-// beban di setiap permintaan. SHA-256 juga memungkinkan lookup O(1) lewat index key_hash.
+// Deliberately different from passwords (bcrypt via auth.HashPassword). Bcrypt is slow by
+// design to resist guessing of low-entropy human-chosen secrets; an API key here is
+// 32 bytes from crypto/rand, so guessing is infeasible and bcrypt's cost would only be
+// overhead on every request. SHA-256 also allows an O(1) lookup through the key_hash index.
 func hashAPIKey(key string) string {
 	sum := sha256.Sum256([]byte(key))
 	return hex.EncodeToString(sum[:])
 }
 
-// apiKeyFromContext mengambil API key yang sudah terverifikasi dari context.
+// apiKeyFromContext retrieves the already-verified API key from the context.
 func apiKeyFromContext(ctx context.Context) *models.FormAPIKey {
 	k, _ := ctx.Value(apiKeyCtxKey).(*models.FormAPIKey)
 	return k
 }
 
-// ipAllowed mencocokkan IP pemanggil dengan daftar izin. Entri boleh berupa satu IP
-// ("103.10.1.5") atau CIDR ("103.10.1.0/24"). Daftar kosong berarti semua IP boleh.
+// ipAllowed matches the caller's IP against the allowlist. An entry may be a single IP
+// ("103.10.1.5") or a CIDR ("103.10.1.0/24"). An empty list means any IP is allowed.
 func ipAllowed(ip string, allowed []string) bool {
 	if len(allowed) == 0 {
 		return true
@@ -209,18 +209,18 @@ func ipAllowed(ip string, allowed []string) bool {
 	return false
 }
 
-// apiKeyMW memverifikasi API key untuk endpoint /api/v1 dan menerapkan seluruh
-// pembatasannya: aktif, belum kedaluwarsa, IP diizinkan, dan kuota per menit.
+// apiKeyMW verifies the API key for the /api/v1 endpoints and enforces all of its
+// restrictions: active, not expired, IP allowed, and within the per-minute quota.
 //
-// Semua penolakan memakai pesan generik supaya tidak bocor apakah suatu key ada.
-// Setiap permintaan — termasuk yang ditolak — dicatat ke api_access_logs.
+// Every rejection uses a generic message so it never reveals whether a key exists.
+// Every request — including rejected ones — is recorded in api_access_logs.
 func (s *Server) apiKeyMW(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ip := s.clientIP(r)
 		raw := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		raw = strings.TrimSpace(raw)
 
-		// Prefix key dicatat apa adanya untuk audit; kalau formatnya salah, catat kosong.
+		// The key prefix is recorded as-is for the audit trail; on a malformed key, record it empty.
 		logPrefix := ""
 		if strings.HasPrefix(raw, apiKeyPrefix) && len(raw) >= len(apiKeyPrefix)+10 {
 			logPrefix = raw[len(apiKeyPrefix) : len(apiKeyPrefix)+10]
@@ -231,27 +231,27 @@ func (s *Server) apiKeyMW(next http.HandlerFunc) http.HandlerFunc {
 		}
 
 		if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") || !strings.HasPrefix(raw, apiKeyPrefix) {
-			deny(http.StatusUnauthorized, "API key tidak valid")
+			deny(http.StatusUnauthorized, "invalid API key")
 			return
 		}
 		key, err := s.st.GetAPIKeyByHash(r.Context(), hashAPIKey(raw))
 		if err != nil {
-			deny(http.StatusUnauthorized, "API key tidak valid")
+			deny(http.StatusUnauthorized, "invalid API key")
 			return
 		}
 		if !key.IsActive {
 			s.logAPIAccess(r, key, key.KeyPrefix, ip, http.StatusUnauthorized, 0, "key nonaktif")
-			writeErr(w, http.StatusUnauthorized, "API key tidak valid")
+			writeErr(w, http.StatusUnauthorized, "invalid API key")
 			return
 		}
 		if key.ExpiresAt != nil && time.Now().After(*key.ExpiresAt) {
 			s.logAPIAccess(r, key, key.KeyPrefix, ip, http.StatusUnauthorized, 0, "key kedaluwarsa")
-			writeErr(w, http.StatusUnauthorized, "API key tidak valid")
+			writeErr(w, http.StatusUnauthorized, "invalid API key")
 			return
 		}
 		if !ipAllowed(ip, key.AllowedIPs) {
-			s.logAPIAccess(r, key, key.KeyPrefix, ip, http.StatusForbidden, 0, "IP tidak diizinkan")
-			writeErr(w, http.StatusForbidden, "akses dari alamat IP ini tidak diizinkan")
+			s.logAPIAccess(r, key, key.KeyPrefix, ip, http.StatusForbidden, 0, "IP address is not allowed")
+			writeErr(w, http.StatusForbidden, "access from this IP address is not allowed")
 			return
 		}
 		quota := key.RateLimitPerMin
@@ -261,7 +261,7 @@ func (s *Server) apiKeyMW(next http.HandlerFunc) http.HandlerFunc {
 		if !apiKeyRL.allow("api:"+key.ID, quota) {
 			w.Header().Set("Retry-After", "60")
 			s.logAPIAccess(r, key, key.KeyPrefix, ip, http.StatusTooManyRequests, 0, "kuota per menit terlampaui")
-			writeErr(w, http.StatusTooManyRequests, "terlalu banyak permintaan, coba lagi dalam 1 menit")
+			writeErr(w, http.StatusTooManyRequests, "too many requests, please try again in 1 minute")
 			return
 		}
 
@@ -275,8 +275,8 @@ func (s *Server) apiKeyMW(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// logAPIAccess menulis satu baris audit. Gagal mencatat tidak boleh menggagalkan
-// permintaan, jadi errornya cuma di-log ke stdout.
+// logAPIAccess writes one audit row. A logging failure must never fail
+// the request, so the error is only logged to stdout.
 func (s *Server) logAPIAccess(r *http.Request, key *models.FormAPIKey, prefix, ip string, status, rowCount int, errMsg string) {
 	l := &models.APIAccessLog{
 		KeyPrefix: prefix,
@@ -294,17 +294,17 @@ func (s *Server) logAPIAccess(r *http.Request, key *models.FormAPIKey, prefix, i
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := s.st.InsertAPIAccessLog(ctx, l); err != nil {
-		log.Printf("[api-audit] gagal mencatat akses %s: %v", r.URL.Path, err)
+		log.Printf("[api-audit] failed to record access %s: %v", r.URL.Path, err)
 	}
 }
 
 /* ---------------- audit aksi admin ---------------- */
 
-// audit mencatat satu aksi admin ke activity_logs. Pelaku diambil dari context, jadi
-// pemanggil cukup menyebut aksi dan sasarannya.
+// audit records one admin action in activity_logs. The actor comes from the context, so
+// the caller only needs to name the action and its target.
 //
-// Sengaja best-effort: gagal mencatat tidak boleh menggagalkan aksi yang sudah
-// terlanjur berhasil, tapi kegagalannya tetap muncul di log server.
+// Deliberately best-effort: a logging failure must not fail an action that has already
+// already succeeded, but the failure is still surfaced in the server log.
 func (s *Server) audit(r *http.Request, action, targetType, targetID, targetLabel, formID, detail string) {
 	l := &models.ActivityLog{
 		Action:      action,
@@ -326,16 +326,16 @@ func (s *Server) audit(r *http.Request, action, targetType, targetID, targetLabe
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := s.st.InsertActivityLog(ctx, l); err != nil {
-		log.Printf("[audit] gagal mencatat %s: %v", action, err)
+		log.Printf("[audit] failed to record %s: %v", action, err)
 	}
 }
 
-// requireRole membatasi akses ke salah satu role yang diizinkan.
+// requireRole restricts access to one of the permitted roles.
 func (s *Server) requireRole(next http.HandlerFunc, roles ...string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		u := userFrom(r.Context())
 		if u == nil {
-			writeErr(w, http.StatusUnauthorized, "perlu login")
+			writeErr(w, http.StatusUnauthorized, "login required")
 			return
 		}
 		for _, role := range roles {
@@ -344,12 +344,12 @@ func (s *Server) requireRole(next http.HandlerFunc, roles ...string) http.Handle
 				return
 			}
 		}
-		writeErr(w, http.StatusForbidden, "akses ditolak")
+		writeErr(w, http.StatusForbidden, "access denied")
 	}
 }
 
-// slidingWindowLimiter membatasi jumlah kejadian per kunci dalam jendela satu menit.
-// Kuncinya bebas: IP untuk percobaan login, "api:<keyID>" untuk pemakaian API key.
+// slidingWindowLimiter caps the number of events per key within a one-minute window.
+// The key is arbitrary: an IP for login attempts, "api:<keyID>" for API key usage.
 type slidingWindowLimiter struct {
 	mu       sync.Mutex
 	attempts map[string][]time.Time
@@ -384,8 +384,8 @@ func (l *slidingWindowLimiter) sweep() {
 	}
 }
 
-// allow mencatat satu kejadian untuk key dan mengembalikan false bila kuota per menit
-// sudah terlampaui.
+// allow records one event for the key and returns false when the per-minute quota
+// has been exceeded.
 func (l *slidingWindowLimiter) allow(key string, max int) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -404,19 +404,19 @@ func (l *slidingWindowLimiter) allow(key string, max int) bool {
 	return true
 }
 
-// loginRL membatasi percobaan login per IP (max 10 per menit).
+// loginRL limits login attempts per IP (max 10 per minute).
 var loginRL = newSlidingWindowLimiter()
 
-// apiKeyRL membatasi pemakaian tiap API key; kuotanya per key (rate_limit_per_min).
+// apiKeyRL limits each API key's usage; the quota is per key (rate_limit_per_min).
 var apiKeyRL = newSlidingWindowLimiter()
 
-// publicRL membatasi endpoint pengisian kuesioner publik.
+// publicRL rate-limits the public form-filling endpoints.
 var publicRL = newSlidingWindowLimiter()
 
-// limitRespondent membatasi laju per akun responden sekaligus per IP.
+// limitRespondent rate-limits per respondent account and per IP at the same time.
 //
-// Dua kunci dipakai bersamaan: batas per responden mencegah satu akun membanjiri,
-// batas per IP mencegah satu mesin memakai banyak akun sekaligus.
+// Two keys are used together: the per-respondent limit stops a single account flooding,
+// the per-IP cap stops one machine from cycling through many accounts.
 func (s *Server) limitRespondent(next http.HandlerFunc, perRespondent, perIP int) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ip := s.clientIP(r)
@@ -426,12 +426,12 @@ func (s *Server) limitRespondent(next http.HandlerFunc, perRespondent, perIP int
 		}
 		if id != "" && !publicRL.allow("resp:"+id, perRespondent) {
 			w.Header().Set("Retry-After", "60")
-			writeErr(w, http.StatusTooManyRequests, "terlalu banyak permintaan, coba lagi dalam 1 menit")
+			writeErr(w, http.StatusTooManyRequests, "too many requests, please try again in 1 minute")
 			return
 		}
 		if !publicRL.allow("pip:"+ip, perIP) {
 			w.Header().Set("Retry-After", "60")
-			writeErr(w, http.StatusTooManyRequests, "terlalu banyak permintaan dari jaringan ini, coba lagi dalam 1 menit")
+			writeErr(w, http.StatusTooManyRequests, "too many requests from this network, please try again in 1 minute")
 			return
 		}
 		next(w, r)

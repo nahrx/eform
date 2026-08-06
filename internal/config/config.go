@@ -20,23 +20,23 @@ type Config struct {
 	JWTRespondentSecret []byte
 	JWTTTL              time.Duration
 	CORSOrigins         []string
-	// TrustedProxies: IP/CIDR reverse proxy yang boleh dipercaya header X-Forwarded-For-nya.
+	// TrustedProxies: reverse-proxy IPs/CIDRs whose X-Forwarded-For header may be trusted.
 	TrustedProxies []string
-	// LogRetentionDays: umur maksimum baris activity_logs & api_access_logs.
+	// LogRetentionDays: maximum age of rows in activity_logs & api_access_logs.
 	LogRetentionDays int
-	PublicBaseURL    string // dipakai untuk membentuk URL share, mis. https://eform.bpskaltim.go.id
-	WebDir           string // folder berisi login.html, admin.html, public.html, builder.html
-	PublicDir        string // folder berisi landing page publik (index.html), disajikan di "/"
+	PublicBaseURL    string // used to build share URLs, e.g. https://eform.bpskaltim.go.id
+	WebDir           string // folder holding login.html, admin.html, public.html, builder.html
+	PublicDir        string // folder holding the public landing page (index.html), served at "/"
 
-	// Identitas instansi yang tampil di halaman. Nilainya disuntikkan ke berkas
-	// HTML saat disajikan (lihat httpapi/pages.go), sehingga instansi lain bisa
-	// memakai aplikasi ini tanpa menyunting satu berkas pun.
-	OrganisationName     string // nama lengkap, mis. "BPS Provinsi Kalimantan Timur"
-	OrganisationNickname string // nama pendek untuk judul tab, mis. "BPS Kaltim"
+	// Organisation identity shown on the pages. The values are injected into the
+	// HTML as it is served (see httpapi/pages.go), so another organisation can
+	// use this application without editing a single file.
+	OrganisationName     string // full name, e.g. "BPS Provinsi Kalimantan Timur"
+	OrganisationNickname string // short name for the tab title, e.g. "BPS Kaltim"
 
 	Seed SeedConfig
 
-	// Google OAuth (untuk responden publik)
+	// Google OAuth (for public respondents)
 	GoogleClientID     string
 	GoogleClientSecret string
 	GoogleRedirectURL  string // default: {PublicBaseURL}/auth/google/callback
@@ -56,8 +56,8 @@ func env(key, def string) string {
 }
 
 func Load() *Config {
-	// Muat .env (jika ada) sebelum membaca env apa pun.
-	// File diabaikan kalau tidak ada; env asli OS tidak ditimpa.
+	// Load .env (if present) before reading any environment variable.
+	// A missing file is ignored; real OS environment variables are never overwritten.
 	loadDotEnv(env("ENV_FILE", ".env"))
 
 	c := &Config{
@@ -66,9 +66,9 @@ func Load() *Config {
 		PublicBaseURL: strings.TrimRight(env("PUBLIC_BASE_URL", "http://localhost:8080"), "/"),
 		WebDir:        env("WEB_DIR", "web"),
 		PublicDir:     env("PUBLIC_DIR", "public"),
-		// Default sengaja diisi nilai yang selama ini tertulis di HTML, supaya
-		// pemasangan yang sudah berjalan tidak berubah tampilannya saat env
-		// belum disetel.
+		// The defaults deliberately carry the values that used to be hard-coded in the
+		// HTML, so an existing deployment looks unchanged while the environment
+		// variables are not set yet.
 		OrganisationName:     env("ORGANISATION_NAME", "BPS Provinsi Kalimantan Timur"),
 		OrganisationNickname: env("ORGANISATION_NICKNAME", "BPS Kaltim"),
 		Seed: SeedConfig{
@@ -86,7 +86,7 @@ func Load() *Config {
 		b := make([]byte, 32)
 		_, _ = rand.Read(b)
 		secret = hex.EncodeToString(b)
-		log.Println("[WARN] JWT_SECRET kosong — memakai secret acak (token akan invalid setelah restart). Set JWT_SECRET di produksi.")
+		log.Println("[WARN] JWT_SECRET is empty — using a random secret (tokens become invalid after a restart). Set JWT_SECRET in production.")
 	}
 	c.JWTSecret = []byte(secret)
 
@@ -95,7 +95,7 @@ func Load() *Config {
 		b := make([]byte, 32)
 		_, _ = rand.Read(b)
 		respSecret = hex.EncodeToString(b)
-		log.Println("[WARN] JWT_RESPONDENT_SECRET kosong — memakai secret acak terpisah. Set JWT_RESPONDENT_SECRET di produksi.")
+		log.Println("[WARN] JWT_RESPONDENT_SECRET is empty — using a separate random secret. Set JWT_RESPONDENT_SECRET in production.")
 	}
 	c.JWTRespondentSecret = []byte(respSecret)
 
@@ -107,9 +107,9 @@ func Load() *Config {
 	}
 	c.JWTTTL = time.Duration(ttlHours) * time.Hour
 
-	// Default sengaja PublicBaseURL saja, bukan "*". Aplikasi menyajikan UI-nya sendiri
-	// dari origin yang sama sehingga tidak butuh CORS terbuka; kalau memang perlu diakses
-	// dari origin lain, isi CORS_ORIGINS secara eksplisit.
+	// The default is deliberately PublicBaseURL alone, not "*". The application serves its
+	// own UI from the same origin and therefore needs no open CORS; if access from another
+	// origin really is required, set CORS_ORIGINS explicitly.
 	origins := env("CORS_ORIGINS", c.PublicBaseURL)
 	for _, o := range strings.Split(origins, ",") {
 		if o = strings.TrimSpace(o); o != "" {
@@ -130,13 +130,13 @@ func Load() *Config {
 	}
 
 	if len(c.CORSOrigins) == 1 && c.CORSOrigins[0] == "*" {
-		log.Println("[WARN] CORS_ORIGINS=* mengizinkan semua origin — isi daftar origin secara eksplisit di produksi.")
+		log.Println("[WARN] CORS_ORIGINS=* allows every origin — list the origins explicitly in production.")
 	}
 	return c
 }
 
-// resolveDBURL mengembalikan connection string PostgreSQL.
-// Prioritas: DATABASE_URL (jika diset) → rakitan dari POSTGRES_* vars.
+// resolveDBURL returns the PostgreSQL connection string.
+// Priority: DATABASE_URL (when set) → assembled from the POSTGRES_* variables.
 func resolveDBURL() string {
 	if url := os.Getenv("DATABASE_URL"); url != "" {
 		return url
@@ -150,8 +150,8 @@ func resolveDBURL() string {
 	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s", user, pass, host, port, name, ssl)
 }
 
-// resolveSuperadminPassword mengembalikan password superadmin dari env, atau
-// men-generate password acak sekali pakai jika env tidak disetel (cetak ke stdout).
+// resolveSuperadminPassword returns the superadmin password from the environment, or
+// generates a one-off random password when it is unset (printed to stdout).
 func resolveSuperadminPassword() string {
 	if pw := os.Getenv("SUPERADMIN_PASSWORD"); pw != "" {
 		return pw
@@ -159,19 +159,19 @@ func resolveSuperadminPassword() string {
 	b := make([]byte, 12)
 	_, _ = rand.Read(b)
 	pw := hex.EncodeToString(b)
-	log.Printf("[WARN] SUPERADMIN_PASSWORD tidak disetel — password sementara: %s (set env untuk produksi)", pw)
+	log.Printf("[WARN] SUPERADMIN_PASSWORD is not set — temporary password: %s (set the env var in production)", pw)
 	return pw
 }
 
-// loadDotEnv memuat file .env (jika ada) memakai joho/godotenv.
-// godotenv.Load TIDAK menimpa variabel yang sudah ada di environment OS,
-// jadi env asli tetap diutamakan. File yang tidak ada diabaikan diam-diam.
+// loadDotEnv loads the .env file (if present) using joho/godotenv.
+// godotenv.Load does NOT overwrite variables that already exist in the OS environment,
+// so real environment variables keep priority. A missing file is ignored silently.
 func loadDotEnv(path string) {
 	if err := godotenv.Load(path); err != nil {
 		if !os.IsNotExist(err) {
-			log.Printf("[config] gagal memuat %s: %v", path, err)
+			log.Printf("[config] failed to load %s: %v", path, err)
 		}
 		return
 	}
-	log.Printf("[config] env dimuat dari %s", path)
+	log.Printf("[config] env loaded from %s", path)
 }

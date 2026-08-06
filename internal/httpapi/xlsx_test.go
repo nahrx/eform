@@ -20,48 +20,48 @@ func TestColumnName(t *testing.T) {
 }
 
 func TestIsSpreadsheetNumber(t *testing.T) {
-	angka := []string{"0", "2", "-5", "6472", "3.14", "-0.5"}
-	for _, v := range angka {
+	numbers := []string{"0", "2", "-5", "6472", "3.14", "-0.5"}
+	for _, v := range numbers {
 		if !isSpreadsheetNumber(v) {
-			t.Errorf("%q seharusnya dianggap angka", v)
+			t.Errorf("%q should be treated as a number", v)
 		}
 	}
-	// Yang paling penting: kode berawalan nol harus tetap teks, kalau tidak
-	// "0101" berubah jadi 101 dan datanya rusak.
-	teks := []string{"", "0101", "007", "6472A", "1,5", "1e5", "abc", "1234567890123456", " 5"}
-	for _, v := range teks {
+	// Most important of all: leading-zero codes must stay text, otherwise
+	// "0101" would become 101 and the data would be corrupt.
+	texts := []string{"", "0101", "007", "6472A", "1,5", "1e5", "abc", "1234567890123456", " 5"}
+	for _, v := range texts {
 		if isSpreadsheetNumber(v) {
-			t.Errorf("%q seharusnya tetap teks", v)
+			t.Errorf("%q should stay text", v)
 		}
 	}
 }
 
-func TestXMLEscapeMembuangKarakterKontrol(t *testing.T) {
+func TestXMLEscapeStripsControlCharacters(t *testing.T) {
 	got := xmlEscape("a\x00b\x07c")
 	if strings.ContainsAny(got, "\x00\x07") {
-		t.Fatalf("karakter kontrol masih ada: %q", got)
+		t.Fatalf("control characters remain: %q", got)
 	}
 	if got != "abc" {
-		t.Fatalf("dapat %q", got)
+		t.Fatalf("got %q", got)
 	}
 	if e := xmlEscape(`a<b>&"c'`); e != `a&lt;b&gt;&amp;&quot;c&apos;` {
-		t.Fatalf("escape salah: %q", e)
+		t.Fatalf("wrong escaping: %q", e)
 	}
-	// tab/newline sah di XML dan harus dipertahankan
+	// tab/newline are legal in XML and must be preserved
 	if xmlEscape("a\nb\tc") != "a\nb\tc" {
-		t.Error("tab/newline seharusnya dipertahankan")
+		t.Error("tab/newline should be preserved")
 	}
 }
 
-// TestXLSXStrukturValid memastikan berkas yang dihasilkan benar-benar zip berisi
-// bagian-bagian wajib OOXML dan XML-nya well-formed.
-func TestXLSXStrukturValid(t *testing.T) {
+// TestXLSXStructureIsValid checks that the produced file really is a zip containing
+// the required OOXML parts, and that its XML is well-formed.
+func TestXLSXStructureIsValid(t *testing.T) {
 	var buf bytes.Buffer
-	x, err := newXLSXWriter(&buf, "Jawaban")
+	x, err := newXLSXWriter(&buf, "Responses")
 	if err != nil {
 		t.Fatal(err)
 	}
-	x.WriteRow([]string{"id", "nama", "jumlah", "kode"})
+	x.WriteRow([]string{"id", "name", "amount", "code"})
 	x.WriteRow([]string{"r1", "Budi <&>", "2", "0101"})
 	x.WriteRow([]string{"r2", "Ani \"Q\"", "3.5", "6472"})
 	if err := x.Close(); err != nil {
@@ -70,7 +70,7 @@ func TestXLSXStrukturValid(t *testing.T) {
 
 	zr, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
 	if err != nil {
-		t.Fatalf("bukan zip yang sah: %v", err)
+		t.Fatalf("not a valid zip: %v", err)
 	}
 	wajib := map[string]bool{
 		"[Content_Types].xml":        false,
@@ -89,7 +89,7 @@ func TestXLSXStrukturValid(t *testing.T) {
 		}
 		data, _ := io.ReadAll(rc)
 		rc.Close()
-		// Setiap bagian harus XML yang well-formed.
+		// Every part must be well-formed XML.
 		dec := xml.NewDecoder(bytes.NewReader(data))
 		for {
 			_, err := dec.Token()
@@ -97,32 +97,32 @@ func TestXLSXStrukturValid(t *testing.T) {
 				break
 			}
 			if err != nil {
-				t.Fatalf("%s bukan XML valid: %v", f.Name, err)
+				t.Fatalf("%s is not valid XML: %v", f.Name, err)
 			}
 		}
 		if f.Name == "xl/worksheets/sheet1.xml" {
 			s := string(data)
 			if !strings.Contains(s, `<v>2</v>`) {
-				t.Error("angka seharusnya ditulis sebagai bilangan")
+				t.Error("a number should be written as numeric")
 			}
 			if !strings.Contains(s, `0101`) || strings.Contains(s, `<v>0101</v>`) {
-				t.Error("kode berawalan nol harus tetap teks")
+				t.Error("a leading-zero code must stay text")
 			}
 			if !strings.Contains(s, "Budi &lt;&amp;&gt;") {
-				t.Error("karakter khusus harus di-escape")
+				t.Error("special characters must be escaped")
 			}
 		}
 	}
 	for name, ada := range wajib {
 		if !ada {
-			t.Errorf("bagian wajib hilang: %s", name)
+			t.Errorf("required part missing: %s", name)
 		}
 	}
 }
 
-func TestXLSXNamaLembarDibersihkan(t *testing.T) {
+func TestXLSXSheetNameIsSanitised(t *testing.T) {
 	var buf bytes.Buffer
-	x, _ := newXLSXWriter(&buf, "Lap/oran: 2026 [uji] yang namanya sangat panjang sekali")
+	x, _ := newXLSXWriter(&buf, "Rep/ort: 2026 [test] with an extremely long name")
 	x.WriteRow([]string{"a"})
 	if err := x.Close(); err != nil {
 		t.Fatal(err)
@@ -136,24 +136,24 @@ func TestXLSXNamaLembarDibersihkan(t *testing.T) {
 		data, _ := io.ReadAll(rc)
 		rc.Close()
 		s := string(data)
-		// Ambil isi atribut name="..." saja — bagian lain wajar memuat ':' (mis. r:id).
+		// Only take the name="..." attribute — other parts legitimately contain ':' (r:id, say).
 		start := strings.Index(s, `<sheet name="`) + len(`<sheet name="`)
 		name := s[start : start+strings.Index(s[start:], `"`)]
 		if strings.ContainsAny(name, `:\/?*[]`) {
-			t.Errorf("nama lembar masih memuat karakter terlarang: %q", name)
+			t.Errorf("the sheet name still contains a forbidden character: %q", name)
 		}
 		if len([]rune(name)) > 31 {
-			t.Errorf("nama lembar melebihi 31 karakter: %q", name)
+			t.Errorf("the sheet name exceeds 31 characters: %q", name)
 		}
 	}
 }
 
-// TestXLSXTulisKeBerkas menulis contoh berkas ke path di env XLSX_OUT supaya bisa
-// diverifikasi pembaca spreadsheet sungguhan di luar Go. Dilewati kalau env tak diisi.
-func TestXLSXTulisKeBerkas(t *testing.T) {
+// TestXLSXWriteToFile writes a sample file to the path in XLSX_OUT so it can be
+// verified by a real spreadsheet reader outside Go. Skipped when the env var is unset.
+func TestXLSXWriteToFile(t *testing.T) {
 	out := os.Getenv("XLSX_OUT")
 	if out == "" {
-		t.Skip("XLSX_OUT tidak diisi")
+		t.Skip("XLSX_OUT is not set")
 	}
 	f, err := os.Create(out)
 	if err != nil {
@@ -161,14 +161,14 @@ func TestXLSXTulisKeBerkas(t *testing.T) {
 	}
 	defer f.Close()
 
-	x, err := newXLSXWriter(f, "Jawaban SE2026")
+	x, err := newXLSXWriter(f, "Responses SE2026")
 	if err != nil {
 		t.Fatal(err)
 	}
-	x.WriteRow([]string{"id", "nama", "kode_wilayah", "jumlah", "catatan", "panjang"})
-	x.WriteRow([]string{"r1", `Budi <Ámir> & "Co"`, "0101", "2", "baris\nbaru\tdan tab", strings.Repeat("x", 40000)})
+	x.WriteRow([]string{"id", "name", "kode_wilayah", "amount", "note", "long"})
+	x.WriteRow([]string{"r1", `Budi <Ámir> & "Co"`, "0101", "2", "line\nbreak\tand tab", strings.Repeat("x", 40000)})
 	x.WriteRow([]string{"r2", "Ani ✓ émoji 😀", "6472", "3.5", "", ""})
-	x.WriteRow([]string{"r3", "kontrol\x01\x02", "007", "-5", "kosong di tengah", "akhir"})
+	x.WriteRow([]string{"r3", "control\x01\x02", "007", "-5", "empty in the middle", "end"})
 	wide := make([]string, 30)
 	for i := range wide {
 		wide[i] = "k" + string(rune('a'+i%26))

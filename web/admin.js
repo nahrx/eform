@@ -29,7 +29,7 @@ function adminConfirm(msg,onConfirm){
 
 async function api(path,opts={}){
   const r=await fetch(path,{...opts,headers:{...H,...(opts.headers||{})}});
-  if(r.status===401){localStorage.removeItem("eform_token");location.replace("/login");throw new Error("sesi habis");}
+  if(r.status===401){localStorage.removeItem("eform_token");location.replace("/login");throw new Error("session expired");}
   const ct=r.headers.get("content-type")||""; const data=ct.includes("json")?await r.json():null;
   if(!r.ok) throw new Error((data&&data.error)||("HTTP "+r.status));
   return data;
@@ -127,13 +127,13 @@ async function loadAudit(page){
   if(page<0) return;
   const rows=$("#auditRows");
   if(!rows) return;
-  rows.innerHTML='<tr><td colspan="6" class="empty">Memuat…</td></tr>';
+  rows.innerHTML='<tr><td colspan="6" class="empty">Loading…</td></tr>';
   try{
     const d=await api(`/api/activity-logs?limit=${AUDIT_SIZE}&offset=${page*AUDIT_SIZE}`);
     AUDIT_PAGE=page;
     const logs=d.logs||[];
     if(!logs.length){
-      rows.innerHTML='<tr><td colspan="6" class="empty">Belum ada aksi tercatat.</td></tr>';
+      rows.innerHTML='<tr><td colspan="6" class="empty">No actions recorded yet.</td></tr>';
     }else{
       rows.innerHTML=logs.map(l=>`<tr>
         <td class="muted">${new Date(l.createdAt).toLocaleString("id-ID")}</td>
@@ -154,7 +154,7 @@ async function loadAudit(page){
 }
 
 /* ======================================================
-   DAFTAR KUESIONER — klik baris untuk membuka halaman pengelolaan
+   FORM LIST — click a row to open its management page
    ====================================================== */
 
 async function load(){
@@ -165,9 +165,9 @@ async function load(){
     const answersTh=$("#thAnswers");
     if(answersTh) answersTh.style.display=canViewResults?"":"none";
     const colCount=(canViewResults?4:3)+1;
-    if(!forms||!forms.length){rows.innerHTML=`<tr><td colspan="${colCount}" class="empty">Belum ada kuesioner. Klik “+ Kuesioner baru”.</td></tr>`;return;}
-    // Jumlah jawaban sudah ikut di /api/forms — dulu di sini ada satu permintaan HTTP
-    // per kuesioner hanya untuk mengambil angkanya.
+    if(!forms||!forms.length){rows.innerHTML=`<tr><td colspan="${colCount}" class="empty">No forms yet. Click “+ New form”.</td></tr>`;return;}
+    // The response count already ships with /api/forms — this used to make one request HTTP
+    // per form just to fetch the number.
     rows.innerHTML=forms.map(f=>`<tr onclick="location.href='/manage?id=${f.id}'" style="cursor:pointer">
       <td><b>${esc(f.title)}</b><div class="muted">${esc(f.slug)}</div></td>
       <td><span class="tag ${f.status}">${f.status}</span></td>
@@ -184,7 +184,7 @@ async function load(){
 }
 
 /* ======================================================
-   DAFTAR KUESIONER — menu titik-3 per baris (Buka Builder / Lihat Jawaban)
+   FORM LIST — the per-row ⋮ menu (Open Builder / View Responses)
    ====================================================== */
 
 let _rowMenuFormId=null;
@@ -222,7 +222,7 @@ async function loadUsers(){
   if(MY_ROLE!=="superadmin") return;
   const rows=$("#userRows");
   if(!rows) return;
-  rows.innerHTML='<tr><td colspan="6" class="empty">Memuat…</td></tr>';
+  rows.innerHTML='<tr><td colspan="6" class="empty">Loading…</td></tr>';
   try{
     const {users}=await api("/api/users");
     _usersCache=users||[];
@@ -235,16 +235,16 @@ async function loadUsers(){
 function _renderUsersTab(){
   const rows=$("#userRows");
   if(!rows) return;
-  if(!_usersCache.length){rows.innerHTML='<tr><td colspan="6" class="empty">Belum ada user.</td></tr>';return;}
+  if(!_usersCache.length){rows.innerHTML='<tr><td colspan="6" class="empty">No users yet.</td></tr>';return;}
   rows.innerHTML=_usersCache.map(u=>`<tr id="urow-${u.id}">
     <td><b>${esc(u.username||"-")}</b></td>
     <td class="muted">${esc(u.email||"-")}</td>
     <td><span class="tag">${esc(u.role||"-")}</span></td>
-    <td><span class="tag ${u.isActive?"published":"archived"}">${u.isActive?"Aktif":"Nonaktif"}</span></td>
+    <td><span class="tag ${u.isActive?"published":"archived"}">${u.isActive?"Active":"Inactive"}</span></td>
     <td class="muted">${u.createdAt?new Date(u.createdAt).toLocaleString("id-ID"):"-"}</td>
     <td style="text-align:right;white-space:nowrap">
       <button class="btn" style="font-size:12px;padding:3px 8px" onclick="editAdminUser('${u.id}')">Edit</button>
-      <button class="btn danger" style="font-size:12px;padding:3px 8px" onclick="deleteAdminUser('${u.id}','${esc(u.username)}')"${u.id===MY_ID?' disabled title="Tidak bisa menghapus akun sendiri"':""}>Hapus</button>
+      <button class="btn danger" style="font-size:12px;padding:3px 8px" onclick="deleteAdminUser('${u.id}','${esc(u.username)}')"${u.id===MY_ID?' disabled title="Cannot delete your own account"':""}>Delete</button>
     </td>
   </tr>`).join("");
 }
@@ -273,12 +273,12 @@ function editAdminUser(id){
         </select>
       </div>
       <div style="flex:1;min-width:180px">
-        <div style="font-size:11px;color:var(--muted);margin-bottom:3px">Password baru <span style="font-weight:normal">(kosongkan jika tidak diubah)</span></div>
-        <input id="uepw-${id}" type="password" style="width:100%;font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:6px" placeholder="min. 6 karakter">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:3px">New password <span style="font-weight:normal">(leave blank if unchanged)</span></div>
+        <input id="uepw-${id}" type="password" style="width:100%;font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:6px" placeholder="min. 6 characters">
       </div>
       <div style="display:flex;gap:6px;flex-shrink:0">
-        <button class="btn primary" style="font-size:13px" onclick="saveAdminUser('${id}')">Simpan</button>
-        <button class="btn" style="font-size:13px" onclick="cancelAdminUserEdit('${id}')">Batal</button>
+        <button class="btn primary" style="font-size:13px" onclick="saveAdminUser('${id}')">Save</button>
+        <button class="btn" style="font-size:13px" onclick="cancelAdminUserEdit('${id}')">Cancel</button>
       </div>
     </div>
     <div id="uemsg-${id}" style="font-size:12px;color:#b91c1c;margin-top:6px"></div>
@@ -297,8 +297,8 @@ async function saveAdminUser(id){
   const role=document.getElementById("uer-"+id)?.value||"admin";
   const password=(document.getElementById("uepw-"+id)?.value||"").trim();
   const msg=document.getElementById("uemsg-"+id);
-  if(!username){if(msg)msg.textContent="Username wajib diisi.";return;}
-  if(password&&password.length<6){if(msg)msg.textContent="Password minimal 6 karakter.";return;}
+  if(!username){if(msg)msg.textContent="Username is required.";return;}
+  if(password&&password.length<6){if(msg)msg.textContent="Password must be at least 6 characters.";return;}
   if(msg)msg.textContent="";
   try{
     const body={username,email,role};
@@ -312,8 +312,8 @@ async function saveAdminUser(id){
 }
 
 async function deleteAdminUser(id,name){
-  if(id===MY_ID){adminToast("Tidak bisa menghapus akun sendiri.",true);return;}
-  adminConfirm(`Hapus user "${name}"? Tindakan ini tidak bisa dibatalkan.`,async()=>{
+  if(id===MY_ID){adminToast("Cannot delete your own account.",true);return;}
+  adminConfirm(`Delete user "${name}"? This action cannot be undone.`,async()=>{
     try{
       await api("/api/users/"+id,{method:"DELETE"});
       await loadUsers();
@@ -329,25 +329,25 @@ async function createUserFromPanel(){
   const msg=$("#userMsg");
 
   if(!username){
-    if(msg) msg.textContent="Username wajib diisi.";
+    if(msg) msg.textContent="Username is required.";
     $("#uUsername")?.focus();
     return;
   }
   if(password.length<6){
-    if(msg) msg.textContent="Password minimal 6 karakter.";
+    if(msg) msg.textContent="Password must be at least 6 characters.";
     $("#uPassword")?.focus();
     return;
   }
 
   const btn=$("#btnCreateUser");
-  if(btn){btn.disabled=true;btn.textContent="Membuat…";}
+  if(btn){btn.disabled=true;btn.textContent="Creating…";}
   if(msg) msg.textContent="";
   try{
     await api("/api/users",{
       method:"POST",
       body:JSON.stringify({username,email,password,role})
     });
-    if(msg) msg.textContent="User berhasil dibuat.";
+    if(msg) msg.textContent="User created successfully.";
     if($("#uUsername")) $("#uUsername").value="";
     if($("#uEmail")) $("#uEmail").value="";
     if($("#uPassword")) $("#uPassword").value="";
@@ -356,7 +356,7 @@ async function createUserFromPanel(){
   }catch(e){
     if(msg) msg.textContent="Gagal: "+e.message;
   }finally{
-    if(btn){btn.disabled=false;btn.textContent="+ Buat User";}
+    if(btn){btn.disabled=false;btn.textContent="+ Create User";}
   }
 }
 

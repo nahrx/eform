@@ -1,10 +1,10 @@
-/* Menambahkan kotak pencarian di atas semua elemen <select> di halaman,
-   supaya dropdown dengan banyak opsi (mis. daftar wilayah dari API) mudah dicari.
-   Bekerja secara progressive-enhancement: <select> asli tetap ada di DOM (disembunyikan
-   secara visual) sebagai sumber nilai, supaya semua kode yang sudah ada (onchange,
-   addEventListener("change", ...), pembacaan `.value` saat submit) tetap berfungsi
-   tanpa perlu diubah. Deteksi <select> baru/berubah dilakukan otomatis lewat
-   MutationObserver, jadi cukup include skrip ini sekali per halaman. */
+/* Adds a search box above every <select> on the page, so dropdowns with many
+   options (a region list pulled from an API, for instance) are easy to search.
+   It works as progressive enhancement: the original <select> stays in the DOM (hidden
+   visually) as the source of truth, so all existing code (onchange,
+   addEventListener("change", ...), reading `.value` on submit) keeps working
+   without any changes. New and changed <select> elements are detected automatically via
+   MutationObserver, so including this script once per page is enough. */
 (function () {
   if (window.__searchableSelectInit) return;
   window.__searchableSelectInit = true;
@@ -33,7 +33,7 @@
 .ss-opt.ss-active{background:var(--accent-soft,#d6edf1);color:var(--accent-ink,#0b5563)}
 .ss-opt.ss-selected{font-weight:600}
 .ss-empty{padding:10px 12px;font-size:12.5px;color:var(--muted,#79828f);text-align:center}
-/* --- pilihan ganda: tiap baris jadi kotak centang --- */
+/* --- multiple choice: every row becomes a checkbox --- */
 .ss-opt.ss-check{display:flex;align-items:center;gap:9px;font-weight:400}
 .ss-opt.ss-check.ss-selected{font-weight:500}
 .ss-box{flex:none;width:16px;height:16px;border:1.5px solid var(--line,#dfe4ea);border-radius:4px;
@@ -67,7 +67,7 @@
       if (w !== except) closePanel(w);
     });
   }
-  // Nilai yang sedang terpilih. Untuk pilihan ganda bisa lebih dari satu.
+  // The currently selected values. For multiple choice there can be more than one.
   function selectedValues(select) {
     return Array.from(select.selectedOptions || []).map((o) => o.value);
   }
@@ -80,7 +80,7 @@
     const opts = optList(select);
     const filtered = q ? opts.filter((o) => o.label.toLowerCase().includes(q)) : opts;
     if (!filtered.length) {
-      list.innerHTML = '<li class="ss-empty">Tidak ditemukan</li>';
+      list.innerHTML = '<li class="ss-empty">No matches</li>';
       updateFoot(wrap);
       return;
     }
@@ -99,12 +99,12 @@
     updateFoot(wrap);
   }
 
-  // Kaki panel hanya dipakai mode pilihan ganda: jumlah terpilih + tombol bersihkan.
+  // The panel footer is only used in multiple-choice mode: the selected count + a clear button.
   function updateFoot(wrap) {
     const foot = wrap.querySelector(".ss-foot");
     if (!foot) return;
     const n = selectedValues(wrap.querySelector("select")).filter(Boolean).length;
-    foot.querySelector(".ss-foot-count").textContent = n ? n + " dipilih" : "Belum ada dipilih";
+    foot.querySelector(".ss-foot-count").textContent = n ? n + " dipilih" : "Nothing selected yet";
     foot.querySelector(".ss-clear").disabled = n === 0;
   }
   function moveActive(list, dir) {
@@ -122,10 +122,10 @@
       ctrl = wrap.querySelector(".ss-ctrl");
 
     if (select.multiple) {
-      // Tampilkan nama pilihannya selama masih muat; lebih dari dua cukup jumlahnya.
+      // Show the option names while they still fit; beyond two, a count is enough.
       const chosen = Array.from(select.selectedOptions).filter((o) => o.value !== "");
       let txt;
-      if (!chosen.length) txt = "— pilih —";
+      if (!chosen.length) txt = "— select —";
       else if (chosen.length <= 2) txt = chosen.map((o) => o.textContent).join(", ");
       else txt = chosen.length + " dipilih";
       label.textContent = txt;
@@ -137,7 +137,7 @@
 
     const opt = select.options[select.selectedIndex];
     const txt = opt ? opt.textContent : "";
-    label.textContent = select.value ? txt : txt || "— pilih —";
+    label.textContent = select.value ? txt : txt || "— select —";
     label.classList.toggle("ss-placeholder", !select.value);
     ctrl.disabled = select.disabled;
   }
@@ -150,8 +150,8 @@
   function pick(wrap, value) {
     const select = wrap.querySelector("select");
 
-    // Pilihan ganda: centang/hapus centang, panel dibiarkan terbuka supaya beberapa
-    // nilai bisa dipilih beruntun.
+    // Multiple choice: tick/untick, leaving the panel open so several values can be
+    // chosen in a row.
     if (select.multiple) {
       const opt = Array.from(select.options).find((o) => o.value === value);
       if (!opt) return;
@@ -159,8 +159,8 @@
       fire(select);
       updateCtrl(wrap);
       renderList(wrap, wrap.querySelector(".ss-search").value);
-      // Kembalikan penanda baris aktif ke opsi yang barusan dicentang, supaya
-      // navigasi panah/Enter tidak melompat ke atas tiap kali mencentang.
+      // Move the active-row marker back to the option just ticked, so arrow/Enter
+      // navigation does not jump to the top on every tick.
       const items = [...wrap.querySelectorAll(".ss-list .ss-opt")];
       items.forEach((li) => li.classList.remove("ss-active"));
       const same = items.find((li) => li.dataset.value === value);
@@ -197,8 +197,8 @@
     renderList(wrap, "");
     requestAnimationFrame(() => {
       search.focus();
-      // Kalau dropdown terbuka di dekat dasar wadah yang bisa digulir (mis. laci
-      // filter), panelnya bisa tertutup kaki laci — geser secukupnya agar terlihat.
+      // If the dropdown opens near the bottom of a scrollable container (the filter
+      // drawer, say), the panel can be hidden by the drawer footer — scroll just enough.
       panel.scrollIntoView({ block: "nearest" });
     });
   }
@@ -212,9 +212,9 @@
     if (!select || select.tagName !== "SELECT") return;
     if (select.closest(".ss-wrap")) return;
 
-    // Salin class asli select (mis. "ff-input", "pv-in", "filter-sel") ke tombol
-    // pengganti, supaya lebar/ukuran yang sudah diatur halaman (max-width, width
-    // tetap, dst.) tetap berlaku — bukan selalu melebar penuh (width:100%).
+    // Copy the select's own classes ("ff-input", "pv-in", "filter-sel", ...) onto the
+    // replacement button, so the width/size the page already set (max-width, width
+    // fixed sizes, and so on) still apply — rather than always stretching to width:100%.
     const originalClasses = select.className;
 
     const wrap = document.createElement("div");
@@ -234,7 +234,7 @@
     panel.className = "ss-panel";
     panel.hidden = true;
     panel.innerHTML =
-      '<input type="text" class="ss-search" placeholder="Cari…" autocomplete="off">' +
+      '<input type="text" class="ss-search" placeholder="Search…" autocomplete="off">' +
       '<ul class="ss-list" role="listbox"' + (select.multiple ? ' aria-multiselectable="true"' : "") + "></ul>" +
       (select.multiple
         ? '<div class="ss-foot"><span class="ss-foot-count"></span><button type="button" class="ss-clear">Bersihkan</button></div>'

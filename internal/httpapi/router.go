@@ -21,7 +21,7 @@ func (s *Server) Routes() http.Handler {
 	mux.Handle("GET /api/auth/me", s.authMW(s.me))
 	mux.Handle("PATCH /api/auth/me/language", s.authMW(s.updateMyLanguage))
 
-	// --- forms (perlu login) ---
+	// --- forms (login required) ---
 	mux.Handle("GET /api/forms", s.authMW(s.listForms))
 	mux.Handle("POST /api/forms", s.authMW(s.createForm))
 	mux.Handle("GET /api/forms/{id}", s.authMW(s.getForm))
@@ -50,7 +50,7 @@ func (s *Server) Routes() http.Handler {
 	mux.Handle("GET /api/forms/{id}/responses.xlsx", s.authMW(s.exportResponsesXLSX))
 	mux.Handle("GET /api/forms/{id}/fields/{fieldName}/suggested-values", s.authMW(s.requireRole(s.suggestedFieldValues, "superadmin", "admin")))
 
-	// --- users (khusus superadmin) ---
+	// --- users (superadmin only) ---
 	mux.Handle("POST /api/users", s.authMW(s.requireRole(s.createUser, "superadmin")))
 	mux.Handle("GET /api/users", s.authMW(s.requireRole(s.listUsers, "superadmin")))
 	mux.Handle("PATCH /api/users/{id}", s.authMW(s.requireRole(s.patchAdminUser, "superadmin")))
@@ -87,7 +87,7 @@ func (s *Server) Routes() http.Handler {
 	mux.Handle("DELETE /api/editor-respondents/{id}", s.authMW(s.requireRole(s.removeEditorAllowedRespondent, "superadmin", "admin")))
 	mux.Handle("GET /api/forms/{id}/respondents", s.authMW(s.requireRole(s.listFormRespondents, "superadmin", "admin")))
 
-	// --- pengelolaan API key per kuesioner (superadmin / admin pemilik) ---
+	// --- API key management per form (superadmin / owning admin) ---
 	mux.Handle("POST /api/forms/{id}/api-keys", s.authMW(s.requireRole(s.createAPIKey, "superadmin", "admin")))
 	mux.Handle("GET /api/forms/{id}/api-keys", s.authMW(s.requireRole(s.listAPIKeys, "superadmin", "admin")))
 	mux.Handle("PUT /api/api-keys/{keyId}", s.authMW(s.requireRole(s.updateAPIKey, "superadmin", "admin")))
@@ -98,24 +98,24 @@ func (s *Server) Routes() http.Handler {
 	mux.Handle("DELETE /api/api-key-respondents/{id}", s.authMW(s.requireRole(s.removeAPIKeyRespondent, "superadmin", "admin")))
 	mux.Handle("GET /api/api-keys/{keyId}/logs", s.authMW(s.requireRole(s.listAPIKeyLogs, "superadmin", "admin")))
 
-	// --- riwayat aksi admin (audit) ---
+	// --- admin action history (audit) ---
 	mux.Handle("GET /api/activity-logs", s.authMW(s.requireRole(s.listActivityLogs, "superadmin", "admin")))
 
-	// riwayat perubahan jawaban: admin pemilik kuesioner, atau editor yang berhak
+	// answer change history: the form's owning admin, or an authorised editor
 	mux.Handle("GET /api/forms/{id}/responses/{responseId}/revisions", s.authMW(s.requireRole(s.listResponseRevisions, "superadmin", "admin", "editor", "viewer")))
 
-	// --- API publik untuk sistem eksternal: autentikasi API key, read-only ---
+	// --- Public API for external systems: API key authentication, read-only ---
 	// Seluruh pembatasan (aktif, kedaluwarsa, IP, kuota) ada di apiKeyMW; cakupan datanya
-	// di store.APIKeyScope. Tidak ada endpoint tulis di sini, dan tidak akan ditambahkan.
+	// in store.APIKeyScope. There are no write endpoints here, and none will be added.
 	mux.Handle("GET /api/v1/me", s.apiKeyMW(s.apiMe))
 	mux.Handle("GET /api/v1/forms/{formId}/responses", s.apiKeyMW(s.apiListResponses))
 	mux.Handle("GET /api/v1/forms/{formId}/responses.csv", s.apiKeyMW(s.apiExportResponses))
 	mux.Handle("GET /api/v1/forms/{formId}/responses/{responseId}", s.apiKeyMW(s.apiGetResponse))
 
-	// --- viewer portal (akses viewer yang sudah login) ---
-	// role diperlonggar jadi "viewer","editor" karena satu akun sekarang bisa jadi viewer
-	// di satu kuesioner dan editor di kuesioner lain — otorisasi per-form yang sebenarnya
-	// tetap dicek di dalam masing-masing handler lewat GetViewerPermission.
+	// --- viewer portal (for signed-in viewers) ---
+	// the role check is widened to "viewer","editor" because one account can now be a viewer
+	// on one form and an editor on another — the real per-form authorisation
+	// is still checked inside each handler via GetViewerPermission.
 	mux.Handle("GET /api/viewer/my-forms", s.authMW(s.requireRole(s.viewerMyForms, "viewer", "editor")))
 	mux.Handle("GET /api/viewer/forms/{id}", s.authMW(s.requireRole(s.viewerGetForm, "viewer", "editor")))
 	mux.Handle("GET /api/viewer/forms/{id}/permission", s.authMW(s.requireRole(s.viewerMyFormPermission, "viewer", "editor")))
@@ -124,7 +124,7 @@ func (s *Server) Routes() http.Handler {
 	mux.Handle("GET /api/viewer/forms/{id}/responses.csv", s.authMW(s.requireRole(s.viewerExportResponses, "viewer", "editor")))
 	mux.Handle("GET /api/viewer/forms/{id}/responses.xlsx", s.authMW(s.requireRole(s.viewerExportResponsesXLSX, "viewer", "editor")))
 
-	// --- editor portal (akses editor yang sudah login) ---
+	// --- editor portal (for signed-in editors) ---
 	mux.Handle("GET /api/editor/my-forms", s.authMW(s.requireRole(s.editorMyForms, "editor", "viewer")))
 	mux.Handle("GET /api/editor/forms/{id}", s.authMW(s.requireRole(s.editorGetForm, "editor", "viewer")))
 	mux.Handle("GET /api/editor/forms/{id}/responses", s.authMW(s.requireRole(s.editorListResponses, "editor", "viewer")))
@@ -133,51 +133,51 @@ func (s *Server) Routes() http.Handler {
 	mux.Handle("GET /api/editor/forms/{id}/responses.csv", s.authMW(s.requireRole(s.editorExportResponses, "editor", "viewer")))
 	mux.Handle("GET /api/editor/forms/{id}/responses.xlsx", s.authMW(s.requireRole(s.editorExportResponsesXLSX, "editor", "viewer")))
 
-	// --- publik: data referensi (tanpa login) ---
+	// --- public: reference data (no login) ---
 	mux.HandleFunc("GET /api/wilayah", s.wilayahList)
 	mux.HandleFunc("GET /api/options-proxy", s.optionsProxy)
 
-	// --- publik: akses kuesioner (tanpa login) ---
+	// --- public: form access (no login) ---
 	mux.HandleFunc("GET /api/public/forms/{token}", s.publicGetForm)
 
-	// --- publik: PWA (mode offline khusus kuesioner multi-respons) ---
+	// --- public: PWA (offline mode, multi-response forms only) ---
 	mux.HandleFunc("GET /api/public/forms/{token}/manifest.webmanifest", s.publicManifest)
 	mux.HandleFunc("GET /api/public/forms/{token}/icon.png", s.publicIcon)
 	mux.HandleFunc("GET /sw.js", s.page("sw.js"))
 
-	// --- publik: respondent (perlu JWT Google) ---
+	// --- public: respondent (Google JWT required) ---
 	mux.Handle("GET /api/public/me", s.respondentMW(s.respondentMe))
 	mux.Handle("GET /api/public/forms/{token}/my-response", s.respondentMW(s.myResponse))
 	mux.Handle("GET /api/public/forms/{token}/my-responses", s.respondentMW(s.myResponses))
 	mux.Handle("GET /api/public/forms/{token}/check-access", s.respondentMW(s.checkAccess))
-	// Endpoint yang menulis data dibatasi lajunya: per akun responden dan per IP.
-	// Draft disimpan otomatis saat mengisi, jadi kuotanya paling longgar.
+	// Endpoints that write data are rate-limited: per respondent account and per IP.
+	// Drafts are saved automatically while filling in, so their quota is the most generous.
 	mux.Handle("POST /api/public/forms/{token}/uploads", s.respondentMW(s.limitRespondent(s.publicUpload, 30, 90)))
 	mux.Handle("POST /api/public/forms/{token}/responses", s.respondentMW(s.limitRespondent(s.publicSubmit, 20, 60)))
 	mux.Handle("POST /api/public/forms/{token}/responses/{responseId}/unsubmit", s.respondentMW(s.limitRespondent(s.unsubmitResponse, 20, 60)))
 	mux.Handle("GET /api/public/forms/{token}/draft", s.respondentMW(s.myDraft))
 	mux.Handle("POST /api/public/forms/{token}/draft", s.respondentMW(s.limitRespondent(s.saveDraftHandler, 120, 300)))
 
-	// --- OAuth Google (redirect, tidak butuh JWT) ---
+	// --- Google OAuth (redirects, no JWT required) ---
 	mux.HandleFunc("GET /auth/google", s.googleLogin)
 	mux.HandleFunc("GET /auth/google/viewer", s.googleViewerLogin)
 	mux.HandleFunc("GET /auth/google/callback", s.googleCallback)
 
-	// --- halaman ---
+	// --- pages ---
 	mux.HandleFunc("GET /login", s.page("login.html"))
 	mux.HandleFunc("GET /admin", s.page("admin.html"))
-	mux.HandleFunc("GET /manage", s.page("manage.html")) // halaman pengelolaan satu kuesioner (builder/share/akses)
+	mux.HandleFunc("GET /manage", s.page("manage.html")) // single-form management page (builder/share/access)
 	mux.HandleFunc("GET /builder", s.page("builder.html"))
-	mux.HandleFunc("GET /f/{token}", s.page("public.html"))                          // halaman isi kuesioner publik
-	mux.HandleFunc("GET /responses", s.page("responses.html"))                       // halaman daftar jawaban
-	mux.HandleFunc("GET /response-view", s.page("response-view.html"))               // halaman lihat detail jawaban
-	mux.HandleFunc("GET /viewer-portal", s.page("viewer-portal.html"))               // portal viewer & editor
-	mux.HandleFunc("GET /viewer-responses", s.page("viewer-responses.html"))         // jawaban terbatas viewer
-	mux.HandleFunc("GET /editor-responses", s.page("editor-responses.html"))         // jawaban editor
-	mux.HandleFunc("GET /portal-response-view", s.page("portal-response-view.html")) // detail jawaban viewer/editor
-	mux.HandleFunc("GET /auth/google/done", s.page("google-done.html"))              // landing setelah OAuth
+	mux.HandleFunc("GET /f/{token}", s.page("public.html"))                          // public form-filling page
+	mux.HandleFunc("GET /responses", s.page("responses.html"))                       // response list page
+	mux.HandleFunc("GET /response-view", s.page("response-view.html"))               // response detail page
+	mux.HandleFunc("GET /viewer-portal", s.page("viewer-portal.html"))               // viewer & editor portal
+	mux.HandleFunc("GET /viewer-responses", s.page("viewer-responses.html"))         // viewer's restricted responses
+	mux.HandleFunc("GET /editor-responses", s.page("editor-responses.html"))         // editor's responses
+	mux.HandleFunc("GET /portal-response-view", s.page("portal-response-view.html")) // viewer/editor response detail
+	mux.HandleFunc("GET /auth/google/done", s.page("google-done.html"))              // landing page after OAuth
 
-	// aset statis tiap halaman (CSS/JS terpisah dari HTML)
+	// per-page static assets (CSS/JS kept separate from the HTML)
 	for _, f := range []string{
 		"login.css", "login.js",
 		"admin.css", "admin.js",
@@ -191,21 +191,21 @@ func (s *Server) Routes() http.Handler {
 		mux.HandleFunc("GET /"+f, s.page(f))
 	}
 
-	// aset pustaka pihak ketiga yang di-vendor (mis. Leaflet) — disajikan dari web/vendor/
+	// vendored third-party library assets (Leaflet, for instance) — served from web/vendor/
 	mux.Handle("GET /vendor/", http.StripPrefix("/vendor/", http.FileServer(http.Dir(filepath.Join(s.cfg.WebDir, "vendor")))))
 
-	// uploads: hanya file yang boleh diakses langsung, listing folder ditolak.
+	// uploads: only files may be fetched directly; directory listings are refused.
 	mux.HandleFunc("GET /uploads/", s.uploadFileOnly)
 	mux.HandleFunc("HEAD /uploads/", s.uploadFileOnly)
 
-	// halaman depan publik: sajikan folder PublicDir (index.html di "/").
-	// Pola "GET /{$}" hanya cocok untuk "/" persis, sehingga index.html bisa
-	// lewat serveHTML (placeholder identitas instansi terisi) sementara aset
-	// lain di PublicDir tetap ditangani FileServer.
+	// public landing page: serve the PublicDir folder (index.html at "/").
+	// The "GET /{$}" pattern matches only "/" exactly, so index.html can go
+	// through serveHTML (with the organisation placeholders filled in) while other
+	// other assets in PublicDir stay with the FileServer.
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		s.serveHTML(w, r, filepath.Join(s.cfg.PublicDir, "index.html"))
 	})
-	// Pola "GET /" bersifat catch-all; rute lebih spesifik di atas tetap menang.
+	// The "GET /" pattern is a catch-all; the more specific routes above still win.
 	fileServer := http.FileServer(http.Dir(s.cfg.PublicDir))
 	mux.Handle("GET /", fileServer)
 
@@ -215,8 +215,8 @@ func (s *Server) Routes() http.Handler {
 func (s *Server) page(name string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		path := filepath.Join(s.cfg.WebDir, name)
-		// Berkas HTML lewat serveHTML supaya placeholder identitas instansi
-		// terisi; aset lain (CSS/JS) tidak memuat placeholder apa pun.
+		// HTML files go through serveHTML so the organisation placeholders get
+		// filled in; other assets (CSS/JS) contain no placeholders at all.
 		if strings.HasSuffix(name, ".html") {
 			s.serveHTML(w, r, path)
 			return
@@ -232,9 +232,9 @@ func (s *Server) uploadFileOnly(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Lampiran hanya bisa diambil lewat URL bertanda tangan yang diterbitkan saat
-	// jawaban disajikan ke pihak yang memang berhak (lihat uploads_sign.go).
-	// Sengaja 404, bukan 403, supaya tidak mengonfirmasi keberadaan berkasnya.
+	// Attachments can only be fetched through a signed URL issued when the response is
+	// served to someone who is actually entitled to it (see uploads_sign.go).
+	// Deliberately 404 rather than 403, so the file's existence is not confirmed.
 	if !s.verifyUploadURL(p, r.URL.Query()) {
 		http.NotFound(w, r)
 		return

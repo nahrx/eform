@@ -1,5 +1,5 @@
-/* Service worker untuk mode offline kuesioner multi-respons (PWA).
-   Kontrak IndexedDB (dipakai bareng web/public.html):
+/* Service worker for the offline mode of multi-response forms (PWA).
+   The IndexedDB contract (shared with web/public.html):
    - DB: "eform-offline", versi 1
    - Object store: "queue", keyPath "id" (autoIncrement)
    - Record: {id, url, method, headers, body, ts} */
@@ -83,7 +83,7 @@ async function flushQueue() {
         headers: rec.headers || {},
         body: rec.body,
       });
-      if (!res.ok) break; // masih ada masalah (mis. server error) — jangan hapus, coba lagi nanti
+      if (!res.ok) break; // something is still wrong (a server error, say) — keep it and retry later
       await new Promise((resolve, reject) => {
         const tx = db.transaction(STORE_NAME, "readwrite");
         tx.objectStore(STORE_NAME).delete(rec.id);
@@ -91,7 +91,7 @@ async function flushQueue() {
         tx.onerror = () => reject(tx.error);
       });
     } catch (_e) {
-      break; // masih offline — hentikan, sisanya dicoba lagi saat sync/online berikutnya
+      break; // still offline — stop; the rest is retried on the next sync/online event
     }
   }
 }

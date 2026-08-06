@@ -1,5 +1,5 @@
 -- 0011_editor_permissions.up.sql
--- Hak akses editor per kuesioner (untuk mengelola form yang ditugaskan)
+-- Editor permissions per form (for managing an assigned form)
 
 CREATE TABLE IF NOT EXISTS editor_form_permissions (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),

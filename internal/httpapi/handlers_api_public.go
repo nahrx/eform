@@ -10,36 +10,36 @@ import (
 	"github.com/nahrx/eform/internal/store"
 )
 
-/* Endpoint yang dipakai sistem eksternal (/api/v1), diautentikasi dengan API key
-   lewat apiKeyMW — bukan JWT. Semuanya read-only: tidak ada jalur untuk mengirim
-   atau mengubah jawaban.
+/* The endpoints external systems call (/api/v1), authenticated with an API key via
+   apiKeyMW — not a JWT. Everything here is read-only: there is no path to submit or
+   modify a response.
 
-   Semua pembatasan data (responden terpilih, filter nilai variabel, masking kolom)
-   diterapkan di layer store lewat store.APIKeyScope, jadi handler di sini tidak bisa
-   "lupa" memfilter. Yang tersisa di sini cuma penyembunyian identitas responden,
-   karena itu memang bagian dari bentuk keluaran. */
+   Every data restriction (selected respondents, field-value filters, column masking)
+   is applied in the store layer through store.APIKeyScope, so a handler here cannot
+   "forget" to filter. All that remains here is hiding the respondent's identity,
+   because that genuinely is part of the output shape. */
 
 const apiMaxLimit = 500
 
-// apiScope mengambil API key dari context lalu memastikan formId di URL memang milik
-// key tersebut. Ketidakcocokan dijawab 404, bukan 403, supaya sebuah key tidak bisa
-// dipakai memetakan kuesioner lain yang ada di sistem.
+// apiScope takes the API key from the context and confirms the formId in the URL really
+// belongs to that key. A mismatch answers 404 rather than 403, so a key cannot be used
+// to map out other forms in the system.
 func (s *Server) apiScope(w http.ResponseWriter, r *http.Request) (*models.FormAPIKey, store.ResponseScope, bool) {
 	key := apiKeyFromContext(r.Context())
 	if key == nil {
-		writeErr(w, http.StatusUnauthorized, "API key tidak valid")
+		writeErr(w, http.StatusUnauthorized, "invalid API key")
 		return nil, store.ResponseScope{}, false
 	}
 	if formID := r.PathValue("formId"); formID != "" && formID != key.FormID {
-		s.logAPIAccess(r, key, key.KeyPrefix, s.clientIP(r), http.StatusNotFound, 0, "formId di luar cakupan key")
-		writeErr(w, http.StatusNotFound, "kuesioner tidak ditemukan")
+		s.logAPIAccess(r, key, key.KeyPrefix, s.clientIP(r), http.StatusNotFound, 0, "formId is outside this key's scope")
+		writeErr(w, http.StatusNotFound, "form not found")
 		return nil, store.ResponseScope{}, false
 	}
 	return key, store.APIKeyScope(key), true
 }
 
-// apiPresent menyiapkan satu jawaban untuk dikirim keluar. Kalau key tidak berhak
-// melihat identitas responden, respondentId dan meta (nama/email/IP) dibuang.
+// apiPresent prepares one response for output. If the key is not entitled to see the
+// respondent's identity, respondentId and meta (name/email/IP) are stripped.
 func apiPresent(rr models.Response, includeRespondent bool) models.Response {
 	if !includeRespondent {
 		rr.RespondentID = nil
@@ -48,8 +48,8 @@ func apiPresent(rr models.Response, includeRespondent bool) models.Response {
 	return rr
 }
 
-// apiMe mengembalikan metadata key yang sedang dipakai — untuk klien memastikan
-// konfigurasinya benar tanpa perlu menarik data.
+// apiMe returns metadata about the key in use — so a client can confirm its
+// configuration is right without pulling any data.
 func (s *Server) apiMe(w http.ResponseWriter, r *http.Request) {
 	key, _, ok := s.apiScope(w, r)
 	if !ok {
@@ -57,7 +57,7 @@ func (s *Server) apiMe(w http.ResponseWriter, r *http.Request) {
 	}
 	form, err := s.st.GetForm(r.Context(), key.FormID)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		writeErr(w, http.StatusInternalServerError, "failed to fetch data")
 		return
 	}
 	out := map[string]any{
@@ -75,7 +75,7 @@ func (s *Server) apiMe(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-// apiListResponses mengembalikan jawaban dalam cakupan key, berhalaman.
+// apiListResponses returns the responses within the key's scope, paginated.
 func (s *Server) apiListResponses(w http.ResponseWriter, r *http.Request) {
 	key, scope, ok := s.apiScope(w, r)
 	if !ok {
@@ -90,20 +90,20 @@ func (s *Server) apiListResponses(w http.ResponseWriter, r *http.Request) {
 	if limit > apiMaxLimit {
 		limit = apiMaxLimit
 	}
-	// Draft tidak pernah ikut: itu dipaksakan oleh scope (ResponseScope.clauses), bukan
-	// oleh filter di sini, supaya berlaku sama untuk semua jalur termasuk ekspor CSV.
+	// Drafts are never included: that is enforced by the scope (ResponseScope.clauses), not
+	// by a filter here, so it holds for every path including the CSV export.
 	f := parseResponseFilter(q)
 
 	rows, err := s.st.ListScopedResponses(r.Context(), scope, f, limit, offset)
 	if err != nil {
 		s.logAPIAccess(r, key, key.KeyPrefix, s.clientIP(r), http.StatusInternalServerError, 0, err.Error())
-		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		writeErr(w, http.StatusInternalServerError, "failed to fetch data")
 		return
 	}
 	total, err := s.st.CountScopedResponses(r.Context(), scope, f)
 	if err != nil {
 		s.logAPIAccess(r, key, key.KeyPrefix, s.clientIP(r), http.StatusInternalServerError, 0, err.Error())
-		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		writeErr(w, http.StatusInternalServerError, "failed to fetch data")
 		return
 	}
 
@@ -122,7 +122,7 @@ func (s *Server) apiListResponses(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// apiGetResponse mengembalikan satu jawaban dalam cakupan key.
+// apiGetResponse returns a single response within the key's scope.
 func (s *Server) apiGetResponse(w http.ResponseWriter, r *http.Request) {
 	key, scope, ok := s.apiScope(w, r)
 	if !ok {
@@ -130,13 +130,13 @@ func (s *Server) apiGetResponse(w http.ResponseWriter, r *http.Request) {
 	}
 	rr, err := s.st.GetScopedResponseByID(r.Context(), scope, r.PathValue("responseId"))
 	if errors.Is(err, store.ErrNotFound) {
-		s.logAPIAccess(r, key, key.KeyPrefix, s.clientIP(r), http.StatusNotFound, 0, "jawaban di luar cakupan")
-		writeErr(w, http.StatusNotFound, "jawaban tidak ditemukan")
+		s.logAPIAccess(r, key, key.KeyPrefix, s.clientIP(r), http.StatusNotFound, 0, "response is out of scope")
+		writeErr(w, http.StatusNotFound, "response not found")
 		return
 	}
 	if err != nil {
 		s.logAPIAccess(r, key, key.KeyPrefix, s.clientIP(r), http.StatusInternalServerError, 0, err.Error())
-		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		writeErr(w, http.StatusInternalServerError, "failed to fetch data")
 		return
 	}
 	s.logAPIAccess(r, key, key.KeyPrefix, s.clientIP(r), http.StatusOK, 1, "")
@@ -144,7 +144,7 @@ func (s *Server) apiGetResponse(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.signResponse(&presented))
 }
 
-// apiExportResponses men-stream seluruh jawaban dalam cakupan key sebagai CSV.
+// apiExportResponses streams every response within the key's scope as CSV.
 func (s *Server) apiExportResponses(w http.ResponseWriter, r *http.Request) {
 	key, scope, ok := s.apiScope(w, r)
 	if !ok {
@@ -153,11 +153,11 @@ func (s *Server) apiExportResponses(w http.ResponseWriter, r *http.Request) {
 	cols, err := s.st.GetFormAnswerColumns(r.Context(), key.FormID)
 	if err != nil {
 		s.logAPIAccess(r, key, key.KeyPrefix, s.clientIP(r), http.StatusInternalServerError, 0, err.Error())
-		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		writeErr(w, http.StatusInternalServerError, "failed to fetch data")
 		return
 	}
-	// Kolom di luar visibleFields tidak boleh muncul sebagai header sekalipun kosong —
-	// nama variabel sendiri sudah merupakan informasi.
+	// Columns outside visibleFields must not appear as headers even when empty —
+	// the field name is itself information.
 	if len(key.VisibleFields) > 0 {
 		allowed := make(map[string]bool, len(key.VisibleFields))
 		for _, f := range key.VisibleFields {

@@ -1,5 +1,5 @@
--- 0001_init.up.sql — skema awal eForm backend
--- Membutuhkan PostgreSQL 13+ (gen_random_uuid tersedia di core).
+-- 0001_init.up.sql — initial eForm backend schema
+-- Requires PostgreSQL 13+ (gen_random_uuid is available in core).
 
 CREATE TABLE IF NOT EXISTS users (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS forms (
     slug        TEXT UNIQUE NOT NULL,
     title       TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
-    schema      JSONB NOT NULL DEFAULT '{}'::jsonb,   -- instrumen v1.1 dari eForm Builder
+    schema      JSONB NOT NULL DEFAULT '{}'::jsonb,   -- v1.1 instrument from the eForm Builder
     status      TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published', 'archived')),
     version     TEXT NOT NULL DEFAULT '1.0.0',
     owner_id    UUID REFERENCES users(id) ON DELETE SET NULL,
@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS forms (
 CREATE INDEX IF NOT EXISTS idx_forms_owner ON forms(owner_id);
 CREATE INDEX IF NOT EXISTS idx_forms_status ON forms(status);
 
--- Share publik: tiap kuesioner bisa punya >=1 link share.
+-- Public shares: each form can have one or more share links.
 CREATE TABLE IF NOT EXISTS form_shares (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     form_id         UUID NOT NULL REFERENCES forms(id) ON DELETE CASCADE,
@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS form_shares (
 CREATE INDEX IF NOT EXISTS idx_shares_form ON form_shares(form_id);
 CREATE INDEX IF NOT EXISTS idx_shares_token ON form_shares(token);
 
--- Jawaban dari publik via share.
+-- Responses submitted publicly through a share.
 CREATE TABLE IF NOT EXISTS form_responses (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     form_id      UUID NOT NULL REFERENCES forms(id) ON DELETE CASCADE,

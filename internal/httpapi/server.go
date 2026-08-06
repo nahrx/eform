@@ -18,7 +18,7 @@ type Server struct {
 	cfg  *config.Config
 	st   *store.Store
 	auth *auth.Manager
-	// pages menyimpan HTML yang placeholder instansinya sudah diganti (pages.go)
+	// pages caches HTML whose organisation placeholders have been substituted (pages.go)
 	pages pageCache
 }
 
@@ -40,7 +40,7 @@ func writeErr(w http.ResponseWriter, status int, msg string) {
 }
 
 func decodeJSON(r *http.Request, v any) error {
-	dec := json.NewDecoder(io.LimitReader(r.Body, 8<<20)) // batas 8 MB
+	dec := json.NewDecoder(io.LimitReader(r.Body, 8<<20)) // 8 MB limit
 	return dec.Decode(v)
 }
 
@@ -54,12 +54,12 @@ func slugify(s string) string {
 		s = s[:60]
 	}
 	if s == "" {
-		s = "kuesioner"
+		s = "form"
 	}
 	return s
 }
 
-// randToken menghasilkan string acak URL-safe (base32 tanpa padding).
+// randToken produces a URL-safe random string (base32 without padding).
 func randToken(nbytes int) string {
 	b := make([]byte, nbytes)
 	_, _ = rand.Read(b)

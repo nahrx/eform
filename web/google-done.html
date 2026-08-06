@@ -1,14 +1,14 @@
 <!doctype html>
-<html lang="id">
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Login berhasil…</title>
+<title>Login successful…</title>
 <style>
 body{font-family:ui-sans-serif,system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#eef1f5;color:#4a525e;font-size:14px}
 </style>
 </head>
 <body>
-<span>Login berhasil, mengalihkan…</span>
+<span>Login successful, redirecting…</span>
 <script>
 (function(){
   const p=new URLSearchParams(location.hash.slice(1));
@@ -18,7 +18,7 @@ body{font-family:ui-sans-serif,system-ui,sans-serif;display:flex;align-items:cen
   const type=p.get("type")||"";
   if(token){
     if(type==="viewer"||type==="editor"){
-      // Token admin JWT — simpan sebagai eform_token (sama dengan token admin biasa)
+      // Admin JWT — store it as eform_token (the same key as an ordinary admin token)
       localStorage.setItem("eform_token",token);
       try{
         const payload=JSON.parse(atob(token.split(".")[1].replace(/-/g,"+").replace(/_/g,"/")));
@@ -29,7 +29,7 @@ body{font-family:ui-sans-serif,system-ui,sans-serif;display:flex;align-items:cen
         }));
       }catch(_){}
     } else {
-      // Token respondent — simpan sebagai eform_resp_token
+      // Respondent token — store it as eform_resp_token
       localStorage.setItem("eform_resp_token",token);
       try{
         const payload=JSON.parse(atob(token.split(".")[1].replace(/-/g,"+").replace(/_/g,"/")));
@@ -45,5 +45,6 @@ body{font-family:ui-sans-serif,system-ui,sans-serif;display:flex;align-items:cen
   location.replace(next);
 })();
 </script>
+<script src="/i18n.js"></script>
 </body>
 </html>

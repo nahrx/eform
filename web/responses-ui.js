@@ -1,11 +1,11 @@
-/* Laci filter (right sidebar) bersama untuk ketiga halaman daftar jawaban:
-   responses.html (admin), viewer-responses.html, dan editor-responses.html.
+/* The shared filter drawer (right sidebar) for the three response-list pages:
+   responses.html (admin), viewer-responses.html, and editor-responses.html.
 
-   Pembagian tugasnya: logika filter — nilai apa yang aktif, bagaimana memuat ulang
-   data — tetap milik masing-masing halaman. File ini hanya mengurus tampilannya:
-   buka/tutup laci, dan menampilkan ringkasan filter yang sedang aktif.
+   The division of labour: the filter logic — which values are active, how data is
+   reloaded — stays with each page. This file only handles the presentation: opening
+   and closing the drawer, and showing a summary of the active filters.
 
-   Halaman memanggil applyFilterSummary(parts) dari updateFilterUI miliknya. */
+   Each page calls applyFilterSummary(parts) from its own updateFilterUI. */
 (function () {
   const el = id => document.getElementById(id);
 
@@ -18,7 +18,7 @@
     if (backdrop) backdrop.classList.toggle("open", open);
     document.body.classList.toggle("drawer-open", open);
     if (open) {
-      // Fokuskan kolom isian pertama supaya laci langsung bisa dipakai dari keyboard.
+      // Focus the first input so the drawer is immediately usable from the keyboard.
       const first = drawer.querySelector("select, input");
       if (first) first.focus({ preventScroll: true });
     } else if (el("btnFilter")) {
@@ -29,10 +29,9 @@
   window.openFilterDrawer = () => setDrawer(true);
   window.closeFilterDrawer = () => setDrawer(false);
 
-  /* applyFilterSummary menampilkan filter yang sedang aktif di dua tempat:
-     angka kecil pada tombol Filter, dan deretan chip di bawah bilah atas.
-     `parts` berisi potongan teks yang sudah aman untuk HTML (dirakit pemanggil
-     dengan esc()). */
+  /* applyFilterSummary shows the active filters in two places: the small count on
+     the Filter button, and the row of chips beneath the top bar.
+     `parts` holds HTML-safe fragments, already escaped by the caller with esc(). */
   window.applyFilterSummary = function (parts) {
     parts = parts || [];
     const count = el("filterCount");
@@ -52,9 +51,9 @@
 
   /* ---- dropdown pilihan format ekspor ---- */
 
-  // Tombol Ekspor menggantikan dua tombol terpisah (CSV & Excel) supaya bilah atas
-  // tidak penuh — terutama di HP. Halaman menyediakan downloadExport(ext); di sini
-  // hanya urusan buka/tutup menunya.
+  // The Export button replaces two separate buttons (CSV & Excel) to keep the top bar
+  // from filling up, especially on phones. The page supplies downloadExport(ext); this
+  // file only handles opening and closing the menu.
   function setExportMenu(open) {
     const menu = el("exportMenu"), btn = el("btnExport");
     if (!menu || !btn) return;
@@ -62,9 +61,9 @@
     btn.setAttribute("aria-expanded", open ? "true" : "false");
     if (!open) return;
 
-    // Menu rata kanan terhadap tombolnya. Di layar sempit tombol Ekspor bisa
-    // berada dekat tepi kiri, sehingga menu justru keluar layar di sebelah kiri —
-    // pada kasus itu penjangkarannya dibalik ke kiri.
+    // The menu is right-aligned to its button. On a narrow screen the Export button can
+    // sit near the left edge, which would push the menu off-screen to the left —
+    // in that case the anchoring is flipped.
     menu.style.left = "";
     menu.style.right = "";
     const r = menu.getBoundingClientRect();

@@ -12,11 +12,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Connect membuka pool dan menunggu DB siap (retry beberapa kali).
+// Connect opens the pool and waits for the database to become ready (retrying a few times).
 func Connect(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {
-		return nil, fmt.Errorf("konfigurasi pool: %w", err)
+		return nil, fmt.Errorf("pool configuration: %w", err)
 	}
 	var lastErr error
 	for i := 0; i < 10; i++ {
@@ -30,17 +30,17 @@ func Connect(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 		time.Sleep(2 * time.Second)
 	}
 	pool.Close()
-	return nil, fmt.Errorf("tidak bisa terhubung ke PostgreSQL: %w", lastErr)
+	return nil, fmt.Errorf("cannot connect to PostgreSQL: %w", lastErr)
 }
 
-// Migrate menjalankan semua file *.up.sql yang belum diterapkan, secara berurutan,
-// masing-masing dalam satu transaksi, dan mencatatnya di tabel schema_migrations.
+// Migrate runs every *.up.sql file that has not been applied yet, in order, each in
+// its own transaction, and records it in the schema_migrations table.
 func Migrate(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS) error {
 	if _, err := pool.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
 		version TEXT PRIMARY KEY,
 		applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
 	)`); err != nil {
-		return fmt.Errorf("buat schema_migrations: %w", err)
+		return fmt.Errorf("create schema_migrations: %w", err)
 	}
 
 	applied := map[string]bool{}
@@ -86,7 +86,7 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS) error {
 		}
 		if _, err := tx.Exec(ctx, string(sqlBytes)); err != nil {
 			_ = tx.Rollback(ctx)
-			return fmt.Errorf("migrasi %s gagal: %w", name, err)
+			return fmt.Errorf("migration %s failed: %w", name, err)
 		}
 		if _, err := tx.Exec(ctx, `INSERT INTO schema_migrations(version) VALUES ($1)`, version); err != nil {
 			_ = tx.Rollback(ctx)
@@ -99,7 +99,7 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS) error {
 		count++
 	}
 	if count == 0 {
-		log.Println("[migrate] tidak ada migrasi baru")
+		log.Println("[migrate] no new migrations")
 	}
 	return nil
 }

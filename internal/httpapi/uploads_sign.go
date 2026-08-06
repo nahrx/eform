@@ -13,24 +13,24 @@ import (
 	"time"
 )
 
-/* Tautan berkas lampiran yang ditandatangani.
+/* Signed links to attachment files.
 
-   Sebelumnya /uploads/... disajikan tanpa pemeriksaan apa pun: nama berkasnya memang
-   acak, tapi siapa pun yang pernah memegang tautannya bisa mengunduh selamanya, dan
-   tautan itu sama sekali tidak terikat pada pembatasan viewer/editor/API key. Artinya
-   seluruh aturan masking kolom & filter baris tidak berlaku untuk lampiran.
+   /uploads/... used to be served with no checks at all: the file names are random,
+   but anyone who ever held a link could download it forever, and that link was not
+   tied to the viewer/editor/API key restrictions in any way. In other words, the
+   column-masking and row-filtering rules simply did not apply to attachments.
 
-   Sekarang: pemeriksaan izin dilakukan sekali saat jawaban disajikan, lalu keputusan
-   itu "dibawa" oleh tanda tangan HMAC berumur pendek yang ditempelkan ke URL-nya.
-   Bentuk ini dipilih karena lampiran dirender lewat <img src> dan <a href>, yang tidak
-   bisa mengirim header Authorization. */
+   Now: the permission check happens once, when the response is served, and that
+   decision is then "carried" by a short-lived HMAC signature attached to the URL.
+   This shape was chosen because attachments are rendered through <img src> and
+   <a href>, neither of which can send an Authorization header. */
 
-// uploadURLTTL adalah masa berlaku tautan lampiran. Cukup panjang untuk membuka dan
-// membaca satu halaman jawaban, cukup pendek agar tautan yang bocor cepat mati.
+// uploadURLTTL is how long an attachment link stays valid. Long enough to open and
+// read one response page, short enough that a leaked link expires quickly.
 const uploadURLTTL = 2 * time.Hour
 
-// uploadSigKey menurunkan kunci tanda tangan dari JWT secret, supaya tidak ada
-// konfigurasi rahasia baru yang harus diatur operator.
+// uploadSigKey derives the signing key from the JWT secret, so operators do not have
+// to configure yet another secret.
 func (s *Server) uploadSigKey() []byte {
 	sum := sha256.Sum256(append([]byte("eform-upload-sig|"), s.cfg.JWTSecret...))
 	return sum[:]
@@ -45,12 +45,12 @@ func (s *Server) uploadSig(path string, exp int64) string {
 }
 
 // signUploadURL menambahkan parameter kedaluwarsa + tanda tangan ke path lampiran.
-// Nilai yang bukan path /uploads/ dikembalikan apa adanya.
+// Values that are not /uploads/ paths are returned unchanged.
 func (s *Server) signUploadURL(raw string) string {
 	if !isUploadPath(raw) {
 		return raw
 	}
-	// Buang query lama supaya tanda tangan tidak menumpuk saat data dilewatkan dua kali.
+	// Drop any existing query so signatures do not stack up when data is passed through twice.
 	path := raw
 	if i := strings.IndexByte(path, '?'); i >= 0 {
 		path = path[:i]
@@ -59,7 +59,7 @@ func (s *Server) signUploadURL(raw string) string {
 	return path + "?e=" + strconv.FormatInt(exp, 10) + "&s=" + s.uploadSig(path, exp)
 }
 
-// verifyUploadURL memeriksa tanda tangan pada permintaan berkas.
+// verifyUploadURL checks the signature on a file request.
 func (s *Server) verifyUploadURL(path string, q url.Values) bool {
 	expStr, sig := q.Get("e"), q.Get("s")
 	if expStr == "" || sig == "" {
@@ -69,7 +69,7 @@ func (s *Server) verifyUploadURL(path string, q url.Values) bool {
 	if err != nil || time.Now().Unix() > exp {
 		return false
 	}
-	// hmac.Equal, bukan ==, supaya lama pembandingan tidak membocorkan tanda tangan.
+	// hmac.Equal rather than ==, so comparison timing cannot leak the signature.
 	return hmac.Equal([]byte(sig), []byte(s.uploadSig(path, exp)))
 }
 
@@ -77,13 +77,13 @@ func isUploadPath(v string) bool {
 	return strings.HasPrefix(v, "/uploads/")
 }
 
-/* ---- menandatangani lampiran di dalam jawaban ---- */
+/* ---- signing attachments inside an answer ---- */
 
-// signAnswerUploads menulis ulang setiap path /uploads/ di dalam JSON jawaban menjadi
-// URL bertanda tangan. Dipanggil TEPAT SETELAH otorisasi, di titik jawaban diserialisasi.
+// signAnswerUploads rewrites every /uploads/ path inside the answer JSON into a
+// signed URL. Called RIGHT AFTER authorisation, at the point the answer is serialised.
 //
-// Struktur jawaban bebas (nilai bisa string, array, atau objek), jadi penelusurannya
-// rekursif dan hanya menyentuh string yang berbentuk path unggahan.
+// The answer structure is free-form (values may be strings, arrays, or objects), so the walk
+// is recursive and only touches strings that look like upload paths.
 func (s *Server) signAnswerUploads(raw json.RawMessage) json.RawMessage {
 	if len(raw) == 0 {
 		return raw
@@ -103,7 +103,7 @@ func (s *Server) signAnswerUploads(raw json.RawMessage) json.RawMessage {
 	return b
 }
 
-// signResponse menandatangani lampiran pada satu jawaban.
+// signResponse signs the attachments on a single response.
 func (s *Server) signResponse(rr *models.Response) *models.Response {
 	if rr != nil {
 		rr.Answers = s.signAnswerUploads(rr.Answers)
@@ -111,7 +111,7 @@ func (s *Server) signResponse(rr *models.Response) *models.Response {
 	return rr
 }
 
-// signResponses menandatangani lampiran pada sekumpulan jawaban.
+// signResponses signs the attachments on a set of responses.
 func (s *Server) signResponses(rows []models.Response) []models.Response {
 	for i := range rows {
 		rows[i].Answers = s.signAnswerUploads(rows[i].Answers)

@@ -7,7 +7,7 @@ const TYPES={input:["text","email","textarea","number","integer","decimal","curr
   media:["geopoint","photo","file","signature","barcode"],struct:["markdown","note"]};
 const CAT_OF={}; Object.entries(TYPES).forEach(([c,a])=>a.forEach(t=>CAT_OF[t]=c));
 const CAT_VAR={input:"--input",choice:"--choice",time:"--time",media:"--media",struct:"--struct",node:"--node"};
-const LABELS={text:"Teks singkat",email:"Email",textarea:"Teks panjang",number:"Angka",integer:"Bilangan bulat",decimal:"Desimal",currency:"Mata uang",range:"Slider",rating:"Rating",calculated:"Terhitung",hidden:"Tersembunyi",select:"Dropdown",multiselect:"Pilih banyak",radio:"Radio",checkbox:"Checkbox",boolean:"Ya/Tidak",date:"Tanggal",time:"Jam",datetime:"Tanggal+jam",geopoint:"Titik GPS",photo:"Foto",file:"Berkas",signature:"Tanda tangan",barcode:"Barcode",note:"Catatan (HTML)",markdown:"Keterangan (Markdown)"};
+const LABELS={text:"Short text",email:"Email",textarea:"Long text",number:"Number",integer:"Whole number",decimal:"Decimal",currency:"Currency",range:"Slider",rating:"Rating",calculated:"Calculated",hidden:"Hidden",select:"Dropdown",multiselect:"Multiple choice",radio:"Radio",checkbox:"Checkbox",boolean:"Yes/No",date:"Date",time:"Time",datetime:"Date+time",geopoint:"GPS point",photo:"Photo",file:"File",signature:"Signature",barcode:"Barcode",note:"Note (HTML)",markdown:"Description (Markdown)"};
 const CHOICE=new Set(["select","multiselect","radio","checkbox"]);
 const NUMERIC=new Set(["number","integer","decimal","currency","range","rating"]);
 const TEXTY=new Set(["text","textarea"]);
@@ -22,7 +22,7 @@ const Expr=(function(){
     while(i<n){let c=src[i];
       if(c===" "||c==="\t"||c==="\n"||c==="\r"){i++;continue;}
       if(c==="$"&&src[i+1]==="{"){let j=i+2,s="";while(j<n&&src[j]!=="}")s+=src[j++];if(src[j]!=="}")throw new Error("${ } tidak ditutup");i=j+1;t.push({t:"ref",v:s.trim()});continue;}
-      if(c==="'"||c==='"'){const q=c;let j=i+1,s="";while(j<n&&src[j]!==q){if(src[j]==="\\"){s+=src[j+1];j+=2;}else s+=src[j++];}if(src[j]!==q)throw new Error("teks tidak ditutup");i=j+1;t.push({t:"str",v:s});continue;}
+      if(c==="'"||c==='"'){const q=c;let j=i+1,s="";while(j<n&&src[j]!==q){if(src[j]==="\\"){s+=src[j+1];j+=2;}else s+=src[j++];}if(src[j]!==q)throw new Error("unterminated string");i=j+1;t.push({t:"str",v:s});continue;}
       if((c>="0"&&c<="9")||(c==="."&&src[i+1]>="0"&&src[i+1]<="9")){let j=i,s="";while(j<n&&((src[j]>="0"&&src[j]<="9")||src[j]===".")){s+=src[j++];}i=j;t.push({t:"num",v:parseFloat(s)});continue;}
       if(/[A-Za-z_]/.test(c)){let j=i,s="";while(j<n&&id(src[j]))s+=src[j++];i=j;
         if(s==="true")t.push({t:"bool",v:true});else if(s==="false")t.push({t:"bool",v:false});else if(s==="null")t.push({t:"null"});else t.push({t:"id",v:s});continue;}
@@ -34,14 +34,14 @@ const Expr=(function(){
       if(c==="["){t.push({t:"lb"});i++;continue;}
       if(c==="]"){t.push({t:"rb"});i++;continue;}
       if(c===","){t.push({t:"comma"});i++;continue;}
-      throw new Error("karakter tak dikenal: "+c);
+      throw new Error("unknown character: "+c);
     }
     return t;
   }
   function parse(src){
     const toks=tokenize(src);let p=0;
     const peek=()=>toks[p],next=()=>toks[p++];
-    const expect=k=>{if(!toks[p]||toks[p].t!==k)throw new Error("diharapkan '"+k+"'");return toks[p++];};
+    const expect=k=>{if(!toks[p]||toks[p].t!==k)throw new Error("expected '"+k+"'");return toks[p++];};
     function or(){let l=and();while(peek()&&peek().t==="op"&&peek().v==="||"){next();l={type:"bin",op:"||",l,r:and()};}return l;}
     function and(){let l=eq();while(peek()&&peek().t==="op"&&peek().v==="&&"){next();l={type:"bin",op:"&&",l,r:eq()};}return l;}
     function eq(){let l=cmp();while(peek()&&peek().t==="op"&&(peek().v==="=="||peek().v==="!=")){const o=next().v;l={type:"bin",op:o,l,r:cmp()};}return l;}
@@ -49,18 +49,18 @@ const Expr=(function(){
     function add(){let l=mul();while(peek()&&peek().t==="op"&&(peek().v==="+"||peek().v==="-")){const o=next().v;l={type:"bin",op:o,l,r:mul()};}return l;}
     function mul(){let l=un();while(peek()&&peek().t==="op"&&["*","/","%"].includes(peek().v)){const o=next().v;l={type:"bin",op:o,l,r:un()};}return l;}
     function un(){if(peek()&&peek().t==="op"&&(peek().v==="!"||peek().v==="-")){const o=next().v;return {type:"un",op:o,e:un()};}return prim();}
-    function prim(){const k=peek();if(!k)throw new Error("ekspresi terpotong");
+    function prim(){const k=peek();if(!k)throw new Error("expression truncated");
       if(k.t==="num"||k.t==="str"||k.t==="bool"){next();return {type:"lit",v:k.v};}
       if(k.t==="null"){next();return {type:"lit",v:null};}
       if(k.t==="ref"){next();return {type:"ref",name:k.v};}
       if(k.t==="lp"){next();const e=or();expect("rp");return e;}
       if(k.t==="lb"){next();const items=[];if(peek()&&peek().t!=="rb"){items.push(or());while(peek()&&peek().t==="comma"){next();items.push(or());}}expect("rb");return {type:"arr",items};}
       if(k.t==="id"){next();
-        if(peek()&&peek().t==="lp"){const fn=k.v.toLowerCase();if(!FUNCS.has(fn))throw new Error("fungsi tak dikenal: "+k.v);next();const args=[];if(peek()&&peek().t!=="rp"){args.push(or());while(peek()&&peek().t==="comma"){next();args.push(or());}}expect("rp");return {type:"call",fn,args};}
-        throw new Error("pakai ${...} untuk merujuk field, bukan '"+k.v+"'");}
-      throw new Error("token tak terduga");
+        if(peek()&&peek().t==="lp"){const fn=k.v.toLowerCase();if(!FUNCS.has(fn))throw new Error("unknown function: "+k.v);next();const args=[];if(peek()&&peek().t!=="rp"){args.push(or());while(peek()&&peek().t==="comma"){next();args.push(or());}}expect("rp");return {type:"call",fn,args};}
+        throw new Error("use ${...} to reference a field, not '"+k.v+"'");}
+      throw new Error("unexpected token");
     }
-    const ast=or();if(p<toks.length)throw new Error("ada token sisa di akhir");return ast;
+    const ast=or();if(p<toks.length)throw new Error("unexpected trailing token");return ast;
   }
   const toNum=v=>v===true?1:v===false?0:(v==null||v==="")?NaN:Number(v);
   const isEmp=x=>x==null||x===""||(Array.isArray(x)&&x.length===0);
@@ -109,7 +109,7 @@ const Expr=(function(){
   };
 })();
 
-/* ---- markdown renderer (untuk elemen Keterangan) ---- */
+/* ---- markdown renderer (for Description elements) ---- */
 function mdToHtml(src){
   if(!src)return "";
   const e=s=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
@@ -135,8 +135,8 @@ let state=blankState(); let selected=null; let selectedSet=new Set(); let view={
 const collapsed={sb1:false,sb2:false};
 
 function blankState(){
-  const p={uid:uid(),kind:"page",name:"page_1",title:"Halaman 1",visibleWhen:"",components:[]};
-  return {id:"instrumen-baru",title:"Instrumen Baru",version:"1.0.0",acronym:"",locales:["id"],defaultLocale:"id",
+  const p={uid:uid(),kind:"page",name:"page_1",title:"Page 1",visibleWhen:"",components:[]};
+  return {id:"new-instrument",title:"New Instrument",version:"1.0.0",acronym:"",locales:["id"],defaultLocale:"id",
     settings:{mode:["capi"],navigation:{mode:"section",showProgress:true,allowBack:true,gateRequired:false},offline:{enabled:false}},
     referenceData:{},pages:[p]};
 }
@@ -155,7 +155,7 @@ function newBlock(){return {uid:uid(),kind:"block",name:autoName("block"),title:
 function newSection(){return {uid:uid(),kind:"section",name:autoName("section"),title:"",visibleWhen:"",components:[]};}
 function newRoster(rt){return {uid:uid(),kind:"roster",name:autoName("roster"),title:"",rowTitle:"",rosterType:rt||"inline",min:"",max:"",countFrom:"",requiredRows:false,itemLabel:"",rowDefaults:"",rowDisplay:[],visibleWhen:"",components:[]};}
 function newField(type){const f={uid:uid(),kind:"field",type,name:autoName(type),label:"",hint:"",required:false,readOnly:false,promptOnAdd:false,visibleWhen:"",enableWhen:"",requiredWhen:"",allowRemark:false,defaultValue:""};
-  if(CHOICE.has(type)){f.options=[{value:"1",label:"Opsi 1"}];f.optionSource="manual";f.optionsRef="";f.optionsFilterBy="";f.optionsApi={};}
+  if(CHOICE.has(type)){f.options=[{value:"1",label:"Option 1"}];f.optionSource="manual";f.optionsRef="";f.optionsFilterBy="";f.optionsApi={};}
   if(NUMERIC.has(type)){f.min="";f.max="";f.step="";f.unit="";}
   if(TEXTY.has(type)){f.maxLength="";f.pattern="";f.placeholder="";}
   if(type==="calculated")f.calculate=""; if(type==="note")f.html=""; if(type==="markdown")f.markdown="";
@@ -198,12 +198,12 @@ function pasteNode(){
   }
 
   const target=selected?findNode(selected):null;
-  // 1) coba tempel DI DALAM target bila menerima kind ini
+  // 1) try pasting INSIDE the target if it accepts this kind
   if(target&&kindAccepted(target.kind,clipboard.kind)){
     target.components=target.components||[];target.components.push(copy);
     selected=copy.uid;selectedSet=new Set([copy.uid]);render();return;
   }
-  // 2) coba tempel sebagai SIBLING setelah target
+  // 2) try pasting as a SIBLING after the target
   if(target){
     const owner=ownerOf(target.uid),ownerKind=owner?owner.kind:"page";
     const arr=parentArrayOf(target.uid);
@@ -212,25 +212,25 @@ function pasteNode(){
       selected=copy.uid;selectedSet=new Set([copy.uid]);render();return;
     }
   }
-  // 3) fallback: belum ada target tapi sedang melihat halaman & clipboard berisi block
+  // 3) fallback: no target yet, but a page is on screen and the clipboard holds a block
   if(!target&&view.type==="page"&&clipboard.kind==="block"){
     const pg=findNode(view.uid);
     if(pg){pg.components=pg.components||[];pg.components.push(copy);selected=copy.uid;selectedSet=new Set([copy.uid]);render();return;}
   }
-  alert("Tidak ada lokasi yang cocok untuk elemen ini. Pilih dulu section/block/halaman tujuan, lalu tempel.");
+  alert("There is no valid location for this element. Select a target section/block/page first, then paste.");
 }
 
 /* ===================== PALETTE (sidebar 1) ===================== */
 function buildPalette(){
   const pal=document.getElementById("palette");
-  let html=`<div class="pal-group"><div class="pal-h">Navigasi</div>
+  let html=`<div class="pal-group"><div class="pal-h">Navigation</div>
     ${chip("__block","Block (card)","--block")}
     ${chip("__section","Section (border)","--section")}
     ${chip("__roster_inline","Roster — inline","--roster")}
-    ${chip("__roster_separate","Roster — subhalaman","--roster")}</div>`;
-  const groups=[["Input",TYPES.input],["Pilihan",TYPES.choice],["Tanggal & Waktu",TYPES.time],["Media & Lokasi",TYPES.media],["Lainnya",TYPES.struct]];
+    ${chip("__roster_separate","Roster — subpage","--roster")}</div>`;
+  const groups=[["Input",TYPES.input],["Choices",TYPES.choice],["Date & Time",TYPES.time],["Media & Location",TYPES.media],["Other",TYPES.struct]];
   for(const [t,arr] of groups){html+=`<div class="pal-group"><div class="pal-h">${t}</div>`;arr.forEach(x=>html+=chip(x,LABELS[x],CAT_VAR[CAT_OF[x]]));html+=`</div>`;}
-  html+=`<div class="hint">Block → Section → field. Roster bisa di Block/Section. Section bisa di dalam Roster. Inline tampil di halaman ini; subhalaman muncul di panel Halaman.</div>`;
+  html+=`<div class="hint">Block → Section → field. A Roster can sit in a Block/Section. A Section can sit inside a Roster. Inline shows on this page; subpages appear in the Pages panel.</div>`;
   pal.innerHTML=html;
   pal.querySelectorAll(".chip").forEach(ch=>ch.addEventListener("dragstart",e=>{dnd.payload={mode:"new",type:ch.dataset.type};e.dataTransfer.effectAllowed="copy";e.dataTransfer.setData("text/plain","new");}));
 }
@@ -244,9 +244,9 @@ function renderPages(){
   state.pages.forEach((p,i)=>{
     const row=document.createElement("div");
     row.className="pg"+(view.type==="page"&&view.uid===p.uid?" active":""); row.draggable=true; row.dataset.uid=p.uid;
-    row.innerHTML=`<span class="pt">${esc(p.title||p.name)}</span><button class="px" title="Hapus halaman">×</button>`;
+    row.innerHTML=`<span class="pt">${esc(p.title||p.name)}</span><button class="px" title="Delete page">×</button>`;
     row.addEventListener("click",e=>{if(e.target.classList.contains("px"))return;openPage(p.uid);select(p.uid);});
-    row.querySelector(".px").addEventListener("click",ev=>{ev.stopPropagation();if(state.pages.length<=1){alert("Minimal satu halaman.");return;}if(confirm("Hapus halaman ini?")){removeNode(p.uid);view={type:"page",uid:state.pages[0].uid};selected=null;selectedSet=new Set();render();}});
+    row.querySelector(".px").addEventListener("click",ev=>{ev.stopPropagation();if(state.pages.length<=1){alert("At least one page is required.");return;}if(confirm("Delete this page?")){removeNode(p.uid);view={type:"page",uid:state.pages[0].uid};selected=null;selectedSet=new Set();render();}});
     row.addEventListener("dragstart",e=>{e.stopPropagation();dnd.payload={mode:"page",id:p.uid};row.classList.add("dragging");});
     row.addEventListener("dragend",()=>row.classList.remove("dragging"));
     row.addEventListener("dragover",e=>{if(dnd.payload&&dnd.payload.mode==="page"){e.preventDefault();}});
@@ -277,25 +277,25 @@ function renderCanvas(){
   const head=document.getElementById("cvHead"), stage=document.getElementById("stage"); stage.innerHTML="";
   if(view.type==="roster"){
     const r=findNode(view.uid), pg=pageOf(r.uid);
-    head.innerHTML=`<div class="eyebrow">Template baris roster</div><button class="btn ghost back" id="backBtn">← ${esc(pg.title||pg.name)}</button>`;
+    head.innerHTML=`<div class="eyebrow">Roster row template</div><button class="btn ghost back" id="backBtn">← ${esc(pg.title||pg.name)}</button>`;
     head.querySelector("#backBtn").addEventListener("click",()=>{openPage(pg.uid);select(r.uid);render();});
     const wrap=document.createElement("div");wrap.className="roster-inline";
     wrap.appendChild(nodeHead(r,"roster",`Roster: ${r.title||r.name}`));
-    wrap.appendChild(dropzone(r,["block","section","field"],"Seret Block, Section, atau field — diulang tiap baris"));
+    wrap.appendChild(dropzone(r,["block","section","field"],"Drag a Block, Section, or field — repeated per row"));
     stage.appendChild(wrap); return;
   }
   const page=findNode(view.uid);
-  head.innerHTML=`<div class="eyebrow">Halaman · ${esc(page.title||page.name)}</div>`;
-  stage.appendChild(dropzone(page,["block"],"Seret Block ke halaman ini"));
+  head.innerHTML=`<div class="eyebrow">Page · ${esc(page.title||page.name)}</div>`;
+  stage.appendChild(dropzone(page,["block"],"Drag a Block onto this page"));
 }
 
 function nodeHead(node,kind,placeholder){
   const h=document.createElement("div"); h.className="node-head";
-  h.innerHTML=`<span class="tag ${kind}">${kind}</span><input class="ti" value="${esc(node.title||"")}" placeholder="${esc(placeholder||"judul "+kind+" (opsional)")}">
-    <button class="icon-btn" data-a="sel" title="Atur">⚙</button><button class="icon-btn danger" data-a="del" title="Hapus">🗑</button>`;
+  h.innerHTML=`<span class="tag ${kind}">${kind}</span><input class="ti" value="${esc(node.title||"")}" placeholder="${esc(placeholder||"judul "+kind+" (optional)")}">
+    <button class="icon-btn" data-a="sel" title="Settings">⚙</button><button class="icon-btn danger" data-a="del" title="Delete">🗑</button>`;
   h.querySelector(".ti").addEventListener("input",e=>{node.title=e.target.value;runValidation();renderPages();});
   h.querySelector('[data-a="sel"]').addEventListener("click",e=>{e.stopPropagation();select(node.uid,e.ctrlKey||e.metaKey||e.shiftKey);});
-  h.querySelector('[data-a="del"]').addEventListener("click",e=>{e.stopPropagation();if(confirm(`Hapus ${kind} ini beserta isinya?`)){removeNode(node.uid);selected=null;selectedSet=new Set();render();}});
+  h.querySelector('[data-a="del"]').addEventListener("click",e=>{e.stopPropagation();if(confirm(`Delete this ${kind} and everything inside it?`)){removeNode(node.uid);selected=null;selectedSet=new Set();render();}});
   h.addEventListener("click",e=>{if(!e.target.closest("input,button"))select(node.uid,e.ctrlKey||e.metaKey||e.shiftKey);});
   return h;
 }
@@ -314,26 +314,26 @@ function renderNode(n){
   if(n.kind==="block"){
     const el=document.createElement("div");el.className="block"+(selectedSet.has(n.uid)?" sel":"");el.dataset.uid=n.uid;el.draggable=true;
     el.appendChild(nodeHead(n,"block"));
-    el.appendChild(dropzone(n,["section","roster","field"],"Seret Section, Roster, atau field ke dalam block"));
+    el.appendChild(dropzone(n,["section","roster","field"],"Drag a Section, Roster, or field into the block"));
     wireDrag(el,n); return el;
   }
   if(n.kind==="section"){
     const el=document.createElement("div");el.className="section"+(selectedSet.has(n.uid)?" sel":"");el.dataset.uid=n.uid;el.draggable=true;
     el.appendChild(nodeHead(n,"section"));
-    el.appendChild(dropzone(n,["section","field","roster"],"Seret Section, field, atau Roster ke dalam section"));
+    el.appendChild(dropzone(n,["section","field","roster"],"Drag a Section, field, or Roster into the section"));
     wireDrag(el,n); return el;
   }
   if(n.kind==="roster"){
     if(n.rosterType==="separate"){
       const el=document.createElement("div");el.className="roster-link"+(selectedSet.has(n.uid)?" sel":"");el.dataset.uid=n.uid;el.draggable=true;
-      el.innerHTML=`<span class="ri">⊞</span><div class="rt"><b>${esc(n.title||n.name)}</b><span>Roster subhalaman · ${(n.components||[]).length} field${n.countFrom?" · ×"+esc(n.countFrom):""}</span></div><span class="go">buka →</span>`;
+      el.innerHTML=`<span class="ri">⊞</span><div class="rt"><b>${esc(n.title||n.name)}</b><span>Roster subhalaman · ${(n.components||[]).length} field${n.countFrom?" · ×"+esc(n.countFrom):""}</span></div><span class="go">open →</span>`;
       el.addEventListener("click",e=>{if(e.target.closest(".go")||!e.target.closest("button")){ if(e.detail===2){view={type:"roster",uid:n.uid};} select(n.uid,e.ctrlKey||e.metaKey||e.shiftKey);} render();});
       el.querySelector(".go").addEventListener("click",e=>{e.stopPropagation();view={type:"roster",uid:n.uid};select(n.uid);render();});
       wireDrag(el,n); return el;
     }
     const el=document.createElement("div");el.className="roster-inline"+(selectedSet.has(n.uid)?" sel":"");el.dataset.uid=n.uid;el.draggable=true;
     el.appendChild(nodeHead(n,"roster",`Roster inline: ${n.title||n.name}`));
-    el.appendChild(dropzone(n,["block","section","field"],"Seret Block, Section, atau field — diulang tiap baris"));
+    el.appendChild(dropzone(n,["block","section","field"],"Drag a Block, Section, or field — repeated per row"));
     wireDrag(el,n); return el;
   }
   // field card
@@ -346,7 +346,7 @@ function renderNode(n){
   else if(n.options&&n.options.length)badges.push(`<span class="badge">${n.options.length} opsi</span>`);
   if(n.validations&&n.validations.length)badges.push(`<span class="badge">${n.validations.length} cek</span>`);
   if(n.visibleWhen)badges.push(`<span class="badge">⊘ kondisi</span>`);
-  const lbl=(n.type==="note"||n.type==="markdown")?`<span style="color:var(--ink-soft)">${esc(((n.type==="markdown"?(n.markdown||""):String(n.html||"").replace(/<[^>]+>/g," ")).replace(/[#>*`_-]/g," ").trim().slice(0,70))||"(keterangan kosong)")}</span>`:(n.label?esc(n.label):`<span class="empty">tanpa label</span>`);
+  const lbl=(n.type==="note"||n.type==="markdown")?`<span style="color:var(--ink-soft)">${esc(((n.type==="markdown"?(n.markdown||""):String(n.html||"").replace(/<[^>]+>/g," ")).replace(/[#>*`_-]/g," ").trim().slice(0,70))||"(empty label)")}</span>`:(n.label?esc(n.label):`<span class="empty">no label</span>`);
   el.innerHTML=`<div class="crail"></div><div class="body"><div class="top"><span class="ty">${n.type}</span>${n.required?'<span class="req">＊</span>':''}</div><div class="lbl">${lbl}</div><div class="meta">${badges.join("")}</div></div><div class="grip">⋮⋮</div>`;
   el.querySelector(".body").addEventListener("click",e=>select(n.uid,e.ctrlKey||e.metaKey||e.shiftKey));
   wireDrag(el,n); return el;
@@ -395,7 +395,7 @@ function wireDropzone(dz,owner,accept){
     const arr=owner.components; const index=phIndex(dz,arr); clearPlaceholder();
     if(dnd.payload.mode==="new"){const node=newFromType(dnd.payload.type);arr.splice(index,0,node);selected=node.uid;selectedSet=new Set([node.uid]);}
     else if(dnd.payload.mode==="move-multi"){
-      // Kumpulkan node yang valid untuk dipindah ke dropzone ini
+      // Collect the nodes that may legitimately move into this dropzone
       const docOrder=allNodes();
       const toMove=dnd.payload.ids
         .map(id=>({node:findNode(id),src:parentArrayOf(id)}))
@@ -403,14 +403,14 @@ function wireDropzone(dz,owner,accept){
         .sort((a,b)=>docOrder.indexOf(a.node)-docOrder.indexOf(b.node));
       if(toMove.length>0){
         let ins=index;
-        // Hapus dari sumber (descending per array agar index tidak bergeser)
+        // Remove from the source (descending per array so indices do not shift)
         const bySrc=new Map();
         toMove.forEach(item=>{if(!bySrc.has(item.src))bySrc.set(item.src,[]);bySrc.get(item.src).push(item);});
         bySrc.forEach((items,srcArr)=>{
           items.sort((a,b)=>srcArr.indexOf(b.node)-srcArr.indexOf(a.node));
           items.forEach(({node})=>{const i=srcArr.indexOf(node);if(i>=0){srcArr.splice(i,1);if(srcArr===arr&&i<ins)ins--;}});
         });
-        // Sisipkan di tujuan dengan urutan dokumen asli
+        // Insert at the destination in original document order
         toMove.forEach(({node},off)=>arr.splice(ins+off,0,node));
       }
     }
@@ -422,7 +422,7 @@ function wireDropzone(dz,owner,accept){
 function childAfter(dz,y){const items=[...dz.children].filter(c=>c!==placeholder&&(c.classList.contains("card")||c.classList.contains("block")||c.classList.contains("section")||c.classList.contains("roster-inline")||c.classList.contains("roster-link")));for(const c of items){const r=c.getBoundingClientRect();if(y<r.top+r.height/2)return c;}return null;}
 function phIndex(dz,arr){const kids=[...dz.children].filter(c=>c===placeholder||c.dataset&&c.dataset.uid);const i=kids.indexOf(placeholder);return i<0?arr.length:i;}
 function nodeContains(node,targetUid){if(node.uid===targetUid)return true;return (node.components||[]).some(c=>nodeContains(c,targetUid));}
-// Dari sekumpulan uid, buang yang merupakan keturunan dari uid lain dalam kumpulan yang sama
+// From a set of uids, drop any that are descendants of another uid in the same set
 function filterTopLevel(ids){const s=new Set(ids);return ids.filter(id=>{const n=findNode(id);if(!n)return false;for(const oid of s){if(oid===id)continue;const on=findNode(oid);if(on&&nodeContains(on,id))return false;}return true;});}
 function duplicateSelected(){
   const topIds=filterTopLevel([...selectedSet]);
@@ -433,7 +433,7 @@ function duplicateSelected(){
     .sort((a,b)=>docOrder.indexOf(a.node)-docOrder.indexOf(b.node));
   if(!items.length)return;
   const newSet=new Set();
-  // Proses descending per array agar index tidak bergeser
+  // Process descending per array so indices do not shift
   const byArr=new Map();
   items.forEach(item=>{if(!byArr.has(item.arr))byArr.set(item.arr,[]);byArr.get(item.arr).push(item);});
   byArr.forEach((its,arr)=>{
@@ -463,16 +463,16 @@ function renderInspector(){
     pane.innerHTML=`<div style="padding:16px 12px">
       <div style="font-weight:600;font-size:13px;margin-bottom:8px">${selectedSet.size} item dipilih</div>
       <div class="help" style="margin-left:0;margin-bottom:14px">
-        <b>Ctrl/Shift+Klik</b> untuk tambah/kurangi pilihan.<br>
-        <b>Seret</b> salah satu item untuk memindahkan semua.<br>
-        <b>Delete</b> untuk menghapus semua.
+        <b>Ctrl/Shift+Klik</b> to add/remove options.<br>
+        <b>Seret</b> any one item to move them all.<br>
+        <b>Delete</b> to remove them all.
       </div>
-      <button class="btn" id="dupAllBtn" style="width:100%;margin-bottom:8px">⧉ Duplikat semua (${selectedSet.size})</button>
-      <button class="btn danger" id="delAllBtn" style="width:100%;margin-bottom:8px">🗑 Hapus semua (${selectedSet.size})</button>
+      <button class="btn" id="dupAllBtn" style="width:100%;margin-bottom:8px">⧉ Duplicate all (${selectedSet.size})</button>
+      <button class="btn danger" id="delAllBtn" style="width:100%;margin-bottom:8px">🗑 Delete all (${selectedSet.size})</button>
       <button class="btn ghost" id="clearSelBtn" style="width:100%">Batalkan pilihan</button>
     </div>`;
     pane.querySelector("#dupAllBtn").addEventListener("click",()=>duplicateSelected());
-    pane.querySelector("#delAllBtn").addEventListener("click",()=>{if(confirm(`Hapus ${selectedSet.size} item yang dipilih?`)){[...selectedSet].forEach(uid=>removeNode(uid));selected=null;selectedSet=new Set();render();}});
+    pane.querySelector("#delAllBtn").addEventListener("click",()=>{if(confirm(`Delete the ${selectedSet.size} selected items?`)){[...selectedSet].forEach(uid=>removeNode(uid));selected=null;selectedSet=new Set();render();}});
     pane.querySelector("#clearSelBtn").addEventListener("click",()=>{selected=null;selectedSet=new Set();render();});
     return;
   }
@@ -485,109 +485,109 @@ function renderInspector(){
   else pane.innerHTML=fieldForm(n);
   wireForm(pane,n);
 }
-function instrumentForm(){const nv=state.settings.navigation;const off=state.settings.offline||(state.settings.offline={enabled:false});return `<div class="empty-state"><div class="big">{ }</div>Tidak ada yang dipilih — pengaturan instrumen.</div>
-  <div class="field"><label>ID instrumen</label><input class="ctrl mono" data-i="id" value="${esc(state.id)}"></div>
-  <div class="row2"><div class="field"><label>Versi</label><input class="ctrl mono" data-i="version" value="${esc(state.version)}"></div><div class="field"><label>Akronim</label><input class="ctrl" data-i="acronym" value="${esc(state.acronym||"")}"></div></div>
-  <div class="row2"><div class="field"><label>Locales</label><input class="ctrl mono" data-i="locales" value="${esc(state.locales.join(","))}"></div><div class="field"><label>Locale utama</label><input class="ctrl mono" data-i="defaultLocale" value="${esc(state.defaultLocale)}"></div></div>
-  <div class="group"><div class="gh">Navigasi</div>
-    <div class="field"><label>Mode</label><select class="ctrl" data-i="nav.mode">${opt("scroll","Scroll",nv.mode)}${opt("section","Section per halaman",nv.mode)}${opt("field","Field per layar",nv.mode)}</select></div>
-    <label class="check"><input type="checkbox" data-i="nav.gateRequired" ${nv.gateRequired?"checked":""}> Wajib selesai sebelum lanjut</label></div>
-  <div class="group"><div class="gh">Mode Offline (PWA)</div>
-    <label class="check"><input type="checkbox" data-i="offline.enabled" ${off.enabled?"checked":""}> Aktifkan mode offline</label>
-    <div class="help" style="margin-left:0;margin-top:6px">Kuesioner bisa di-install seperti aplikasi native di ponsel dan diisi tanpa internet — jawaban tersimpan di perangkat lalu terkirim otomatis saat online kembali. <b>Hanya berlaku</b> untuk tautan share yang diatur sebagai <b>multi-respons</b>.</div></div>
-  <div class="group"><div class="gh">Sumber lookup / Reference data (JSON)</div><textarea class="ctrl mono" data-i="referenceData" rows="6" placeholder='{ "kabupaten": { "items":[ {"code":"6472","label":"Samarinda"} ] } }'>${esc(jsonOrEmpty(state.referenceData))}</textarea><div class="help" style="margin-left:0;margin-top:6px">Tiap tabel bisa <b>inline</b> (pakai <code>items</code>) atau <b>API</b>:<br><code>"kec": { "source":"api", "url":"https://.../kec?prov={parent}", "valueField":"kode", "labelField":"nama", "parentParam":"prov", "path":"data" }</code><br>API: <code>valueField</code>/<code>labelField</code>=key di respons; <code>{parent}</code> atau <code>parentParam</code> untuk cascading; <code>path</code> bila array bersarang. Rujuk dari field lewat <b>optionsRef</b>.</div></div>`;}
+function instrumentForm(){const nv=state.settings.navigation;const off=state.settings.offline||(state.settings.offline={enabled:false});return `<div class="empty-state"><div class="big">{ }</div>Nothing selected — instrument settings.</div>
+  <div class="field"><label>Instrument ID</label><input class="ctrl mono" data-i="id" value="${esc(state.id)}"></div>
+  <div class="row2"><div class="field"><label>Version</label><input class="ctrl mono" data-i="version" value="${esc(state.version)}"></div><div class="field"><label>Acronym</label><input class="ctrl" data-i="acronym" value="${esc(state.acronym||"")}"></div></div>
+  <div class="row2"><div class="field"><label>Locales</label><input class="ctrl mono" data-i="locales" value="${esc(state.locales.join(","))}"></div><div class="field"><label>Default locale</label><input class="ctrl mono" data-i="defaultLocale" value="${esc(state.defaultLocale)}"></div></div>
+  <div class="group"><div class="gh">Navigation</div>
+    <div class="field"><label>Mode</label><select class="ctrl" data-i="nav.mode">${opt("scroll","Scroll",nv.mode)}${opt("section","Sections per page",nv.mode)}${opt("field","Fields per screen",nv.mode)}</select></div>
+    <label class="check"><input type="checkbox" data-i="nav.gateRequired" ${nv.gateRequired?"checked":""}> Must be completed before continuing</label></div>
+  <div class="group"><div class="gh">Offline Mode (PWA)</div>
+    <label class="check"><input type="checkbox" data-i="offline.enabled" ${off.enabled?"checked":""}> Enable offline mode</label>
+    <div class="help" style="margin-left:0;margin-top:6px">The form can be installed like a native app on a phone and filled in offline — responses are stored on the device and sent automatically once back online. <b>Only applies</b> to share links set as <b>multi-response</b>.</div></div>
+  <div class="group"><div class="gh">Lookup source / Reference data (JSON)</div><textarea class="ctrl mono" data-i="referenceData" rows="6" placeholder='{ "kabupaten": { "items":[ {"code":"6472","label":"Samarinda"} ] } }'>${esc(jsonOrEmpty(state.referenceData))}</textarea><div class="help" style="margin-left:0;margin-top:6px">Each table can be <b>inline</b> (using <code>items</code>) or <b>API</b>:<br><code>"kec": { "source":"api", "url":"https://.../kec?prov={parent}", "valueField":"kode", "labelField":"nama", "parentParam":"prov", "path":"data" }</code><br>API: <code>valueField</code>/<code>labelField</code>=key in the response; <code>{parent}</code> or <code>parentParam</code> for cascading; <code>path</code> if it's a nested array. Reference it from a field using <b>optionsRef</b>.</div></div>`;}
 function wireInstrument(pane){pane.querySelectorAll("[data-i]").forEach(inp=>inp.addEventListener("input",()=>{const k=inp.dataset.i,v=inp.type==="checkbox"?inp.checked:inp.value;if(k.startsWith("nav."))state.settings.navigation[k.slice(4)]=v;else if(k.startsWith("offline."))state.settings.offline[k.slice(8)]=v;else if(k==="locales")state.locales=v.split(",").map(s=>s.trim()).filter(Boolean);else if(k==="referenceData"){try{state.referenceData=v.trim()?JSON.parse(v):{};inp.style.borderColor="";}catch(_){inp.style.borderColor="var(--bad)";}}else state[k]=v;runValidation();}));}
 
 function navForm(n,kind){
-  const titleLabel=kind==="page"?"Judul halaman":kind==="block"?"Judul block (opsional)":"Judul section (opsional)";
-  // Halaman & section: dataKey dibuat otomatis & sudah pasti unik, tapi tetap bisa diubah bila perlu.
+  const titleLabel=kind==="page"?"Page title":kind==="block"?"Block title (optional)":"Section title (optional)";
+  // Pages & sections: the dataKey is generated automatically and is already unique, but can still be changed if needed.
   const nameField=(kind==="page"||kind==="section")
-    ? `<div class="field"><label>Nama (dataKey) <span class="help">otomatis & unik, bisa diubah</span></label><input class="ctrl mono" data-k="name" value="${esc(n.name)}"></div>`
-    : `<div class="field"><label>Nama (dataKey) <span class="help">unik</span></label><input class="ctrl mono" data-k="name" value="${esc(n.name)}"></div>`;
+    ? `<div class="field"><label>Name (dataKey) <span class="help">automatic & unique, can be changed</span></label><input class="ctrl mono" data-k="name" value="${esc(n.name)}"></div>`
+    : `<div class="field"><label>Name (dataKey) <span class="help">unique</span></label><input class="ctrl mono" data-k="name" value="${esc(n.name)}"></div>`;
   return `${headBar(kind,n.name)}
   ${nameField}
   <div class="field"><label>${titleLabel}</label><input class="ctrl" data-k="title" value="${esc(n.title||"")}"></div>
-  <div class="field"><label>Tampil bila (visibleWhen)</label><textarea class="ctrl" data-k="visibleWhen" placeholder="\${field} == nilai">${esc(n.visibleWhen||"")}</textarea></div>`;
+  <div class="field"><label>Visible when (visibleWhen)</label><textarea class="ctrl" data-k="visibleWhen" placeholder="\${field} == value">${esc(n.visibleWhen||"")}</textarea></div>`;
 }
 function rosterForm(n){
   const childFields=(n.components||[]).filter(c=>c.kind==="field");
   const minRows=Math.max(0,Math.floor(Number(n.min)||0));
   const rowDefaultLines=String(n.rowDefaults||"").split(/\r?\n/);
-  const dispBlock = `<div class="group"><div class="gh">Field tampil di daftar baris</div>${childFields.length?childFields.map(f=>`<label class="check"><input type="checkbox" data-rowdisp="${esc(f.name)}" ${(n.rowDisplay||[]).includes(f.name)?"checked":""}> ${esc(f.label||f.name)}</label>`).join(""):`<div class="help" style="margin-left:0">Tambah field ke roster dulu.</div>`}<div class="help" style="margin-left:0;margin-top:6px">Untuk roster subhalaman: nilai field ini jadi ringkasan tiap baris di halaman utama.</div></div>`;
+  const dispBlock = `<div class="group"><div class="gh">Fields shown in the row list</div>${childFields.length?childFields.map(f=>`<label class="check"><input type="checkbox" data-rowdisp="${esc(f.name)}" ${(n.rowDisplay||[]).includes(f.name)?"checked":""}> ${esc(f.label||f.name)}</label>`).join(""):`<div class="help" style="margin-left:0">Add a field to the roster first.</div>`}<div class="help" style="margin-left:0;margin-top:6px">For subpage rosters: this field's value becomes each row's summary on the main page.</div></div>`;
   const rowDefaultEditor=(n.rosterType==="separate")
     ? (minRows>0
-      ? `<div class="group"><div class="gh">Nilai awal baris (auto isi field pertama)</div>${Array.from({length:minRows},(_,i)=>`<div class="field"><label>Baris ${i+1}</label><input class="ctrl" data-rowdefault-index="${i}" value="${esc((rowDefaultLines[i]||"").trim())}" placeholder="Contoh: Usaha ${i+1}"></div>`).join("")}<div class="help" style="margin-left:0">Nilai ini otomatis diisi ke field pertama tiap baris yang dibuat dari Min baris. Tidak menimpa nilai yang sudah Anda ubah manual.</div></div>`
-      : `<div class="group"><div class="gh">Nilai awal baris</div><div class="help" style="margin-left:0;margin-bottom:6px">Isi Min baris dulu agar editor per baris muncul. Anda juga bisa isi cepat dalam format 1 baris = 1 nilai.</div><textarea class="ctrl" data-k="rowDefaults" rows="4" placeholder="Usaha Budi&#10;Usaha Rudi&#10;Usaha Dudi">${esc(n.rowDefaults||"")}</textarea></div>`)
+      ? `<div class="group"><div class="gh">Default row value (auto-fills the first field)</div>${Array.from({length:minRows},(_,i)=>`<div class="field"><label>Baris ${i+1}</label><input class="ctrl" data-rowdefault-index="${i}" value="${esc((rowDefaultLines[i]||"").trim())}" placeholder="Contoh: Usaha ${i+1}"></div>`).join("")}<div class="help" style="margin-left:0">This value is prefilled into the first field of every row created by Min rows. It never overwrites a value you changed by hand.</div></div>`
+      : `<div class="group"><div class="gh">Default row value</div><div class="help" style="margin-left:0;margin-bottom:6px">Set Min rows first so the per-row editor appears. You can also fill it quickly using one value per line.</div><textarea class="ctrl" data-k="rowDefaults" rows="4" placeholder="Usaha Budi&#10;Usaha Rudi&#10;Usaha Dudi">${esc(n.rowDefaults||"")}</textarea></div>`)
     : "";
   return `${headBar("roster",n.name)}
-  <div class="field"><label>Nama (dataKey)</label><input class="ctrl mono" data-k="name" value="${esc(n.name)}"></div>
-  <div class="field"><label>Jenis roster</label>
-    <div class="seg" id="rtSeg"><button data-rt="inline" class="${n.rosterType==="inline"?"on":""}">Inline</button><button data-rt="separate" class="${n.rosterType==="separate"?"on":""}">Subhalaman</button></div>
-    <div class="help" style="margin-left:0;margin-top:6px">${n.rosterType==="inline"?"Input di halaman yang sama.":"Daftar baris di halaman utama; isi tiap baris di halaman terpisah."}</div></div>
-  <div class="field"><label>Judul roster (opsional)</label><input class="ctrl" data-k="title" value="${esc(n.title||"")}"></div>
-  <div class="field"><label>Judul baris roster <span class="help">mis. "Usaha" — dipakai di tombol &amp; popup tambah baris</span></label><input class="ctrl" data-k="rowTitle" placeholder="Usaha" value="${esc(n.rowTitle||"")}"></div>
-  <div class="row2"><div class="field"><label>Min baris</label><input class="ctrl" type="number" step="1" min="0" inputmode="numeric" data-k="min" value="${esc(n.min??"")}"></div><div class="field"><label>Maks baris</label><input class="ctrl" type="number" step="1" min="0" inputmode="numeric" data-k="max" value="${esc(n.max??"")}"></div></div>
-  <div class="field"><label>Jumlah baris dari field (countFrom) <span class="help">otomatis generate baris; kosongkan untuk pakai tombol "+ Tambah ${n.rowTitle?esc(n.rowTitle):"baris"}" dengan popup</span></label><input class="ctrl mono" data-k="countFrom" value="${esc(n.countFrom||"")}"></div>
-  <div class="field"><label class="chk"><input type="checkbox" data-k="requiredRows" ${n.requiredRows?"checked":""}> Wajib ada penambahan baris (minimal 1 baris)</label></div>
-  <div class="field"><label>Label tiap baris (itemLabel)</label><input class="ctrl" data-k="itemLabel" placeholder="Usaha {{index}}: \${nama}" value="${esc(n.itemLabel||"")}"></div>
+  <div class="field"><label>Name (dataKey)</label><input class="ctrl mono" data-k="name" value="${esc(n.name)}"></div>
+  <div class="field"><label>Roster type</label>
+    <div class="seg" id="rtSeg"><button data-rt="inline" class="${n.rosterType==="inline"?"on":""}">Inline</button><button data-rt="separate" class="${n.rosterType==="separate"?"on":""}">Subpage</button></div>
+    <div class="help" style="margin-left:0;margin-top:6px">${n.rosterType==="inline"?"Input on the same page.":"List rows on the main page; fill each row on a separate page."}</div></div>
+  <div class="field"><label>Roster title (optional)</label><input class="ctrl" data-k="title" value="${esc(n.title||"")}"></div>
+  <div class="field"><label>Roster row title <span class="help">e.g. "Business" — used in the add-row button &amp; popup</span></label><input class="ctrl" data-k="rowTitle" placeholder="Usaha" value="${esc(n.rowTitle||"")}"></div>
+  <div class="row2"><div class="field"><label>Min rows</label><input class="ctrl" type="number" step="1" min="0" inputmode="numeric" data-k="min" value="${esc(n.min??"")}"></div><div class="field"><label>Max rows</label><input class="ctrl" type="number" step="1" min="0" inputmode="numeric" data-k="max" value="${esc(n.max??"")}"></div></div>
+  <div class="field"><label>Row count from field (countFrom) <span class="help">automatically generates rows; kosongkan untuk pakai tombol "+ Add ${n.rowTitle?esc(n.rowTitle):"baris"}" with a popup</span></label><input class="ctrl mono" data-k="countFrom" value="${esc(n.countFrom||"")}"></div>
+  <div class="field"><label class="chk"><input type="checkbox" data-k="requiredRows" ${n.requiredRows?"checked":""}> At least one row must be added (minimum 1 row)</label></div>
+  <div class="field"><label>Per-row label (itemLabel)</label><input class="ctrl" data-k="itemLabel" placeholder="Usaha {{index}}: \${nama}" value="${esc(n.itemLabel||"")}"></div>
   ${rowDefaultEditor}
   ${dispBlock}
-  <div class="field"><label>Tampil bila</label><textarea class="ctrl" data-k="visibleWhen">${esc(n.visibleWhen||"")}</textarea></div>
-  ${n.rosterType==="separate"?`<button class="add-row" id="openRoster">Buka editor template roster →</button>`:""}`;
+  <div class="field"><label>Visible when</label><textarea class="ctrl" data-k="visibleWhen">${esc(n.visibleWhen||"")}</textarea></div>
+  ${n.rosterType==="separate"?`<button class="add-row" id="openRoster">Open the roster template editor →</button>`:""}`;
 }
 function fieldForm(c){const t=c.type;let html=headBar(t,c.name);
-  html+=`<div class="field"><label>Nama (dataKey) <span class="help">unik, kolom output</span></label><input class="ctrl mono" data-k="name" value="${esc(c.name)}"></div>`;
-  if(t!=="note")html+=`<div class="field"><label>Label pertanyaan</label><input class="ctrl" data-k="label" value="${esc(c.label||"")}"></div>`;
-  html+=`<div class="field"><label>Petunjuk (hint)</label><input class="ctrl" data-k="hint" value="${esc(c.hint||"")}"></div>`;
-  if(t==="note")html+=`<div class="field"><label>Konten HTML</label><textarea class="ctrl" data-k="html" rows="3">${esc(c.html||"")}</textarea></div>`;
-  if(t==="markdown")html+=`<div class="field"><label>Keterangan (Markdown)</label><textarea class="ctrl" data-k="markdown" rows="6" placeholder="# Petunjuk Pengisian&#10;&#10;Isi sesuai **kondisi sebenarnya**. Lihat:&#10;- poin pertama&#10;- poin kedua&#10;&#10;> Catatan penting.">${esc(c.markdown||"")}</textarea><div class="help" style="margin-left:0;margin-top:4px">Mendukung: # judul, **tebal**, *miring*, \`kode\`, list (- / 1.), &gt; kutipan, [teks](url), --- garis.</div></div>`;
-  if(t==="calculated")html+=`<div class="field"><label>Rumus (calculate)</label><textarea class="ctrl" data-k="calculate" placeholder="\${a}+\${b}">${esc(c.calculate||"")}</textarea></div><label class="check" style="margin-top:6px"><input type="checkbox" data-k="autofill" ${c.autofill?"checked":""}> Autofill — isi otomatis tapi bisa diedit</label>`;
-  if(NUMERIC.has(t))html+=`<div class="row3">${mini("min","Min",c.min)}${mini("max","Maks",c.max)}${mini("step","Step",c.step)}</div><div class="field"><label>Satuan</label><input class="ctrl" data-k="unit" value="${esc(c.unit||"")}"></div>`;
-  if(DATETIME.has(t)){const it=DT_INPUT_TYPE[t];html+=`<div class="row2">${mini("min","Dari",c.min,it)}${mini("max","Sampai",c.max,it)}</div>`;}
-  if(TEXTY.has(t))html+=`<div class="row2">${mini("maxLength","Maks karakter",c.maxLength,"number")}<div class="field"><label>Placeholder</label><input class="ctrl" data-k="placeholder" value="${esc(c.placeholder||"")}"></div></div><div class="field"><label>Pola (regex)</label><input class="ctrl mono" data-k="pattern" value="${esc(c.pattern||"")}"></div>`;
+  html+=`<div class="field"><label>Name (dataKey) <span class="help">unique, output column</span></label><input class="ctrl mono" data-k="name" value="${esc(c.name)}"></div>`;
+  if(t!=="note")html+=`<div class="field"><label>Question label</label><input class="ctrl" data-k="label" value="${esc(c.label||"")}"></div>`;
+  html+=`<div class="field"><label>Hint</label><input class="ctrl" data-k="hint" value="${esc(c.hint||"")}"></div>`;
+  if(t==="note")html+=`<div class="field"><label>HTML content</label><textarea class="ctrl" data-k="html" rows="3">${esc(c.html||"")}</textarea></div>`;
+  if(t==="markdown")html+=`<div class="field"><label>Description (Markdown)</label><textarea class="ctrl" data-k="markdown" rows="6" placeholder="# Filling instructions&#10;&#10;Answer according to **actual conditions**. See:&#10;- first point&#10;- second point&#10;&#10;> Important note.">${esc(c.markdown||"")}</textarea><div class="help" style="margin-left:0;margin-top:4px">Supports: # heading, **bold**, *italic*, \`kode\`, list (- / 1.), &gt; kutipan, [teks](url), --- garis.</div></div>`;
+  if(t==="calculated")html+=`<div class="field"><label>Formula (calculate)</label><textarea class="ctrl" data-k="calculate" placeholder="\${a}+\${b}">${esc(c.calculate||"")}</textarea></div><label class="check" style="margin-top:6px"><input type="checkbox" data-k="autofill" ${c.autofill?"checked":""}> Autofill — filled automatically but can be edited</label>`;
+  if(NUMERIC.has(t))html+=`<div class="row3">${mini("min","Min",c.min)}${mini("max","Max",c.max)}${mini("step","Step",c.step)}</div><div class="field"><label>Unit</label><input class="ctrl" data-k="unit" value="${esc(c.unit||"")}"></div>`;
+  if(DATETIME.has(t)){const it=DT_INPUT_TYPE[t];html+=`<div class="row2">${mini("min","From",c.min,it)}${mini("max","To",c.max,it)}</div>`;}
+  if(TEXTY.has(t))html+=`<div class="row2">${mini("maxLength","Max characters",c.maxLength,"number")}<div class="field"><label>Placeholder</label><input class="ctrl" data-k="placeholder" value="${esc(c.placeholder||"")}"></div></div><div class="field"><label>Pattern (regex)</label><input class="ctrl mono" data-k="pattern" value="${esc(c.pattern||"")}"></div>`;
   if(CHOICE.has(t))html+=optionsBlock(c);
   const dvHtml=(()=>{
     if(t==="note"||t==="markdown"||t==="calculated")return"";
-    if(t==="boolean")return`<div class="field" style="margin-top:8px"><label>Nilai awal (default)</label><select class="ctrl" data-k="defaultValue"><option value="">— tidak ada —</option><option value="true"${c.defaultValue==="true"?" selected":""}>Ya</option><option value="false"${c.defaultValue==="false"?" selected":""}>Tidak</option></select></div>`;
+    if(t==="boolean")return`<div class="field" style="margin-top:8px"><label>Default value</label><select class="ctrl" data-k="defaultValue"><option value="">— none —</option><option value="true"${c.defaultValue==="true"?" selected":""}>Yes</option><option value="false"${c.defaultValue==="false"?" selected":""}>No</option></select></div>`;
     if(CHOICE.has(t)&&(c.optionSource==="manual"||(!c.optionSource&&c.options&&c.options.length))){
       const opts=(c.options||[]).map(o=>{const v=String(o.value??"");const lbl=typeof o.label==="object"?(o.label[state.defaultLocale]||o.label.id||v):(o.label||v);return`<option value="${esc(v)}"${String(c.defaultValue??"")=== v?" selected":""}>${esc(lbl)}</option>`;}).join("");
-      return`<div class="field" style="margin-top:8px"><label>Nilai awal (default)</label><select class="ctrl" data-k="defaultValue"><option value="">— tidak ada —</option>${opts}</select></div>`;
+      return`<div class="field" style="margin-top:8px"><label>Default value</label><select class="ctrl" data-k="defaultValue"><option value="">— none —</option>${opts}</select></div>`;
     }
-    return`<div class="field" style="margin-top:8px"><label>Nilai awal (default)</label><input class="ctrl" data-k="defaultValue" value="${esc(c.defaultValue||"")}"></div>`;
+    return`<div class="field" style="margin-top:8px"><label>Default value</label><input class="ctrl" data-k="defaultValue" value="${esc(c.defaultValue||"")}"></div>`;
   })();
-  html+=`<div class="group"><div class="gh">Perilaku</div><label class="check"><input type="checkbox" data-k="required" ${c.required?"checked":""}> Wajib diisi</label><label class="check"><input type="checkbox" data-k="readOnly" ${c.readOnly?"checked":""}> Hanya baca</label><label class="check"><input type="checkbox" data-k="allowRemark" ${c.allowRemark?"checked":""}> Izinkan catatan</label><label class="check"><input type="checkbox" data-k="promptOnAdd" ${c.promptOnAdd?"checked":""}> Ditanyakan saat tambah baris <span class="help">nilai bisa dipanggil di label dengan <code>{{${c.name}}}</code></span></label>${dvHtml}</div>`;
-  html+=`<div class="group"><div class="gh">Kondisi & alur</div>${cond("visibleWhen","Tampil bila",c.visibleWhen)}${cond("enableWhen","Aktif bila",c.enableWhen)}${cond("requiredWhen","Wajib bila",c.requiredWhen)}${skipsBlock(c)}</div>`;
+  html+=`<div class="group"><div class="gh">Behavior</div><label class="check"><input type="checkbox" data-k="required" ${c.required?"checked":""}> Required</label><label class="check"><input type="checkbox" data-k="readOnly" ${c.readOnly?"checked":""}> Read-only</label><label class="check"><input type="checkbox" data-k="allowRemark" ${c.allowRemark?"checked":""}> Allow remarks</label><label class="check"><input type="checkbox" data-k="promptOnAdd" ${c.promptOnAdd?"checked":""}> Prompted when adding a row <span class="help">the value can be referenced in labels with <code>{{${c.name}}}</code></span></label>${dvHtml}</div>`;
+  html+=`<div class="group"><div class="gh">Conditions & flow</div>${cond("visibleWhen","Visible when",c.visibleWhen)}${cond("enableWhen","Enabled when",c.enableWhen)}${cond("requiredWhen","Required when",c.requiredWhen)}${skipsBlock(c)}</div>`;
   html+=validationsBlock(c); return html;
 }
-function headBar(kind,name){const cat=CAT_OF[kind]||"node";const colorVar=({page:"--page",block:"--block",section:"--section",roster:"--roster"})[kind]||CAT_VAR[cat];const pasteBtn=clipboard?`<button class="icon-btn" id="pasteBtn" title="Tempel ${esc(clipboard.kind)} yang disalin">📥</button>`:"";return `<div style="display:flex;align-items:center;gap:9px;margin-bottom:14px"><span style="width:4px;height:30px;border-radius:2px;background:var(${colorVar})"></span><div><div style="font-family:var(--mono);font-size:11px;color:var(${colorVar});font-weight:700;text-transform:uppercase">${kind}</div><div style="font-size:11px;color:var(--muted)">${esc(name)}</div></div><button class="icon-btn" id="copyBtn" title="Salin" style="margin-left:auto">📋</button><button class="icon-btn" id="dupBtn" title="Duplikat">⧉</button>${pasteBtn}<button class="icon-btn danger" id="delBtn" title="Hapus">🗑</button></div>`;}
+function headBar(kind,name){const cat=CAT_OF[kind]||"node";const colorVar=({page:"--page",block:"--block",section:"--section",roster:"--roster"})[kind]||CAT_VAR[cat];const pasteBtn=clipboard?`<button class="icon-btn" id="pasteBtn" title="Paste the copied ${esc(clipboard.kind)}">📥</button>`:"";return `<div style="display:flex;align-items:center;gap:9px;margin-bottom:14px"><span style="width:4px;height:30px;border-radius:2px;background:var(${colorVar})"></span><div><div style="font-family:var(--mono);font-size:11px;color:var(${colorVar});font-weight:700;text-transform:uppercase">${kind}</div><div style="font-size:11px;color:var(--muted)">${esc(name)}</div></div><button class="icon-btn" id="copyBtn" title="Copy" style="margin-left:auto">📋</button><button class="icon-btn" id="dupBtn" title="Duplicate">⧉</button>${pasteBtn}<button class="icon-btn danger" id="delBtn" title="Delete">🗑</button></div>`;}
 function mini(k,l,v,type){const attrs=type==="number"?'type="number" step="1" min="0" inputmode="numeric"':(type?`type="${esc(type)}"`:'');return `<div class="field"><label>${l}</label><input class="ctrl" ${attrs} data-k="${k}" value="${esc(v??"")}"></div>`;}
-function cond(k,l,v){return `<div class="field"><label>${l}</label><textarea class="ctrl" data-k="${k}" placeholder="\${field} == nilai">${esc(v||"")}</textarea></div>`;}
+function cond(k,l,v){return `<div class="field"><label>${l}</label><textarea class="ctrl" data-k="${k}" placeholder="\${field} == value">${esc(v||"")}</textarea></div>`;}
 function optionsBlock(c){
   const mode=c.optionSource||(c.optionsApi&&c.optionsApi.url?"api":(c.optionsRef?"ref":"manual"));
   const seg=`<div class="seg" id="osSeg"><button data-os="manual" class="${mode==="manual"?"on":""}">Manual</button><button data-os="ref" class="${mode==="ref"?"on":""}">Inline</button><button data-os="api" class="${mode==="api"?"on":""}">API</button></div>`;
   let body="";
   if(mode==="manual"){
-    const rows=(c.options||[]).map((o,i)=>`<div class="mini" data-oi="${i}"><div class="mr"><input class="ctrl" data-of="value" placeholder="value" value="${esc(o.value??"")}"><input class="ctrl" data-of="label" placeholder="label" value="${esc(typeof o.label==="object"?(o.label.id||""):(o.label||""))}"><button class="x" data-orm>×</button></div><input class="ctrl mono" data-of="skipTo" placeholder="skipTo (opsional)" value="${esc(o.skipTo||"")}" style="margin-top:6px"></div>`).join("");
-    body=`<div id="optRows">${rows}</div><button class="add-row" id="addOpt">+ Tambah opsi</button>`;
+    const rows=(c.options||[]).map((o,i)=>`<div class="mini" data-oi="${i}"><div class="mr"><input class="ctrl" data-of="value" placeholder="value" value="${esc(o.value??"")}"><input class="ctrl" data-of="label" placeholder="label" value="${esc(typeof o.label==="object"?(o.label.id||""):(o.label||""))}"><button class="x" data-orm>×</button></div><input class="ctrl mono" data-of="skipTo" placeholder="skipTo (optional)" value="${esc(o.skipTo||"")}" style="margin-top:6px"></div>`).join("");
+    body=`<div id="optRows">${rows}</div><button class="add-row" id="addOpt">+ Add option</button>`;
   } else if(mode==="ref"){
     const tables=Object.entries(state.referenceData||{}).filter(([k,v])=>!(v&&v.source==="api")).map(([k])=>k);
     body = tables.length
-      ? `<div class="field"><label>Tabel sumber (variabel)</label><select class="ctrl" data-k="optionsRef"><option value="">— pilih tabel —</option>${tables.map(k=>`<option value="${esc(k)}"${c.optionsRef===k?" selected":""}>${esc(k)}</option>`).join("")}</select></div>`
-      : `<div class="help" style="margin-left:0">Belum ada tabel inline. Definisikan dulu di pengaturan instrumen → Reference data, lalu pilih di sini.</div>`;
-    body+=`<div class="field"><label>Filter berjenjang (field induk)</label><input class="ctrl mono" data-k="optionsFilterBy" placeholder="nama field induk (opsional)" value="${esc(c.optionsFilterBy||"")}"></div>`;
+      ? `<div class="field"><label>Source table (field)</label><select class="ctrl" data-k="optionsRef"><option value="">— select a table —</option>${tables.map(k=>`<option value="${esc(k)}"${c.optionsRef===k?" selected":""}>${esc(k)}</option>`).join("")}</select></div>`
+      : `<div class="help" style="margin-left:0">No inline tables yet. Define one in instrument settings → Reference data first, then pick it here.</div>`;
+    body+=`<div class="field"><label>Cascading filter (parent field)</label><input class="ctrl mono" data-k="optionsFilterBy" placeholder="parent field name (optional)" value="${esc(c.optionsFilterBy||"")}"></div>`;
   } else {
     const a=c.optionsApi||{};
-    body=`<div class="field"><label>URL API <span class="help">gunakan {dataKey} untuk substitusi nilai field</span></label><input class="ctrl mono" data-api="url" placeholder="https://api.../wilayah?kab={kabupaten_kota}" value="${esc(a.url||"")}"></div>
-      <div class="field"><label>Trigger dataKey <span class="help">dataKey yang memicu fetch ulang &amp; harus terisi dulu — pisah koma</span></label><input class="ctrl mono" data-api="depKeys" placeholder="provinsi, kabupaten_kota" value="${esc(a.depKeys||"")}"></div>
+    body=`<div class="field"><label>API URL <span class="help">use {dataKey} to substitute the field's value</span></label><input class="ctrl mono" data-api="url" placeholder="https://api.../wilayah?kab={kabupaten_kota}" value="${esc(a.url||"")}"></div>
+      <div class="field"><label>Trigger dataKey <span class="help">dataKey that triggers a refetch &amp; must be filled first — comma separated</span></label><input class="ctrl mono" data-api="depKeys" placeholder="provinsi, kabupaten_kota" value="${esc(a.depKeys||"")}"></div>
       <div class="row2"><div class="field"><label>Value field</label><input class="ctrl mono" data-api="valueField" placeholder="kode" value="${esc(a.valueField||"")}"></div><div class="field"><label>Label field</label><input class="ctrl mono" data-api="labelField" placeholder="nama" value="${esc(a.labelField||"")}"></div></div>
-      <div class="row2"><div class="field"><label>Parent param <span class="help">cascading</span></label><input class="ctrl mono" data-api="parentParam" placeholder="prov (opsional)" value="${esc(a.parentParam||"")}"></div><div class="field"><label>Path respons <span class="help">opsional</span></label><input class="ctrl mono" data-api="path" placeholder="data" value="${esc(a.path||"")}"></div></div>
-      <div class="field"><label>Filter berjenjang (field induk)</label><input class="ctrl mono" data-k="optionsFilterBy" placeholder="nama field induk (opsional)" value="${esc(c.optionsFilterBy||"")}"></div>
-      <div class="help" style="margin-left:0"><code>{dataKey}</code> di URL diganti nilai field tersebut. Trigger dataKey memblokir fetch &amp; mereset pilihan saat belum terisi. <code>path</code> bila array bersarang.</div>`;
+      <div class="row2"><div class="field"><label>Parent param <span class="help">cascading</span></label><input class="ctrl mono" data-api="parentParam" placeholder="prov (optional)" value="${esc(a.parentParam||"")}"></div><div class="field"><label>Response path <span class="help">optional</span></label><input class="ctrl mono" data-api="path" placeholder="data" value="${esc(a.path||"")}"></div></div>
+      <div class="field"><label>Cascading filter (parent field)</label><input class="ctrl mono" data-k="optionsFilterBy" placeholder="parent field name (optional)" value="${esc(c.optionsFilterBy||"")}"></div>
+      <div class="help" style="margin-left:0"><code>{dataKey}</code> in the URL is replaced by that field's value. A trigger dataKey blocks the fetch &amp; resets the choice while it is empty. <code>path</code> if the array is nested.</div>`;
   }
-  return `<div class="group"><div class="gh">Pilihan · sumber</div>${seg}${body}</div>`;
+  return `<div class="group"><div class="gh">Choices · source</div>${seg}${body}</div>`;
 }
-function skipsBlock(c){let rows=(c.skips||[]).map((s,i)=>`<div class="mini" data-si="${i}"><input class="ctrl mono" data-sf="when" placeholder="bila (ekspresi)" value="${esc(s.when||"")}"><div class="mr" style="grid-template-columns:1fr auto;margin-top:6px"><input class="ctrl mono" data-sf="to" placeholder="lompat ke / __end" value="${esc(s.to||"")}"><button class="x" data-srm>×</button></div></div>`).join("");return `<div style="margin-top:6px"><div class="gh" style="margin-bottom:6px">Lompatan (skips)</div><div id="skipRows">${rows}</div><button class="add-row" id="addSkip">+ Tambah lompatan</button></div>`;}
-function validationsBlock(c){let rows=(c.validations||[]).map((v,i)=>`<div class="mini" data-vi="${i}"><input class="ctrl mono" data-vf="test" placeholder="test (TRUE=lolos)" value="${esc(v.test||"")}"><div class="mr" style="grid-template-columns:1fr auto;margin-top:6px"><input class="ctrl" data-vf="message" placeholder="pesan" value="${esc(typeof v.message==="object"?(v.message.id||""):(v.message||""))}"><button class="x" data-vrm>×</button></div><select class="ctrl" data-vf="severity" style="margin-top:6px">${opt("error","error — blokir",v.severity||"error")}${opt("warning","warning — boleh lanjut",v.severity||"error")}</select></div>`).join("");return `<div class="group"><div class="gh">Validasi</div><div id="valRows">${rows}</div><button class="add-row" id="addVal">+ Tambah aturan</button></div>`;}
+function skipsBlock(c){let rows=(c.skips||[]).map((s,i)=>`<div class="mini" data-si="${i}"><input class="ctrl mono" data-sf="when" placeholder="when (expression)" value="${esc(s.when||"")}"><div class="mr" style="grid-template-columns:1fr auto;margin-top:6px"><input class="ctrl mono" data-sf="to" placeholder="jump to / __end" value="${esc(s.to||"")}"><button class="x" data-srm>×</button></div></div>`).join("");return `<div style="margin-top:6px"><div class="gh" style="margin-bottom:6px">Skips</div><div id="skipRows">${rows}</div><button class="add-row" id="addSkip">+ Add skip</button></div>`;}
+function validationsBlock(c){let rows=(c.validations||[]).map((v,i)=>`<div class="mini" data-vi="${i}"><input class="ctrl mono" data-vf="test" placeholder="test (TRUE=pass)" value="${esc(v.test||"")}"><div class="mr" style="grid-template-columns:1fr auto;margin-top:6px"><input class="ctrl" data-vf="message" placeholder="message" value="${esc(typeof v.message==="object"?(v.message.id||""):(v.message||""))}"><button class="x" data-vrm>×</button></div><select class="ctrl" data-vf="severity" style="margin-top:6px">${opt("error","error — blocks",v.severity||"error")}${opt("warning","warning — can continue",v.severity||"error")}</select></div>`).join("");return `<div class="group"><div class="gh">Validation</div><div id="valRows">${rows}</div><button class="add-row" id="addVal">+ Add rule</button></div>`;}
 
 function wireForm(pane,node){
   pane.querySelectorAll("[data-k]").forEach(inp=>{const h=()=>{node[inp.dataset.k]=inp.type==="checkbox"?inp.checked:inp.value;if(node.kind==="roster"&&inp.dataset.k==="min"){render();return;}softUpdate();};inp.addEventListener("input",h);inp.addEventListener("change",h);});
@@ -604,7 +604,7 @@ function wireForm(pane,node){
     inp.addEventListener("input",onChange);
     inp.addEventListener("change",onChange);
   });
-  pane.querySelector("#delBtn")?.addEventListener("click",()=>{if(confirm("Hapus ini?")){removeNode(node.uid);selected=null;selectedSet=new Set();render();}});
+  pane.querySelector("#delBtn")?.addEventListener("click",()=>{if(confirm("Delete this?")){removeNode(node.uid);selected=null;selectedSet=new Set();render();}});
   pane.querySelector("#dupBtn")?.addEventListener("click",()=>{const arr=parentArrayOf(node.uid),i=arr.indexOf(node),copy=JSON.parse(JSON.stringify(node));reuid(copy);copy.name=uniqueCopyName(node.name);arr.splice(i+1,0,copy);selected=copy.uid;selectedSet=new Set([copy.uid]);render();});
   pane.querySelector("#copyBtn")?.addEventListener("click",()=>{copyNode(node);render();});
   pane.querySelector("#pasteBtn")?.addEventListener("click",()=>{pasteNode();});
@@ -615,7 +615,7 @@ function wireForm(pane,node){
   pane.querySelectorAll("#osSeg button").forEach(b=>b.addEventListener("click",()=>{node.optionSource=b.dataset.os;if(node.optionSource==="api"&&!node.optionsApi)node.optionsApi={url:"",valueField:"",labelField:""};render();}));
   pane.querySelectorAll("[data-api]").forEach(inp=>inp.addEventListener("input",()=>{node.optionsApi=node.optionsApi||{};node.optionsApi[inp.dataset.api]=inp.value;softUpdate();}));
   pane.querySelectorAll("#optRows .mini").forEach(row=>{const i=+row.dataset.oi;row.querySelectorAll("[data-of]").forEach(inp=>inp.addEventListener("input",()=>{const f=inp.dataset.of;node.options[i][f]=inp.value;softUpdate();}));row.querySelector("[data-orm]")?.addEventListener("click",()=>{node.options.splice(i,1);render();});});
-  pane.querySelector("#addOpt")?.addEventListener("click",()=>{node.options=node.options||[];node.options.push({value:String(node.options.length+1),label:"Opsi "+(node.options.length+1)});render();});
+  pane.querySelector("#addOpt")?.addEventListener("click",()=>{node.options=node.options||[];node.options.push({value:String(node.options.length+1),label:"Option "+(node.options.length+1)});render();});
   // skips
   pane.querySelectorAll("#skipRows .mini").forEach(row=>{const i=+row.dataset.si;row.querySelectorAll("[data-sf]").forEach(inp=>inp.addEventListener("input",()=>{node.skips[i][inp.dataset.sf]=inp.value;softUpdate();}));row.querySelector("[data-srm]")?.addEventListener("click",()=>{node.skips.splice(i,1);render();});});
   pane.querySelector("#addSkip")?.addEventListener("click",()=>{node.skips=node.skips||[];node.skips.push({when:"",to:""});render();});
@@ -667,14 +667,14 @@ function lint(){
     else{if(n.name){containers.add(n.name);see(n.name,p);}if(n.kind==="roster"&&clean(n.countFrom))refs.push({path:`${p}.countFrom`,kind:"field",val:n.countFrom});if(clean(n.visibleWhen))exprs.push({path:`${p}.visibleWhen`,expr:n.visibleWhen});(n.components||[]).forEach(c=>walk(c,p));}
   }
   state.pages.forEach(p=>walk(p,""));
-  Object.entries(names).forEach(([n,ps])=>{if(ps.length>1)add("error",n,`Nama '${n}' dipakai ${ps.length}×`);});
+  Object.entries(names).forEach(([n,ps])=>{if(ps.length>1)add("error",n,`Name '${n}' is used ${ps.length}×`);});
   const tables=new Set(Object.keys(state.referenceData||{}));const nav=new Set([...fields,...containers,"__end","__next","__prev"]);
-  refs.forEach(r=>{if(r.kind==="table"&&!tables.has(r.val))add("error",r.path,`optionsRef '${r.val}' tidak ada di referenceData`);if(r.kind==="field"&&!fields.has(r.val))add("error",r.path,`'${r.val}' bukan field yang ada`);if(r.kind==="nav"&&!nav.has(r.val))add("error",r.path,`target lompatan '${r.val}' tidak ditemukan`);});
-  exprs.forEach(({path,expr})=>{try{Expr.parse(expr);}catch(e){add("error",path,"ekspresi tidak valid: "+e.message);}for(const m of String(expr).matchAll(/\$\{([^}]*)\}/g)){const full=m[1].trim();const b=full.split(/[.\[]/)[0];if(!b||b.startsWith("__"))continue;if(fields.has(full)||containers.has(full))continue;if(!fields.has(b)&&!containers.has(b))add("error",path,`ekspresi merujuk '${b}' yang tidak ada`);}});
-  const locs=new Set(state.locales||[]);if(state.defaultLocale&&locs.size&&!locs.has(state.defaultLocale))add("warning","defaultLocale",`locale utama '${state.defaultLocale}' tidak ada di locales`);
+  refs.forEach(r=>{if(r.kind==="table"&&!tables.has(r.val))add("error",r.path,`optionsRef '${r.val}' does not exist in referenceData`);if(r.kind==="field"&&!fields.has(r.val))add("error",r.path,`'${r.val}' is not an existing field`);if(r.kind==="nav"&&!nav.has(r.val))add("error",r.path,`skip target '${r.val}' not found`);});
+  exprs.forEach(({path,expr})=>{try{Expr.parse(expr);}catch(e){add("error",path,"invalid expression: "+e.message);}for(const m of String(expr).matchAll(/\$\{([^}]*)\}/g)){const full=m[1].trim();const b=full.split(/[.\[]/)[0];if(!b||b.startsWith("__"))continue;if(fields.has(full)||containers.has(full))continue;if(!fields.has(b)&&!containers.has(b))add("error",path,`expression references '${b}', which does not exist`);}});
+  const locs=new Set(state.locales||[]);if(state.defaultLocale&&locs.size&&!locs.has(state.defaultLocale))add("warning","defaultLocale",`default locale '${state.defaultLocale}' is missing from locales`);
   return issues;
 }
-function renderJson(issues){const pane=document.getElementById("paneJson");const json=serialize();const errs=issues.filter(i=>i.sev==="error"),warns=issues.filter(i=>i.sev==="warning");let ih=!issues.length?`<div class="allgood">✓ Bersih — tidak ada masalah.</div>`:issues.map(it=>`<div class="issue ${it.sev==="error"?"err":"warn"}"><div><div>${esc(it.msg)}</div><div class="ipath">${esc(it.path)}</div></div></div>`).join("");pane.innerHTML=`<div class="jbar"><button class="btn" id="copyJson">Salin</button><button class="btn primary" id="dlJson">Unduh .json</button></div><pre class="json">${highlight(JSON.stringify(json,null,2))}</pre><div style="margin-top:14px"><div class="gh" style="font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Validasi — ${errs.length} error, ${warns.length} warning</div>${ih}</div>`;pane.querySelector("#copyJson").addEventListener("click",e=>{navigator.clipboard.writeText(JSON.stringify(json,null,2));e.target.textContent="Tersalin ✓";setTimeout(()=>e.target.textContent="Salin",1200);});pane.querySelector("#dlJson").addEventListener("click",()=>download(`${state.id||"kuesioner"}.json`,JSON.stringify(json,null,2)));}
+function renderJson(issues){const pane=document.getElementById("paneJson");const json=serialize();const errs=issues.filter(i=>i.sev==="error"),warns=issues.filter(i=>i.sev==="warning");let ih=!issues.length?`<div class="allgood">✓ Clean — no issues found.</div>`:issues.map(it=>`<div class="issue ${it.sev==="error"?"err":"warn"}"><div><div>${esc(it.msg)}</div><div class="ipath">${esc(it.path)}</div></div></div>`).join("");pane.innerHTML=`<div class="jbar"><button class="btn" id="copyJson">Copy</button><button class="btn primary" id="dlJson">Download .json</button></div><pre class="json">${highlight(JSON.stringify(json,null,2))}</pre><div style="margin-top:14px"><div class="gh" style="font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Validation — ${errs.length} error, ${warns.length} warning</div>${ih}</div>`;pane.querySelector("#copyJson").addEventListener("click",e=>{navigator.clipboard.writeText(JSON.stringify(json,null,2));e.target.textContent="Copied ✓";setTimeout(()=>e.target.textContent="Copy",1200);});pane.querySelector("#dlJson").addEventListener("click",()=>download(`${state.id||"form"}.json`,JSON.stringify(json,null,2)));}
 
 /* ===================== UTIL ===================== */
 function esc(s){return String(s??"").replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));}
@@ -720,24 +720,24 @@ document.getElementById("exp1").addEventListener("click",()=>{collapsed.sb1=fals
 document.getElementById("col2").addEventListener("click",()=>{collapsed.sb2=true;applyCols();});
 document.getElementById("exp2").addEventListener("click",()=>{collapsed.sb2=false;applyCols();});
 document.getElementById("instTitle").addEventListener("input",e=>{state.title=e.target.value;runValidation();});
-document.getElementById("addPage").addEventListener("click",()=>{const p=newPage();p.title="Halaman "+(state.pages.length+1);state.pages.push(p);view={type:"page",uid:p.uid};selected=p.uid;render();});
-document.getElementById("btnExport").addEventListener("click",()=>{switchTab("json");download(`${state.id||"kuesioner"}.json`,JSON.stringify(serialize(),null,2));});
+document.getElementById("addPage").addEventListener("click",()=>{const p=newPage();p.title="Page "+(state.pages.length+1);state.pages.push(p);view={type:"page",uid:p.uid};selected=p.uid;render();});
+document.getElementById("btnExport").addEventListener("click",()=>{switchTab("json");download(`${state.id||"form"}.json`,JSON.stringify(serialize(),null,2));});
 document.getElementById("btnImport").addEventListener("click",()=>document.getElementById("fileInput").click());
-document.getElementById("fileInput").addEventListener("change",e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{importJSON(JSON.parse(r.result));}catch(err){alert("JSON tidak valid: "+err.message);}};r.readAsText(f);e.target.value="";});
+document.getElementById("fileInput").addEventListener("change",e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{importJSON(JSON.parse(r.result));}catch(err){alert("Invalid JSON: "+err.message);}};r.readAsText(f);e.target.value="";});
 document.getElementById("btnPreview").addEventListener("click",openPreview);
 document.getElementById("pvClose").addEventListener("click",closePreview);
 document.getElementById("pvMode").addEventListener("change",e=>{pv.mode=e.target.value;pv.page=0;renderPreview();});
 document.addEventListener("keydown",e=>{
   if(e.key==="Escape"&&!document.getElementById("preview").hidden){closePreview();return;}
   const at=document.activeElement,tag=at&&at.tagName;
-  if(tag==="INPUT"||tag==="TEXTAREA"||(at&&at.isContentEditable))return; // jangan ganggu copy-paste teks biasa
+  if(tag==="INPUT"||tag==="TEXTAREA"||(at&&at.isContentEditable))return; // do not interfere with ordinary text copy-paste
   if(e.key==="Escape"&&selectedSet.size>0){selected=null;selectedSet=new Set();render();return;}
   if((e.key==="Delete"||e.key==="Backspace")&&selectedSet.size>0&&document.getElementById("preview").hidden){
     e.preventDefault();
     if(selectedSet.size>1){
-      if(confirm(`Hapus ${selectedSet.size} item yang dipilih?`)){[...selectedSet].forEach(uid=>removeNode(uid));selected=null;selectedSet=new Set();render();}
+      if(confirm(`Delete the ${selectedSet.size} selected items?`)){[...selectedSet].forEach(uid=>removeNode(uid));selected=null;selectedSet=new Set();render();}
     }else if(selected){
-      if(confirm("Hapus ini?")){removeNode(selected);selected=null;selectedSet=new Set();render();}
+      if(confirm("Delete this?")){removeNode(selected);selected=null;selectedSet=new Set();render();}
     }
     return;
   }
@@ -746,7 +746,7 @@ document.addEventListener("keydown",e=>{
 });
 document.querySelector(".canvas").addEventListener("click",e=>{if(e.target.classList.contains("canvas")||e.target.closest(".cv-head")&&!e.target.closest("button")){selected=null;selectedSet=new Set();render();}});
 
-/* ===================== PREVIEW (Lihat Kuesioner) ===================== */
+/* ===================== PREVIEW (View Form) ===================== */
 let pv={values:{},page:0,mode:"section",row:null};
 function openPreview(){pv={values:{},page:0,mode:state.settings.navigation.mode==="scroll"?"scroll":"section",row:null,apiCache:{}};const sel=document.getElementById("pvMode");if(sel)sel.value=pv.mode;document.getElementById("preview").hidden=false;renderPreview();setupSidebarToggle(document.getElementById("pvSide"));}
 function closePreview(){document.getElementById("preview").hidden=true;const s=document.getElementById("pvSide");if(s){s.classList.remove("open","collapsed");}document.getElementById("pvSideBd")?.classList.remove("show");}
@@ -754,7 +754,7 @@ function setupSidebarToggle(side){
   const tog=document.getElementById("pvSideTog");
   const bd=document.getElementById("pvSideBd");
   if(!tog||!side)return;
-  tog.replaceWith(tog.cloneNode(true)); // hapus listener lama
+  tog.replaceWith(tog.cloneNode(true)); // drop the old listener
   const newTog=document.getElementById("pvSideTog");
   const mobile=()=>window.innerWidth<=680;
   newTog.addEventListener("click",()=>{
@@ -799,7 +799,7 @@ function getPath(obj,path){return String(path).split(".").reduce((o,k)=>(o==null
 function buildApiUrl(tbl,parentVal,rp){
   rp=rp||"";
   let url=tbl.url;
-  // Ganti {key}: {parent} → parentVal; field lain → cari roster-prefixed dahulu, fallback halaman
+  // Replace {key}: {parent} → parentVal; other fields → look for the roster-prefixed one first, then the page
   url=url.replace(/\{([^}]+)\}/g,(_,k)=>encodeURIComponent(k==="parent"?(parentVal??""): ((rp&&pv.values[rp+k]!=null?pv.values[rp+k]:pv.values[k])??"")));
   if(!tbl.url.includes("{")&&tbl.parentParam&&parentVal!=null&&parentVal!=="")
     url+=(url.includes("?")?"&":"?")+encodeURIComponent(tbl.parentParam)+"="+encodeURIComponent(parentVal);
@@ -832,9 +832,9 @@ function resolveOptions(c,rp){
   return {state:"ok",opts:(c.options||[]).map(o=>({value:o.value,label:textOf(o.label)||String(o.value)}))};
 }
 function optWrap(ro,fn,key){
-  if(ro.state==="skip"){if(key!=null)pv.values[key]="";return '<select class="pv-in" disabled><option value="">— isi kolom sebelumnya dahulu —</option></select>';}
-  if(ro.state==="loading")return '<div class="pv-loading">⏳ Memuat pilihan dari API…</div>';
-  if(ro.state==="error")return `<div class="pv-vmsg error">Gagal memuat pilihan: ${esc(ro.error||"")}</div>`;
+  if(ro.state==="skip"){if(key!=null)pv.values[key]="";return '<select class="pv-in" disabled><option value="">— fill in the previous field first —</option></select>';}
+  if(ro.state==="loading")return '<div class="pv-loading">⏳ Loading options from the API…</div>';
+  if(ro.state==="error")return `<div class="pv-vmsg error">Failed to load options: ${esc(ro.error||"")}</div>`;
   return fn();
 }
 function visiblePages(){return state.pages.filter(p=>evalVisible(p.visibleWhen,""));}
@@ -861,8 +861,8 @@ function fieldSkipTarget(f){
   }
   return null;
 }
-// Target skip pertama yang terdaftar pada field ini (dipakai sebagai default
-// ketika field belum dijawab sama sekali — lihat fieldEffectiveSkipTarget).
+// The first skip target registered on this field (used as the default
+// when the field has not been answered at all — see fieldEffectiveSkipTarget).
 function fieldPendingTarget(f){
   const s=(f.skips||[]).find(x=>x.when&&x.to);
   if(s)return s.to;
@@ -872,16 +872,16 @@ function fieldPendingTarget(f){
   }
   return null;
 }
-// Field yang punya kemampuan skip tapi BELUM dijawab dianggap "pending":
-// secara default field di antara dia dan target tetap disembunyikan sampai
-// dijawab dengan opsi yang TIDAK memicu skip (baru jalur normal terbuka).
+// A field that can skip but has NOT been answered yet counts as "pending":
+// by default the fields between it and the target stay hidden until
+// answered with an option that does NOT trigger a skip (only then does the normal path open).
 function fieldEffectiveSkipTarget(f){
   const t=fieldSkipTarget(f);
   if(t)return t;
   if(pvEmpty(pv.values[f.name]))return fieldPendingTarget(f);
   return null;
 }
-// Varian roster: evaluasi skip dengan jawaban dari baris tertentu (rp = "roster#idx#").
+// Roster variant: evaluate the skip using one specific row's answers (rp = "roster#idx#").
 function fieldSkipTargetRp(f,rp){
   for(const s of (f.skips||[])){
     if(!s.when||!s.to)continue;
@@ -902,9 +902,9 @@ function fieldEffectiveSkipTargetRp(f,rp){
   if(pvEmpty(pv.values[rp+f.name]))return fieldPendingTarget(f);
   return null;
 }
-// Hitung field dalam satu baris roster yang harus disembunyikan karena skip-to.
-// Target "__end" berarti akhiri sisa baris ini (field setelahnya di baris yang
-// sama disembunyikan; baris roster lain tidak terpengaruh).
+// Work out which fields in one roster row must be hidden because of a skip-to.
+// The "__end" target means finish the rest of this row (later fields in the same
+// row are hidden; other roster rows are unaffected).
 function computeRosterRowSkipState(roster,rowIdx){
   const rp=`${roster.name}#${rowIdx}#`;
   const allRowFields=flatFields(roster.components);
@@ -922,9 +922,9 @@ function computeRosterRowSkipState(roster,rowIdx){
   }
   return hidden;
 }
-// Hitung field di halaman ini yang harus disembunyikan karena skip yang
-// sedang aktif (target di halaman yang sama), plus target lintas-halaman
-// bila skip yang aktif belum "selesai" sampai akhir halaman.
+// Work out which fields on this page must be hidden because a skip is currently
+// active (its target is on the same page), plus the cross-page target when the
+// active skip has not "finished" by the end of the page.
 function computePageSkipState(page){
   const hidden=new Set();
   const fields=[];
@@ -999,10 +999,10 @@ function focusPvField(key){
 function renderPreview(){
   const body=document.getElementById("pvBody");const keep=body.scrollTop;
   const navArea=document.getElementById("pvNavArea");
-  document.getElementById("pvTitle").textContent=textOf(state.title)||"Kuesioner";
+  document.getElementById("pvTitle").textContent=textOf(state.title)||"Form";
   if(pv.row){renderRosterRowPage();renderPvSide();return;}
   const pages=visiblePages();
-  if(!pages.length){body.innerHTML=`<div class="pv-empty">Belum ada halaman untuk ditampilkan.</div>`;if(navArea)navArea.innerHTML="";renderPvSide();return;}
+  if(!pages.length){body.innerHTML=`<div class="pv-empty">No pages to show yet.</div>`;if(navArea)navArea.innerHTML="";renderPvSide();return;}
   if(pv.mode==="scroll"){
     SKIP_HIDDEN=new Set();ROW_SKIP_HIDDEN=new Map();
     let h="";pages.forEach(p=>h+=pvPage(p));
@@ -1015,7 +1015,7 @@ function renderPreview(){
     body.innerHTML=pvPage(p);
     if(navArea){
       const pct=pages.length>1?Math.round(((pv.page+1)/pages.length)*100):100;
-      navArea.innerHTML=`<div class="pv-nav-err" id="pvNavErr"></div><div class="pv-nav">${pv.page>0?`<button class="btn" id="pvPrev">← Sebelumnya</button>`:`<span></span>`}<div class="pv-prog-wrap"><div class="pv-progbar-track"><div class="pv-progbar" style="width:${pct}%"></div></div><span class="pv-prog">Halaman ${pv.page+1} / ${pages.length}</span></div>${pv.page<pages.length-1?`<button class="btn primary" id="pvNext">Lanjut →</button>`:`<button class="btn primary" id="pvDone">Selesai</button>`}</div>`;
+      navArea.innerHTML=`<div class="pv-nav-err" id="pvNavErr"></div><div class="pv-nav">${pv.page>0?`<button class="btn" id="pvPrev">← Sebelumnya</button>`:`<span></span>`}<div class="pv-prog-wrap"><div class="pv-progbar-track"><div class="pv-progbar" style="width:${pct}%"></div></div><span class="pv-prog">Page ${pv.page+1} / ${pages.length}</span></div>${pv.page<pages.length-1?`<button class="btn primary" id="pvNext">Lanjut →</button>`:`<button class="btn primary" id="pvDone">Selesai</button>`}</div>`;
     }
   }
   bindPreview(body);body.scrollTop=keep;renderPvSide();
@@ -1023,7 +1023,7 @@ function renderPreview(){
   document.getElementById("pvNext")?.addEventListener("click",()=>{
     const curP=pages[pv.page];
     const gate=validateCurrentPage(curP);
-    if(!gate.ok){const err=document.getElementById("pvNavErr");if(err)err.textContent="Lengkapi pertanyaan wajib / perbaiki isian yang tidak valid sebelum melanjutkan.";focusPvField(gate.key);return;}
+    if(!gate.ok){const err=document.getElementById("pvNavErr");if(err)err.textContent="Complete the required questions / fix the invalid entries before continuing.";focusPvField(gate.key);return;}
     const target=computePageSkipState(curP).crossPageTarget;
     const idx=target?pageIndexOfTarget(target,pages):null;
     if(idx!=null){clearSkippedPages(pages,pv.page,idx);pv.page=idx;body.scrollTop=0;renderPreview();return;}
@@ -1032,8 +1032,8 @@ function renderPreview(){
   document.getElementById("pvDone")?.addEventListener("click",()=>{
     const curP=pages[pv.page];
     const gate=validateCurrentPage(curP);
-    if(!gate.ok){const err=document.getElementById("pvNavErr");if(err)err.textContent="Lengkapi pertanyaan wajib / perbaiki isian yang tidak valid sebelum mengirim.";focusPvField(gate.key);return;}
-    alert("Preview selesai. Ini hanya tampilan — data tidak disimpan.");
+    if(!gate.ok){const err=document.getElementById("pvNavErr");if(err)err.textContent="Complete the required questions / fix the invalid entries before submitting.";focusPvField(gate.key);return;}
+    alert("Preview finished. This is display only — nothing is saved.");
   });
 }
 function pvPage(p){let h=`<div class="pv-page" id="pvpage_${esc(p.name)}"><h2 class="pv-h2">${esc(p.title||p.name)}</h2>`;p.components.forEach(c=>h+=pvNode(c,null));return h+`</div>`;}
@@ -1100,13 +1100,13 @@ function ensureRosterDefaultValues(r,count){
   }
 }
 function openAddRowModal(r){
-  const title=r.rowTitle||"baris";
+  const title=r.rowTitle||"row";
   const promptFields=flatFields(r.components).filter(f=>f.promptOnAdd);
   const bg=document.createElement("div");bg.className="pv-modal-bg";
   const fieldsHtml=promptFields.length
     ?promptFields.map(f=>`<div style="margin-bottom:10px"><label style="display:block;font-size:12.5px;font-weight:500;margin-bottom:5px">${esc(f.label||f.name)}</label><input class="pv-modal-in" data-pf="${esc(f.name)}" placeholder="${esc(f.placeholder||f.label||f.name)}…" style="width:100%;border:1px solid var(--line);border-radius:var(--radius-s);padding:9px 10px;font-size:13px;box-sizing:border-box"></div>`).join("")
     :`<input type="text" id="addRowInput" placeholder="${esc(title)}…" style="width:100%;border:1px solid var(--line);border-radius:var(--radius-s);padding:9px 10px;font-size:13px;margin-bottom:4px;box-sizing:border-box">`;
-  bg.innerHTML=`<div class="pv-modal"><h3>Tambah ${esc(title)}</h3>${fieldsHtml}<div class="pv-modal-actions"><button class="btn ghost" id="addRowCancel">Batal</button><button class="btn primary" id="addRowConfirm">+ Tambah ${esc(title)}</button></div></div>`;
+  bg.innerHTML=`<div class="pv-modal"><h3>Add ${esc(title)}</h3>${fieldsHtml}<div class="pv-modal-actions"><button class="btn ghost" id="addRowCancel">Cancel</button><button class="btn primary" id="addRowConfirm">+ Add ${esc(title)}</button></div></div>`;
   document.body.appendChild(bg);
   const firstInput=bg.querySelector("input");if(firstInput)firstInput.focus();
   const close=()=>bg.remove();
@@ -1118,7 +1118,7 @@ function openAddRowModal(r){
     if(r.max!==""&&r.max!=null){
       const mx=Number(r.max);
       if(Number.isFinite(mx)&&mx>=0&&cur>=mx){
-        alert(`Maksimal ${mx} baris.`);
+        alert(`Maximum ${mx} rows.`);
         return;
       }
     }
@@ -1144,9 +1144,9 @@ function delRow(rname,idx){
   });
   nv[key]=Math.max(0,count-1);pv.values=nv;
 }
-function addRowLabel(r){return r.rowTitle?`+ Tambah ${esc(r.rowTitle)}`:"+ Tambah baris";}
-// Interpolasi nilai field lain dalam baris roster ke teks label/hint/itemLabel.
-// Mendukung dua sintaks: {{nama}} dan ${nama} (dipakai campur di berbagai tempat).
+function addRowLabel(r){return r.rowTitle?`+ Add ${esc(r.rowTitle)}`:"+ Add row";}
+// Interpolate other fields from the same roster row into label/hint/itemLabel text.
+// Supports two syntaxes: {{name}} and ${name} (both are used in various places).
 const INTERP_RE=/\{\{\s*([^}]+?)\s*\}\}|\$\{\s*([^}]+?)\s*\}/g;
 function rowPrefixes(row){
   if(!row)return [];
@@ -1187,7 +1187,7 @@ function rowLabel(r,i,row){
     const scope={r:r.name,i,parents:rowPrefixes(row)};
     return esc(r.itemLabel.replace(/\{\{\s*index\s*\}\}|\$\{\s*index\s*\}/g,String(i+1)).replace(INTERP_RE,(_,a,b)=>{const v=resolveRowValue((a||b).trim(),scope);return v!=null?String(v):"";}));
   }
-  return r.rowTitle?`${esc(r.rowTitle)} #${i+1}`:`Baris #${i+1}`;
+  return r.rowTitle?`${esc(r.rowTitle)} #${i+1}`:`Row #${i+1}`;
 }
 function pvRoster(r,row){
   const rp=rowStoragePrefix(row);
@@ -1199,19 +1199,19 @@ function pvRoster(r,row){
   ensureRosterDefaultValues(r,count);
   if(r.rosterType==="separate"){
     let h=`<div class="pv-roster" id="pvroster_${esc(r.name)}"><div class="pv-rh">${esc(titleTxt)}<span class="pv-tag">subhalaman</span></div>`;
-    if(from&&count<=0){h+=`<div class="pv-rowempty">Isi dulu “${esc(labelOfField(from))}” untuk menentukan jumlah baris.</div>`;}
-    else if(count<=0){h+=`<div class="pv-rowempty">Belum ada baris.</div>`;}
+    if(from&&count<=0){h+=`<div class="pv-rowempty">Fill in “${esc(labelOfField(from))}” first to determine the number of rows.</div>`;}
+    else if(count<=0){h+=`<div class="pv-rowempty">No rows yet.</div>`;}
     else{h+=`<div class="pv-rowlist">`;
       for(let i=0;i<count;i++){const sum=rowSummary(r,i);
-        h+=`<div class="pv-rowitem"><div class="pv-rowinfo"><b>${rowLabel(r,i,row)}</b><span>${sum||"<i>belum diisi</i>"}</span></div>${manual?`<button class="pv-rowdel" data-delrow="${esc(r.name)}" data-i="${i}">hapus</button>`:""}<button class="pv-rowopen" data-openrow="${r.uid}" data-i="${i}">${isRowFilled(r,i)?"Edit":"Isi"} →</button></div>`;}
+        h+=`<div class="pv-rowitem"><div class="pv-rowinfo"><b>${rowLabel(r,i,row)}</b><span>${sum||"<i>not filled in</i>"}</span></div>${manual?`<button class="pv-rowdel" data-delrow="${esc(r.name)}" data-i="${i}">remove</button>`:""}<button class="pv-rowopen" data-openrow="${r.uid}" data-i="${i}">${isRowFilled(r,i)?"Edit":"Fill"} →</button></div>`;}
       h+=`</div>`;}
     if(canAdd)h+=`<button class="pv-add" data-addrow="${esc(r.uid)}">${addRowLabel(r)}</button>`;
     return h+`</div>`;
   }
   // inline
   let h=`<div class="pv-roster" id="pvroster_${esc(r.name)}"><div class="pv-rh">${esc(titleTxt)}</div>`;
-  if(from&&count<=0)h+=`<div class="pv-rowempty">Isi dulu “${esc(labelOfField(from))}” untuk menentukan jumlah baris.</div>`;
-  for(let i=0;i<count;i++){const childRp=rosterRowPrefix(r,i,rp);const rowKey=childRp.slice(0,-1);const rs=computeRosterRowSkipState(r,i);ROW_SKIP_HIDDEN.set(rowKey,rs);rs.forEach(n=>{delete pv.values[`${childRp}${n}`];});h+=`<div class="pv-row"><div class="pv-rownum"><span>${rowLabel(r,i,row)}</span>${manual?`<button class="pv-del" data-delrow="${esc(r.name)}" data-i="${i}">hapus</button>`:""}</div>`;r.components.forEach(f=>h+=pvNode(f,{r:r.name,i,parents:parentPrefixes}));h+=`</div>`;}
+  if(from&&count<=0)h+=`<div class="pv-rowempty">Fill in “${esc(labelOfField(from))}” first to determine the number of rows.</div>`;
+  for(let i=0;i<count;i++){const childRp=rosterRowPrefix(r,i,rp);const rowKey=childRp.slice(0,-1);const rs=computeRosterRowSkipState(r,i);ROW_SKIP_HIDDEN.set(rowKey,rs);rs.forEach(n=>{delete pv.values[`${childRp}${n}`];});h+=`<div class="pv-row"><div class="pv-rownum"><span>${rowLabel(r,i,row)}</span>${manual?`<button class="pv-del" data-delrow="${esc(r.name)}" data-i="${i}">remove</button>`:""}</div>`;r.components.forEach(f=>h+=pvNode(f,{r:r.name,i,parents:parentPrefixes}));h+=`</div>`;}
   if(canAdd)h+=`<button class="pv-add" data-addrow="${esc(r.uid)}">${addRowLabel(r)}</button>`;
   return h+`</div>`;
 }
@@ -1220,16 +1220,16 @@ function renderRosterRowPage(){
   const r=findNode(pv.row.uid);if(!r){pv.row=null;return renderPreview();}
   const i=pv.row.index;const parent=pageOf(r.uid);
   const rs=computeRosterRowSkipState(r,i);ROW_SKIP_HIDDEN.set(`${r.name}#${i}`,rs);rs.forEach(n=>{delete pv.values[`${r.name}#${i}#${n}`];});
-  const pageTitle=esc(parent?(parent.title||parent.name):"Kembali");
+  const pageTitle=esc(parent?(parent.title||parent.name):"Back");
   const rosterTitle=esc(rowInterp(r.title||r.name,{r:r.name,i}));
   const total=rosterCount(r);
   const hasStructure=(r.components||[]).some(c=>c.kind==="block"||c.kind==="section");
   let fieldsHtml=r.components.map(f=>pvNode(f,{r:r.name,i})).join("");
   if(!hasStructure&&fieldsHtml)fieldsHtml=`<div class="pv-card">${fieldsHtml}</div>`;
-  let h=`<div class="pv-page"><div class="pv-rrow-hdr"><div class="pv-rrow-bread"><button id="pvBack" class="pv-rrow-back">← ${pageTitle}</button><span class="pv-rrow-sep">›</span><span class="pv-rrow-rname">${rosterTitle}</span><span class="pv-rrow-num">Baris ${i+1} dari ${total}</span></div><div class="pv-rrow-title">${rowLabel(r,i)}</div></div>${fieldsHtml}</div>`;
+  let h=`<div class="pv-page"><div class="pv-rrow-hdr"><div class="pv-rrow-bread"><button id="pvBack" class="pv-rrow-back">← ${pageTitle}</button><span class="pv-rrow-sep">›</span><span class="pv-rrow-rname">${rosterTitle}</span><span class="pv-rrow-num">Row ${i+1} of ${total}</span></div><div class="pv-rrow-title">${rowLabel(r,i)}</div></div>${fieldsHtml}</div>`;
   body.innerHTML=h;
   const navArea=document.getElementById("pvNavArea");
-  if(navArea)navArea.innerHTML=`<div class="pv-nav"><span></span><button class="btn primary" id="pvBackDone">Simpan &amp; kembali</button></div>`;
+  if(navArea)navArea.innerHTML=`<div class="pv-nav"><span></span><button class="btn primary" id="pvBackDone">Save &amp; back</button></div>`;
   bindPreview(body);body.scrollTop=keep;
   document.getElementById("pvBack")?.addEventListener("click",backFromRow);
   document.getElementById("pvBackDone")?.addEventListener("click",backFromRow);
@@ -1243,7 +1243,7 @@ function pvField(c,row){
   if(c.type==="hidden")return "";
   const rp=rowStoragePrefix(row);
   if(!evalVisible(c.visibleWhen,rp))return "";
-  if(row?ROW_SKIP_HIDDEN.get(rp.slice(0,-1))?.has(c.name):SKIP_HIDDEN.has(c.name))return ""; // skip-to: halaman atau baris roster
+  if(row?ROW_SKIP_HIDDEN.get(rp.slice(0,-1))?.has(c.name):SKIP_HIDDEN.has(c.name))return ""; // skip-to: page atau baris roster
   if(c.type==="note")return `<div class="pv-note pv-field">${c.html||""}</div>`;
   if(c.type==="markdown")return `<div class="pv-note pv-field pv-md">${mdToHtml(c.markdown||"")}</div>`;
   const key=row?`${rp}${c.name}`:c.name;
@@ -1270,24 +1270,24 @@ function pvField(c,row){
   const da=`data-k="${esc(key)}"`;let ctrl="";
   if(c.type==="textarea")ctrl=`<textarea ${da} class="pv-in" rows="3"${dis}${rdOnly}>${esc(val)}</textarea>`;
   else if(c.type==="text")ctrl=`<input ${da} class="pv-in" value="${esc(val)}" placeholder="${esc(c.placeholder||"")}"${dis}${rdOnly}>`;
-  else if(c.type==="email")ctrl=`<input ${da} type="email" class="pv-in" value="${esc(val)}" placeholder="${esc(c.placeholder||"nama@domain.com")}"${dis}${rdOnly}>`;
+  else if(c.type==="email")ctrl=`<input ${da} type="email" class="pv-in" value="${esc(val)}" placeholder="${esc(c.placeholder||"name@domain.com")}"${dis}${rdOnly}>`;
   else if(NUMERIC.has(c.type))ctrl=`<input ${da} type="number" class="pv-in" value="${esc(val)}"${c.min!==""&&c.min!=null?` min="${c.min}"`:""}${c.max!==""&&c.max!=null?` max="${c.max}"`:""}${dis}${rdOnly} style="width:auto;min-width:160px">${c.unit?`<span class="pv-unit">${esc(c.unit)}</span>`:""}`;
-  else if(c.type==="boolean")ctrl=pvRadios(key,[{value:"true",label:"Ya"},{value:"false",label:"Tidak"}],String(val),disAll);
+  else if(c.type==="boolean")ctrl=pvRadios(key,[{value:"true",label:"Yes"},{value:"false",label:"No"}],String(val),disAll);
   else if(c.type==="radio"){const ro=resolveOptions(c,rp);ctrl=optWrap(ro,()=>pvRadios(key,ro.opts,String(val),disAll),key);}
-  else if(c.type==="select"){const ro=resolveOptions(c,rp);ctrl=optWrap(ro,()=>`<select ${da} class="pv-in"${disAll}><option value="">— pilih —</option>${ro.opts.map(o=>`<option value="${esc(o.value)}"${String(val)===String(o.value)?" selected":""}>${esc(o.label)}</option>`).join("")}</select>`,key);}
+  else if(c.type==="select"){const ro=resolveOptions(c,rp);ctrl=optWrap(ro,()=>`<select ${da} class="pv-in"${disAll}><option value="">— select —</option>${ro.opts.map(o=>`<option value="${esc(o.value)}"${String(val)===String(o.value)?" selected":""}>${esc(o.label)}</option>`).join("")}</select>`,key);}
   else if(c.type==="checkbox"||c.type==="multiselect"){const ro=resolveOptions(c,rp);ctrl=optWrap(ro,()=>`<div class="pv-radios">${ro.opts.map(o=>`<label class="pv-opt"><input type="checkbox" data-kc="${esc(key)}" value="${esc(o.value)}"${(Array.isArray(val)&&val.map(String).includes(String(o.value)))?" checked":""}${disAll}> ${esc(o.label)}</label>`).join("")}</div>`,key);}
   else if(DATETIME.has(c.type))ctrl=`<input ${da} type="${DT_INPUT_TYPE[c.type]}" class="pv-in" value="${esc(val)}"${clean(c.min)?` min="${esc(c.min)}"`:""}${clean(c.max)?` max="${esc(c.max)}"`:""} style="width:auto"${dis}${rdOnly}>`;
   else if(c.type==="geopoint")ctrl=`<div class="pv-inbtn"><input ${da} class="pv-in" value="${esc(val)}" placeholder="lat, lng"${dis}${rdOnly}><button type="button" class="pv-smbtn pv-geobtn"${disAll}>📍 Ambil Lokasi</button></div><div class="pv-geomsg"></div>`;
   else if(c.type==="photo"||c.type==="file"){
     const isPhoto=c.type==="photo";
     const disClass=(enabled&&!c.readOnly)?"":" pv-photolabel-dis";
-    ctrl=`<div class="pv-photowrap"><input type="hidden" ${da} value="${esc(val)}"><label class="pv-photolabel${disClass}"><input type="file" class="pv-photofile"${isPhoto?' accept="image/*" capture="environment"':''}${disAll}>${isPhoto?'📷 Ambil / Pilih Foto':'📎 Pilih File'}</label><div class="pv-photopreview" hidden></div></div>`;
+    ctrl=`<div class="pv-photowrap"><input type="hidden" ${da} value="${esc(val)}"><label class="pv-photolabel${disClass}"><input type="file" class="pv-photofile"${isPhoto?' accept="image/*" capture="environment"':''}${disAll}>${isPhoto?'📷 Take / Choose Photo':'📎 Choose File'}</label><div class="pv-photopreview" hidden></div></div>`;
   }
-  else if(c.type==="signature")ctrl=`<div class="pv-sigwrap"><input type="hidden" ${da}><canvas class="pv-sigpad" width="400" height="140"${(enabled&&!c.readOnly)?"":' data-disabled="1"'}></canvas><div class="pv-sigactions"><button type="button" class="pv-smbtn pv-sigclear"${disAll}>Hapus tanda tangan</button></div></div>`;
-  else if(c.type==="barcode")ctrl=`<div class="pv-inbtn"><input ${da} class="pv-in" value="${esc(val)}" placeholder="scan / ketik kode"${dis}${rdOnly}><button type="button" class="pv-smbtn pv-scanbtn"${disAll}>📷 Pindai</button></div>`;
+  else if(c.type==="signature")ctrl=`<div class="pv-sigwrap"><input type="hidden" ${da}><canvas class="pv-sigpad" width="400" height="140"${(enabled&&!c.readOnly)?"":' data-disabled="1"'}></canvas><div class="pv-sigactions"><button type="button" class="pv-smbtn pv-sigclear"${disAll}>Clear signature</button></div></div>`;
+  else if(c.type==="barcode")ctrl=`<div class="pv-inbtn"><input ${da} class="pv-in" value="${esc(val)}" placeholder="scan / type code"${dis}${rdOnly}><button type="button" class="pv-smbtn pv-scanbtn"${disAll}>📷 Pindai</button></div>`;
   else ctrl=`<input ${da} class="pv-in" value="${esc(val)}"${dis}${rdOnly}>`;
   let vmsg="";
-  (c.validations||[]).forEach(v=>{if(!v.test)return;if(pvEmpty(val))return;const r=evalExprSrc(v.test,rp);if(r===undefined)return;if(!r)vmsg+=`<div class="pv-vmsg ${v.severity==="warning"?"warning":"error"}">${esc(textOf(v.message)||"Nilai tidak valid")}</div>`;});
+  (c.validations||[]).forEach(v=>{if(!v.test)return;if(pvEmpty(val))return;const r=evalExprSrc(v.test,rp);if(r===undefined)return;if(!r)vmsg+=`<div class="pv-vmsg ${v.severity==="warning"?"warning":"error"}">${esc(textOf(v.message)||"Invalid value")}</div>`;});
   return `<div class="pv-field" data-fieldkey="${esc(key)}">${lab}${hint}<div>${ctrl}</div>${vmsg}</div>`;
 }
 function snapScroll(fkey,top0){
@@ -1371,8 +1371,8 @@ function wireGeoButton(btn){
     const msg=wrap?.querySelector(".pv-geomsg");
     const input=btn.previousElementSibling;
     if(msg){msg.textContent="";msg.classList.remove("error");}
-    if(!navigator.geolocation){if(msg){msg.textContent="Geolocation tidak didukung browser ini.";msg.classList.add("error");}return;}
-    const orig=btn.textContent;btn.disabled=true;btn.textContent="Mencari…";
+    if(!navigator.geolocation){if(msg){msg.textContent="Geolocation is not supported by this browser.";msg.classList.add("error");}return;}
+    const orig=btn.textContent;btn.disabled=true;btn.textContent="Searching…";
     navigator.geolocation.getCurrentPosition(
       pos=>{
         btn.disabled=false;btn.textContent=orig;
@@ -1381,7 +1381,7 @@ function wireGeoButton(btn){
       },
       err=>{
         btn.disabled=false;btn.textContent=orig;
-        if(msg){msg.textContent=err.code===1?"Izin lokasi ditolak.":"Gagal mengambil lokasi: "+err.message;msg.classList.add("error");}
+        if(msg){msg.textContent=err.code===1?"Location permission denied.":"Failed to get location: "+err.message;msg.classList.add("error");}
       },
       {enableHighAccuracy:true,timeout:15000}
     );
@@ -1389,16 +1389,16 @@ function wireGeoButton(btn){
 }
 function wireScanButton(btn){
   if(btn._wired)return;btn._wired=true;
-  if(!("BarcodeDetector" in window)){btn.disabled=true;btn.title="Pemindaian otomatis tidak didukung browser ini — isi manual.";return;}
+  if(!("BarcodeDetector" in window)){btn.disabled=true;btn.title="Automatic scanning is not supported by this browser — enter manually.";return;}
   btn.addEventListener("click",()=>openBarcodeScanner(btn.previousElementSibling));
 }
 async function openBarcodeScanner(input){
   const bg=document.createElement("div");bg.className="pv-modal-bg";
   bg.innerHTML=`<div class="pv-modal pv-scanmodal">
-    <h3>Pindai Barcode</h3>
-    <p class="pv-modal-sub">Arahkan kamera ke barcode/QR.</p>
+    <h3>Scan Barcode</h3>
+    <p class="pv-modal-sub">Point the camera at the barcode/QR code.</p>
     <video id="scanVideo" autoplay playsinline muted></video>
-    <div class="pv-modal-actions"><button class="btn ghost" id="scanCancel">Batal</button></div>
+    <div class="pv-modal-actions"><button class="btn ghost" id="scanCancel">Cancel</button></div>
   </div>`;
   document.body.appendChild(bg);
   const video=bg.querySelector("#scanVideo"),sub=bg.querySelector(".pv-modal-sub");
@@ -1425,7 +1425,7 @@ async function openBarcodeScanner(input){
     };
     requestAnimationFrame(loop);
   }catch(e){
-    if(sub)sub.textContent="Tidak bisa mengakses kamera: "+e.message;
+    if(sub)sub.textContent="Cannot access camera: "+e.message;
   }
 }
 
@@ -1457,9 +1457,9 @@ function showPhotoPreview(preview,dataUrl,disabled){
   const isImage=dataUrl.startsWith("data:image");
   const dis=disabled?" disabled":"";
   if(isImage)
-    preview.innerHTML=`<img class="pv-photoimg" src="${dataUrl}"><button type="button" class="pv-smbtn pv-photoclear"${dis}>Hapus foto</button>`;
+    preview.innerHTML=`<img class="pv-photoimg" src="${dataUrl}"><button type="button" class="pv-smbtn pv-photoclear"${dis}>Remove photo</button>`;
   else
-    preview.innerHTML=`<span style="font-size:12.5px;color:var(--ink-soft)">File dipilih</span><button type="button" class="pv-smbtn pv-photoclear"${dis}>Hapus</button>`;
+    preview.innerHTML=`<span style="font-size:12.5px;color:var(--ink-soft)">File dipilih</span><button type="button" class="pv-smbtn pv-photoclear"${dis}>Delete</button>`;
   preview.hidden=false;
 }
 
@@ -1469,7 +1469,7 @@ function renderPvSide(){
   let activeIdx=-1,activeRosterUid=null;
   if(pv.row){const rn=findNode(pv.row.uid);activeRosterUid=pv.row.uid;const pp=rn&&pageOf(rn.uid);activeIdx=pp?pages.indexOf(pp):-1;}
   else if(pv.mode==="section")activeIdx=pv.page;
-  let html=`<div class="pv-side-h">Daftar Halaman</div>`;
+  let html=`<div class="pv-side-h">Page list</div>`;
   pages.forEach((p,idx)=>{
     html+=`<div class="pv-pg${idx===activeIdx&&!activeRosterUid?" active":""}" data-pvpage="${idx}">${esc(p.title||p.name)}</div>`;
     separateRosters(p).forEach(r=>{html+=`<div class="pv-subpg${r.uid===activeRosterUid?" active":""}" data-pvroster="${esc(r.name)}" data-pvidx="${idx}"><span class="ri">⊞</span><span>${esc(r.title||r.name)}</span></div>`;});
@@ -1490,34 +1490,6 @@ function goToPage(idx,scrollToId){
     if(scrollToId)setTimeout(()=>{const el=document.getElementById(scrollToId);if(el)el.scrollIntoView({behavior:"smooth",block:"start"});},40);
   }
 }
-
-/* ===================== CONTOH ===================== */
-const EXAMPLE={specVersion:"1.1",id:"se2026-listing-demo",title:{id:"Listing Usaha SE2026"},version:"1.1.0",locales:["id"],defaultLocale:"id",
-  settings:{mode:["capi"],navigation:{mode:"section",showProgress:true,allowBack:true,gateRequired:true}},
-  referenceData:{kabupaten:{items:[{code:"6472",label:"Samarinda"},{code:"6471",label:"Balikpapan"}]},kategori_kbli:{items:[{code:"G",label:"Perdagangan"},{code:"I",label:"Akomodasi & Makan Minum"}]}},
-  pages:[
-    {kind:"page",name:"page_identitas",title:"Identitas Wilayah",components:[
-      {kind:"block",name:"blok_wilayah",title:"Wilayah",components:[
-        {kind:"section",name:"sec_wilayah",title:"",components:[
-          {kind:"field",name:"kabupaten_kota",type:"select",label:{id:"Kabupaten/Kota"},optionsRef:"kabupaten",required:true},
-          {kind:"field",name:"titik",type:"geopoint",label:{id:"Titik Lokasi"}}
-        ]}
-      ]}
-    ]},
-    {kind:"page",name:"page_usaha",title:"Daftar Usaha",components:[
-      {kind:"block",name:"blok_usaha",title:"Usaha pada bangunan",components:[
-        {kind:"section",name:"sec_usaha",title:"",components:[
-          {kind:"field",name:"ada_usaha",type:"radio",label:{id:"Ada usaha?"},required:true,options:[{value:true,label:{id:"Ya"}},{value:false,label:{id:"Tidak"}}]},
-          {kind:"field",name:"jumlah_usaha",type:"integer",label:{id:"Jumlah usaha"},min:0,max:50,required:true,visibleWhen:"${ada_usaha} == true"},
-          {kind:"roster",name:"daftar_usaha",title:"Rincian Usaha",rosterType:"separate",countFrom:"jumlah_usaha",itemLabel:{id:"Usaha {{index}}: ${nama_usaha}"},components:[
-            {kind:"field",name:"nama_usaha",type:"text",label:{id:"Nama Usaha"},required:true,maxLength:150},
-            {kind:"field",name:"kategori",type:"select",label:{id:"Kategori KBLI"},optionsRef:"kategori_kbli",required:true},
-            {kind:"field",name:"tenaga_kerja",type:"integer",label:{id:"Tenaga Kerja"},unit:"orang",min:1,required:true,validations:[{test:"${tenaga_kerja} <= 10000",message:{id:"Cek lagi, terlalu besar."},severity:"warning"}]}
-          ]}
-        ]}
-      ]}
-    ]}
-  ]};
 
 /* ===================== BOOT ===================== */
 buildPalette();

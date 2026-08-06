@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="id">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Jawaban · eForm Viewer</title>
+<title>Responses · eForm Viewer</title>
 <style>
 :root{
   --ink:#13171e;--ink-soft:#4a525e;--muted:#79828f;
@@ -71,7 +71,7 @@ table.resp-tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:500p
 <div class="shell">
   <header class="topbar">
     <a class="btn" href="/viewer-portal">← Portal</a>
-    <span class="form-title" id="formTitle">Memuat…</span>
+    <span class="form-title" id="formTitle">Loading…</span>
     <span class="count-badge" id="countBadge" hidden></span>
     <span class="notice" id="accessNotice" hidden></span>
     <button class="btn" id="btnFilter">
@@ -90,44 +90,44 @@ table.resp-tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:500p
     </div>
   </header>
 
-  <!-- Ringkasan filter aktif; tersembunyi selama belum ada filter dipakai -->
+  <!-- Active filter summary; hidden until a filter is applied -->
   <div class="active-bar" id="activeBar" hidden>
     <div class="active-chips" id="filterChips"></div>
-    <button class="btn-reset" id="btnReset" onclick="resetFilters()">✕ Reset semua</button>
+    <button class="btn-reset" id="btnReset" onclick="resetFilters()">✕ Reset all</button>
   </div>
 
   <div class="tbl-outer">
     <div class="tbl-wrap" id="tblWrap">
-      <div class="loading">Memuat…</div>
+      <div class="loading">Loading…</div>
     </div>
   </div>
 </div>
 
-<!-- Laci filter -->
+<!-- Filter drawer -->
 <div class="drawer-backdrop" id="drawerBackdrop"></div>
-<aside class="filter-drawer" id="filterDrawer" aria-hidden="true" aria-label="Filter jawaban">
+<aside class="filter-drawer" id="filterDrawer" aria-hidden="true" aria-label="Filter responses">
   <div class="drawer-h">
     <span>Filter</span>
-    <button class="drawer-close" id="btnDrawerClose" aria-label="Tutup filter">✕</button>
+    <button class="drawer-close" id="btnDrawerClose" aria-label="Close filter">✕</button>
   </div>
   <div class="drawer-b">
     <div class="drawer-sect">
-      <label class="drawer-lbl" for="fSearch">Cari</label>
-      <input class="filter-search" id="fSearch" placeholder="Cari nama / email…" oninput="onSearchDebounce()">
+      <label class="drawer-lbl" for="fSearch">Search</label>
+      <input class="filter-search" id="fSearch" placeholder="Search name / email…" oninput="onSearchDebounce()">
     </div>
     <div class="drawer-sect">
       <label class="drawer-lbl" for="fStatus">Status</label>
       <select class="filter-sel" id="fStatus" onchange="onStatusChange()">
-        <option value="">Semua</option>
-        <option value="submitted">Terkirim</option>
-        <option value="draft">Draf</option>
+        <option value="">All</option>
+        <option value="submitted">Submitted</option>
+        <option value="draft">Draft</option>
       </select>
     </div>
     <div class="ff-bar" id="ffBar"></div>
   </div>
   <div class="drawer-f">
     <button class="btn" onclick="resetFilters()">Reset</button>
-    <button class="btn primary" id="btnDrawerDone">Selesai</button>
+    <button class="btn primary" id="btnDrawerDone">Done</button>
   </div>
 </aside>
 <script src="/searchable-select.js"></script>
@@ -153,7 +153,7 @@ let _searchTimer=null, _fieldTimer=null;
 
 async function api(path,opts={}){
   const r=await fetch(path,{...opts,headers:{...H,...(opts.headers||{})}});
-  if(r.status===401){localStorage.removeItem("eform_token");location.replace("/login");throw new Error("sesi habis");}
+  if(r.status===401){localStorage.removeItem("eform_token");location.replace("/login");throw new Error("session expired");}
   const data=(r.headers.get("content-type")||"").includes("json")?await r.json():null;
   if(!r.ok)throw new Error((data&&data.error)||("HTTP "+r.status));
   return data;
@@ -161,39 +161,39 @@ async function api(path,opts={}){
 
 async function init(){
   try{
-    // Cek role — viewer maupun editor boleh membuka halaman ini (satu akun bisa jadi viewer di
-    // satu kuesioner dan editor di kuesioner lain); otorisasi untuk kuesioner INI ditentukan oleh
-    // panggilan /api/viewer/forms/{id}/permission di bawah, bukan role global akun.
+    // Role check — both viewers and editors may open this page (one account can be a viewer on
+    // one form and an editor on another); authorisation for THIS form is decided by
+    // the /api/viewer/forms/{id}/permission call below, not the account's global role.
     const me=await api("/api/auth/me");
     if(me.role!=="viewer"&&me.role!=="editor"){location.replace("/admin");return;}
 
-    // Muat permission dan schema secara paralel
+    // Load the permission and schema in parallel
     const [perm,form]=await Promise.all([
       api("/api/viewer/forms/"+FORM_ID+"/permission"),
       api("/api/viewer/forms/"+FORM_ID)
     ]);
     PERM=perm; SCHEMA=form.schema;
 
-    document.title="Jawaban · "+(form.title||"Kuesioner");
-    document.getElementById("formTitle").textContent=form.title||"Kuesioner";
+    document.title="Responses · "+(form.title||"Form");
+    document.getElementById("formTitle").textContent=form.title||"Form";
 
     // Tampilkan info akses
     const notice=document.getElementById("accessNotice");
     notice.hidden=false;
     const fields=PERM.visibleFields&&PERM.visibleFields.length;
-    notice.textContent=`Akses: ${PERM.respondentAccess==="all"?"semua responden":"responden terpilih"}`+
-      (fields?` · ${PERM.visibleFields.length} variabel`:" · semua variabel");
+    notice.textContent=`Access: ${PERM.respondentAccess==="all"?"all respondents":"selected respondents"}`+
+      (fields?` · ${PERM.visibleFields.length} fields`:" · all fields");
 
-    // Kolom tambahan dari konfigurasi admin (column_config form)
+    // Extra columns from the admin configuration (the form's column_config)
     ALL_FIELDS=extractFields(SCHEMA);
     SEL_COLS=form.columnConfig&&Array.isArray(form.columnConfig)?form.columnConfig:[];
     renderFieldFilters();
 
     await loadPage(0);
   }catch(e){
-    document.getElementById("formTitle").textContent="Gagal memuat: "+e.message;
+    document.getElementById("formTitle").textContent="Failed to load: "+e.message;
     if(e.message.includes("403")||e.message.includes("akses"))
-      document.getElementById("tblWrap").innerHTML='<div class="empty-state">Anda tidak memiliki akses ke kuesioner ini.</div>';
+      document.getElementById("tblWrap").innerHTML='<div class="empty-state">You do not have access to this form.</div>';
   }
 }
 
@@ -260,8 +260,8 @@ function onFieldMultiSelect(el){
     return(fk.kind==="cascade"||fk.kind==="multicascade")&&fk.deps.includes(name);
   });
   if(hasCascadeChild)renderFieldFilters();
-  // Dropdown centang tetap terbuka, jadi pengguna biasanya mencentang beberapa nilai
-  // beruntun — tunda pemuatan ulang supaya tidak sekali permintaan per centang.
+  // The checkbox dropdown stays open, so users typically tick several values in a
+  // row — debounce the reload so it is not one request per tick.
   clearTimeout(_fieldTimer);
   _fieldTimer=setTimeout(()=>loadPage(0),350);
 }
@@ -274,7 +274,7 @@ function toggleSort(col){
 
 async function loadPage(page){
   PAGE=page;
-  document.getElementById("tblWrap").innerHTML='<div class="loading">Memuat…</div>';
+  document.getElementById("tblWrap").innerHTML='<div class="loading">Loading…</div>';
   try{
     const params=new URLSearchParams({limit:PAGE_SIZE,offset:PAGE*PAGE_SIZE,sortBy:SORT_BY,sortDir:SORT_DIR});
     if(FILTER_STATUS)params.set("status",FILTER_STATUS);
@@ -292,7 +292,7 @@ async function loadPage(page){
 
     const isFiltered=FILTER_STATUS||FILTER_SEARCH||Object.keys(FIELD_FILTERS).length||Object.keys(FIELD_EXACT_FILTERS).length||Object.keys(FIELD_ANY_FILTERS).length||Object.keys(FIELD_RANGE_FILTERS).length;
     const badge=document.getElementById("countBadge");
-    badge.textContent=TOTAL+" jawaban"+(isFiltered?" (difilter)":"");
+    badge.textContent=TOTAL+" responses"+(isFiltered?" (filtered)":"");
     badge.hidden=false;
     updateFilterUI();
     renderTable();
@@ -301,7 +301,7 @@ async function loadPage(page){
   }
 }
 
-/* ---- field extraction & filter bar (kolom dari konfigurasi admin) ---- */
+/* ---- field extraction & filter bar (columns from the admin configuration) ---- */
 function extractFields(schema){
   const out=[];
   function walk(comps,inRoster){
@@ -326,18 +326,18 @@ function extractFields(schema){
 
 
 
-// data-label dipakai responsive-tables.js sebagai label kolom saat tabel berubah
-// jadi kartu di layar HP — tanpa itu ikon urutan (↕) ikut terbawa ke labelnya.
+// responsive-tables.js uses data-label as the column label when the table turns into
+// cards on phones — without it the sort icon (↕) would end up in the label.
 
 function renderTable(){
   if(!RESPONSES.length){
     const isFiltered=FILTER_STATUS||FILTER_SEARCH||Object.keys(FIELD_FILTERS).length||Object.keys(FIELD_EXACT_FILTERS).length;
     document.getElementById("tblWrap").innerHTML=
-      `<div class="empty-state">${isFiltered?"Tidak ada jawaban yang cocok dengan filter.":"Belum ada jawaban."}</div>`;
+      `<div class="empty-state">${isFiltered?"No responses match the filter.":"No responses yet."}</div>`;
     return;
   }
 
-  // Header kolom tambahan dari konfigurasi admin
+  // Extra column headers from the admin configuration
   const extraTh=SEL_COLS.map(name=>{
     const f=ALL_FIELDS.find(ff=>ff.name===name);
     const label=f?f.label:name;
@@ -347,8 +347,8 @@ function renderTable(){
   let html=`<table class="resp-tbl cards"><thead><tr>
     <th class="td-num">#</th>
     ${sortTh("status","Status","td-status")}
-    ${sortTh("who","Responden","td-who")}
-    ${sortTh("waktu","Waktu","td-time")}
+    ${sortTh("who","Respondent","td-who")}
+    ${sortTh("waktu","Time","td-time")}
     ${extraTh}
     <th></th>
   </tr></thead><tbody>`;
@@ -360,26 +360,26 @@ function renderTable(){
     const who=meta.name
       ?`${esc(meta.name)}<br><span style="font-size:11px;color:var(--muted)">${esc(meta.email||"")}</span>`
       :esc(meta.email||"—");
-    const waktu=formatDate(resp.submittedAt);
+    const time=formatDate(resp.submittedAt);
     const extraVals=SEL_COLS.map(name=>{
       const c=findField(SCHEMA,name);
       const raw=answers[name];
       const display=c?formatFieldValue(c,raw):txt(raw);
-      // is-empty dipakai tampilan kartu di HP untuk melewati kolom yang kosong.
+      // The card view on phones uses is-empty to skip empty columns.
       const empty=String(display??"").trim()===""?" is-empty":"";
       return`<td class="td-val${empty}" title="${esc(display)}">${esc(display)}</td>`;
     }).join("");
 
     const statusBadge=resp.status==="draft"
-      ?`<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;background:#fef3c7;color:#92400e">Draf</span>`
-      :`<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;background:var(--ok-soft);color:var(--ok)">Terkirim</span>`;
+      ?`<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;background:#fef3c7;color:#92400e">Draft</span>`
+      :`<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;background:var(--ok-soft);color:var(--ok)">Submitted</span>`;
     html+=`<tr>
       <td class="td-num">${num}</td>
       <td class="td-status">${statusBadge}</td>
       <td class="td-who">${who}</td>
-      <td class="td-time">${waktu}</td>
+      <td class="td-time">${time}</td>
       ${extraVals}
-      <td class="td-act" style="white-space:nowrap"><a class="btn-sm" href="/portal-response-view?form=${encodeURIComponent(FORM_ID)}&resp=${encodeURIComponent(resp.id)}&type=viewer" target="_blank">Lihat</a></td>
+      <td class="td-act" style="white-space:nowrap"><a class="btn-sm" href="/portal-response-view?form=${encodeURIComponent(FORM_ID)}&resp=${encodeURIComponent(resp.id)}&type=viewer" target="_blank">View</a></td>
     </tr>`;
   });
 
@@ -388,9 +388,9 @@ function renderTable(){
   // Footer paginasi
   const totalPages=Math.ceil(TOTAL/PAGE_SIZE);
   const footer=totalPages>1?`<div class="tbl-foot">
-    <div>${(PAGE*PAGE_SIZE+1)}–${Math.min((PAGE+1)*PAGE_SIZE,TOTAL)} dari ${TOTAL}</div>
+    <div>${(PAGE*PAGE_SIZE+1)}–${Math.min((PAGE+1)*PAGE_SIZE,TOTAL)} of ${TOTAL}</div>
     <div style="display:flex;gap:6px">
-      <button class="btn-sm" onclick="loadPage(${PAGE-1})" ${PAGE===0?"disabled":""}>← Sebelumnya</button>
+      <button class="btn-sm" onclick="loadPage(${PAGE-1})" ${PAGE===0?"disabled":""}>← Previous</button>
       <button class="btn-sm" onclick="loadPage(${PAGE+1})" ${PAGE>=totalPages-1?"disabled":""}>Berikutnya →</button>
     </div>
   </div>`:"";
@@ -398,11 +398,11 @@ function renderTable(){
   document.getElementById("tblWrap").innerHTML=html+footer;
 }
 
-// Ekspor CSV & Excel memakai jalur yang sama; hanya ekstensinya berbeda.
+// The CSV & Excel exports share one path; only the extension differs.
 window.downloadExport = async function(ext){
   try{
     const r=await fetch("/api/viewer/forms/"+FORM_ID+"/responses."+ext,{headers:H});
-    if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.error||"Gagal");}
+    if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.error||"Failed");}
     const blob=await r.blob();
     const url=URL.createObjectURL(blob);
     const a=document.createElement("a");a.href=url;a.download="responses-"+FORM_ID+"."+ext;a.click();
@@ -412,5 +412,6 @@ window.downloadExport = async function(ext){
 
 init();
 </script>
+<script src="/i18n.js"></script>
 </body>
 </html>

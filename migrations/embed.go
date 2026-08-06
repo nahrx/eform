@@ -2,7 +2,7 @@ package migrations
 
 import "embed"
 
-// FS memuat seluruh file .sql untuk dijalankan oleh migration runner.
+// FS carries every .sql file for the migration runner to execute.
 //
 //go:embed *.sql
 var FS embed.FS

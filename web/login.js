@@ -1,11 +1,11 @@
   const $=s=>document.querySelector(s);
-  // Viewer DAN editor sama-sama diarahkan ke /viewer-portal: halaman itu menampilkan
-  // gabungan kuesioner viewer & editor akun tersebut. Dashboard /admin menolak role
-  // editor (listForms hanya melayani admin/superadmin), jadi mengarahkan editor ke sana
-  // hanya menghasilkan halaman error.
+  // Viewers AND editors both go to /viewer-portal: that page shows the
+  // combined viewer & editor forms for that account. The /admin dashboard rejects the
+  // editor role (listForms only serves admin/superadmin), so sending an editor there
+  // would only produce an error page.
   const homeFor=role=>(role==="viewer"||role==="editor")?"/viewer-portal":"/admin";
 
-  // sudah login? arahkan ke halaman yang sesuai role
+  // already signed in? redirect to the page matching the role
   const _existing=localStorage.getItem("eform_token");
   if(_existing){
     try{
@@ -19,7 +19,7 @@
   async function login(){
     const btn=$("#btn"); const err=$("#err"); err.style.display="none";
     const username=$("#u").value.trim(), password=$("#p").value;
-    if(!username||!password){err.textContent="Username dan password wajib diisi";err.style.display="block";return;}
+    if(!username||!password){err.textContent="Username and password are required";err.style.display="block";return;}
     btn.disabled=true; btn.textContent="Memproses…";
     try{
       const r=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username,password})});

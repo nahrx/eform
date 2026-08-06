@@ -8,147 +8,147 @@ import (
 	"github.com/nahrx/eform/internal/models"
 )
 
-/* Aturan yang paling berbahaya kalau diam-diam berubah: kolom mana yang boleh terbaca
-   dan baris mana yang boleh keluar. Tes di bawah mengunci keduanya tanpa perlu database. */
+/* The rules that are most dangerous if they change silently: which columns may be
+   read and which rows may leave. The tests below lock both down without a database. */
 
 func TestMaskAnswers(t *testing.T) {
-	raw := json.RawMessage(`{"nama":"Budi","nik":"3201","gaji":"5000000"}`)
+	raw := json.RawMessage(`{"name":"Budi","nik":"3201","salary":"5000000"}`)
 
-	t.Run("daftar kosong berarti semua kolom terbaca", func(t *testing.T) {
+	t.Run("an empty list means every column is readable", func(t *testing.T) {
 		got := maskAnswers(raw, nil)
 		if string(got) != string(raw) {
-			t.Fatalf("tanpa pembatasan seharusnya utuh, dapat %s", got)
+			t.Fatalf("without restrictions it should be untouched, got %s", got)
 		}
 	})
 
-	t.Run("hanya kolom yang diizinkan yang tersisa", func(t *testing.T) {
-		got := maskAnswers(raw, []string{"nama"})
+	t.Run("only the permitted columns remain", func(t *testing.T) {
+		got := maskAnswers(raw, []string{"name"})
 		var m map[string]string
 		if err := json.Unmarshal(got, &m); err != nil {
-			t.Fatalf("hasil bukan JSON valid: %v", err)
+			t.Fatalf("result is not valid JSON: %v", err)
 		}
-		if len(m) != 1 || m["nama"] != "Budi" {
-			t.Fatalf("harusnya hanya {nama:Budi}, dapat %v", m)
+		if len(m) != 1 || m["name"] != "Budi" {
+			t.Fatalf("should be only {name:Budi}, got %v", m)
 		}
 		if _, ada := m["nik"]; ada {
-			t.Error("NIK bocor padahal tidak masuk visibleFields")
+			t.Error("NIK leaked even though it is not in visibleFields")
 		}
 		if _, ada := m["gaji"]; ada {
-			t.Error("gaji bocor padahal tidak masuk visibleFields")
+			t.Error("salary leaked even though it is not in visibleFields")
 		}
 	})
 
-	t.Run("kolom yang diminta tapi tidak ada tidak memunculkan apa pun", func(t *testing.T) {
+	t.Run("a requested but absent column produces nothing", func(t *testing.T) {
 		got := maskAnswers(raw, []string{"tidak_ada"})
 		var m map[string]any
 		_ = json.Unmarshal(got, &m)
 		if len(m) != 0 {
-			t.Fatalf("harusnya kosong, dapat %v", m)
+			t.Fatalf("should be empty, got %v", m)
 		}
 	})
 }
 
 func TestResponseScopeClauses(t *testing.T) {
-	t.Run("draft ditutup saat IncludeDrafts=false", func(t *testing.T) {
+	t.Run("drafts are excluded when IncludeDrafts=false", func(t *testing.T) {
 		sc := ResponseScope{FormID: "f1", RespondentAccess: "all"}
 		clause, _ := sc.clauses(nil)
 		if !strings.Contains(clause, "status='submitted'") {
-			t.Fatalf("scope tanpa draft harus memfilter status, dapat %q", clause)
+			t.Fatalf("a scope without drafts must filter on status, got %q", clause)
 		}
 	})
 
-	t.Run("viewer tetap boleh melihat draft", func(t *testing.T) {
+	t.Run("a viewer may still see drafts", func(t *testing.T) {
 		sc := ResponseScope{FormID: "f1", RespondentAccess: "all", IncludeDrafts: true}
 		clause, _ := sc.clauses(nil)
 		if strings.Contains(clause, "status='submitted'") {
-			t.Fatalf("scope dengan draft tidak boleh memfilter status, dapat %q", clause)
+			t.Fatalf("a scope including drafts must not filter on status, got %q", clause)
 		}
 	})
 
-	t.Run("responden terpilih dibatasi lewat tabel izin yang benar", func(t *testing.T) {
+	t.Run("selected respondents are restricted through the correct allow table", func(t *testing.T) {
 		sc := ResponseScope{
 			FormID: "f1", RespondentAccess: "selected",
 			PermissionID: "p1", AllowedTable: AllowedTableAPIKey,
 		}
 		clause, args := sc.clauses(nil)
 		if !strings.Contains(clause, AllowedTableAPIKey) {
-			t.Fatalf("klausa harus menyebut %s, dapat %q", AllowedTableAPIKey, clause)
+			t.Fatalf("the clause must name %s, got %q", AllowedTableAPIKey, clause)
 		}
 		if len(args) != 1 || args[0] != "p1" {
-			t.Fatalf("permission id harus jadi argumen query, dapat %v", args)
+			t.Fatalf("the permission id must be a query argument, got %v", args)
 		}
 	})
 
-	t.Run("nama tabel tak dikenal menutup semua baris, bukan membukanya", func(t *testing.T) {
-		// Kalau suatu saat ada jalur akses baru yang lupa mengisi AllowedTable,
-		// hasilnya harus tidak mengembalikan apa pun — bukan mengembalikan semuanya.
+	t.Run("an unknown table name closes every row rather than opening them", func(t *testing.T) {
+		// If a new access path ever forgets to set AllowedTable, the result must be
+		// that nothing is returned — not that everything is.
 		sc := ResponseScope{
 			FormID: "f1", RespondentAccess: "selected",
 			PermissionID: "p1", AllowedTable: "tabel_ngawur",
 		}
 		clause, _ := sc.clauses(nil)
 		if !strings.Contains(clause, "false") {
-			t.Fatalf("tabel tak dikenal harus menutup total, dapat %q", clause)
+			t.Fatalf("an unknown table must deny outright, got %q", clause)
 		}
 		if strings.Contains(clause, "tabel_ngawur") {
-			t.Error("nama tabel tak dikenal tidak boleh ikut masuk SQL")
+			t.Error("an unknown table name must never reach the SQL")
 		}
 	})
 
-	t.Run("filter nilai variabel jadi argumen berparameter", func(t *testing.T) {
+	t.Run("field-value filters become bound parameters", func(t *testing.T) {
 		sc := ResponseScope{
 			FormID: "f1", RespondentAccess: "all",
 			FieldFilters: map[string]string{"kabupaten": "6472"},
 		}
 		clause, args := sc.clauses(nil)
 		if !strings.Contains(clause, "answers->>'kabupaten'") {
-			t.Fatalf("klausa harus menyaring field, dapat %q", clause)
+			t.Fatalf("the clause must filter the field, got %q", clause)
 		}
 		if len(args) != 1 || args[0] != "6472" {
-			t.Fatalf("nilai filter harus lewat argumen, dapat %v", args)
+			t.Fatalf("the filter value must travel as an argument, got %v", args)
 		}
 		if strings.Contains(clause, "6472") {
-			t.Error("nilai filter tidak boleh ditanam langsung di SQL")
+			t.Error("the filter value must never be inlined into the SQL")
 		}
 	})
 
-	t.Run("nama variabel berbahaya diabaikan", func(t *testing.T) {
+	t.Run("dangerous field names are ignored", func(t *testing.T) {
 		sc := ResponseScope{
 			FormID: "f1", RespondentAccess: "all",
 			FieldFilters: map[string]string{"a'; DROP TABLE users; --": "x"},
 		}
 		clause, args := sc.clauses(nil)
 		if strings.Contains(clause, "DROP TABLE") {
-			t.Fatalf("nama field tidak aman bocor ke SQL: %q", clause)
+			t.Fatalf("an unsafe field name leaked into the SQL: %q", clause)
 		}
 		if len(args) != 0 {
-			t.Fatalf("filter tidak aman seharusnya dibuang, dapat %v", args)
+			t.Fatalf("unsafe filters should be dropped, got %v", args)
 		}
 	})
 }
 
-func TestAPIKeyScopeTidakPernahIkutkanDraft(t *testing.T) {
-	// Draft adalah isian setengah jadi; API tidak boleh membagikannya.
+func TestAPIKeyScopeNeverIncludesDrafts(t *testing.T) {
+	// Drafts are half-finished entries; the API must not share them.
 	sc := APIKeyScope(&models.FormAPIKey{ID: "k1", FormID: "f1", RespondentAccess: "selected"})
 	if sc.IncludeDrafts {
-		t.Fatal("scope API key tidak boleh menyertakan draft")
+		t.Fatal("an API key scope must not include drafts")
 	}
 	if sc.AllowedTable != AllowedTableAPIKey {
-		t.Fatalf("scope API key harus memakai %s, dapat %s", AllowedTableAPIKey, sc.AllowedTable)
+		t.Fatalf("an API key scope must use %s, got %s", AllowedTableAPIKey, sc.AllowedTable)
 	}
 }
 
 func TestIsSafeIdentifier(t *testing.T) {
-	aman := []string{"nama", "kabupaten_kota", "f1", "A_9"}
-	for _, s := range aman {
+	safe := []string{"name", "kabupaten_kota", "f1", "A_9"}
+	for _, s := range safe {
 		if !isSafeIdentifier(s) {
-			t.Errorf("%q seharusnya dianggap aman", s)
+			t.Errorf("%q should be considered safe", s)
 		}
 	}
 	bahaya := []string{"", "a b", "a'b", "a;b", "a-b", "a.b", "a#b", strings.Repeat("a", 65)}
 	for _, s := range bahaya {
 		if isSafeIdentifier(s) {
-			t.Errorf("%q seharusnya ditolak", s)
+			t.Errorf("%q should be rejected", s)
 		}
 	}
 }

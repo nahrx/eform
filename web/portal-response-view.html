@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="id">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Detail Jawaban</title>
+<title>Response Detail</title>
 <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
 <style>
 :root{
@@ -34,21 +34,21 @@ button,input,select,textarea{font-family:inherit}
 .btn.danger{background:var(--panel);border-color:#fca5a5;color:var(--danger)}
 .btn.danger:hover{background:var(--danger-soft)}
 .btn[disabled]{opacity:.5;cursor:default;pointer-events:none}
-/* display:inline-flex pada .btn mengalahkan gaya bawaan [hidden] milik browser,
-   sehingga atribut hidden tidak berpengaruh apa-apa. Tanpa aturan ini tombol
-   Simpan/Batal ikut tampil di luar mode edit. */
+/* display:inline-flex on .btn beats the browser's built-in [hidden] style, so the
+   hidden attribute has no effect at all. Without this rule the Save and Cancel
+   buttons show up outside edit mode. */
 .btn[hidden]{display:none}
-/* tombol ikon menu (daftar halaman) — hanya dipakai di layar HP, tempat sidebar
-   berubah jadi laci geser */
+/* menu icon button (page list) — only used on phone screens, where the sidebar
+   becomes a sliding drawer */
 .icon-btn{display:none;padding:6px 8px;flex:none}
 .nav-backdrop{position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:299;
   background:rgba(19,23,30,.38);opacity:0;visibility:hidden;
   transition:opacity .2s ease,visibility .2s ease}
 .nav-backdrop.open{opacity:1;visibility:visible}
 @supports(height:100dvh){.nav-backdrop{height:100dvh}}
-/* Kalau laci sedang terbuka lalu layar melebar (rotasi tablet, jendela
-   diperbesar), sidebar kembali menetap tapi kelas .open masih menempel di latar —
-   tanpa aturan ini latar gelapnya ikut menutupi halaman desktop. */
+/* If the drawer is open when the screen widens (tablet rotation, window resize),
+   the sidebar becomes static again but the .open class is still on the backdrop —
+   without this rule the dark overlay would cover the desktop page. */
 @media(min-width:681px){.nav-backdrop{display:none}}
 
 /* badge */
@@ -63,7 +63,7 @@ button,input,select,textarea{font-family:inherit}
 .sidebar{width:200px;flex:none;padding:14px 10px;background:var(--panel);border-right:1px solid var(--line);position:sticky;top:52px;height:calc(100vh - 52px);overflow-y:auto}
 .sidebar-h{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);padding:0 6px;margin-bottom:8px;
   display:flex;align-items:center;justify-content:space-between;gap:8px}
-/* tombol tutup laci — di desktop sidebar selalu tampil, jadi tak perlu */
+/* drawer close button — on desktop the sidebar is always visible, so it is unnecessary */
 .nav-close{display:none;border:none;background:none;color:var(--muted);cursor:pointer;
   font-size:20px;line-height:1;padding:2px 6px;border-radius:var(--radius-s)}
 .nav-close:hover{background:var(--line-2);color:var(--ink)}
@@ -150,16 +150,16 @@ button,input,select,textarea{font-family:inherit}
 .toast.err{background:var(--danger)}
 @keyframes slideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 
-/* Sidebar tidak lagi disembunyikan di HP, tapi berubah jadi laci geser yang
-   dibuka lewat tombol menu — supaya lompat antar-halaman tetap bisa dilakukan,
-   bukan hanya lewat tombol Sebelumnya/Selanjutnya. DOM-nya sama persis dengan
-   versi desktop, jadi #pgList cukup dirender sekali oleh renderPage(). */
+/* On phones the sidebar is no longer hidden; it becomes a sliding drawer opened by
+   the menu button — so jumping between pages is still possible, not just
+   Previous/Next. The DOM is exactly the desktop one, so #pgList only needs
+   rendering once, by renderPage(). */
 @media(max-width:680px){
   .icon-btn,.nav-close{display:inline-flex}
   .sidebar{position:fixed;top:0;left:0;bottom:0;z-index:300;width:260px;max-width:82vw;
     height:auto;padding-top:18px;border-right:1px solid var(--line);
     box-shadow:10px 0 34px rgba(19,23,30,.16);
-    /* visibility mengeluarkan isi laci dari urutan Tab selama tertutup */
+    /* visibility takes the drawer's contents out of the Tab order while closed */
     transform:translateX(-100%);visibility:hidden;
     transition:transform .22s ease,visibility .22s ease}
   .sidebar.open{transform:none;visibility:visible}
@@ -167,10 +167,10 @@ button,input,select,textarea{font-family:inherit}
   .pg-foot{left:0}
 }
 @media(prefers-reduced-motion:reduce){.sidebar,.nav-backdrop{transition:none}}
-/* ---- layar HP ----
-   Topbar sudah membungkus sendiri (flex-wrap di .topbar); di sini isinya
-   dirapatkan supaya tidak memakan terlalu banyak tinggi, dan navigasi bawah
-   dibuat muat di layar 360px tanpa menggeser halaman ke samping. */
+/* ---- phone screens ----
+   The top bar already wraps on its own (flex-wrap on .topbar); here its contents are
+   tightened so it does not eat too much height, and the bottom navigation is made
+   to fit a 360px screen without pushing the page sideways. */
 @media(max-width:640px){
   .topbar{gap:6px;padding:8px 12px}
   .topbar-title{font-size:14px}
@@ -179,7 +179,7 @@ button,input,select,textarea{font-family:inherit}
   .meta-card{padding:12px 14px;gap:8px}
   .pg-foot{padding:0 12px}
   .pg-foot-in{gap:8px;padding:9px 0 10px}
-  /* kedua tombol berbagi sisa ruang merata; teks progres pakai lebar seadanya */
+  /* both buttons share the remaining space evenly; the progress text takes what it needs */
   .pg-foot-in .btn{flex:1 1 0;min-width:0;justify-content:center;padding:8px 6px}
   .pg-prog{flex:none;font-size:11.5px;text-align:center}
 }
@@ -193,30 +193,30 @@ button,input,select,textarea{font-family:inherit}
   <img id="photoModalImg" src="" alt="">
 </div>
 <header class="topbar">
-  <button class="btn icon-btn" id="btnMenu" hidden aria-label="Daftar halaman" aria-expanded="false"
+  <button class="btn icon-btn" id="btnMenu" hidden aria-label="Page list" aria-expanded="false"
           onclick="toggleNav()">
     <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor"
          stroke-width="1.9" stroke-linecap="round"><path d="M3 5.5h14M3 10h14M3 14.5h14"/></svg>
   </button>
-  <span id="modeBadge" class="ro-badge">Hanya Baca</span>
-  <span class="topbar-title" id="topTitle">Memuat…</span>
+  <span id="modeBadge" class="ro-badge">Read Only</span>
+  <span class="topbar-title" id="topTitle">Loading…</span>
   <span class="st-badge" id="statusBadge" hidden></span>
-  <button class="btn" id="btnToggleEdit" hidden>✏️ Mode Edit</button>
-  <button class="btn primary" id="btnSave" hidden disabled>Simpan</button>
-  <button class="btn danger" id="btnCancel" hidden>Batal</button>
-  <button class="btn" onclick="window.close()">✕ Tutup</button>
+  <button class="btn" id="btnToggleEdit" hidden>✏️ Edit Mode</button>
+  <button class="btn primary" id="btnSave" hidden disabled>Save</button>
+  <button class="btn danger" id="btnCancel" hidden>Cancel</button>
+  <button class="btn" onclick="window.close()">✕ Close</button>
 </header>
 <div class="nav-backdrop" id="navBackdrop" onclick="toggleNav(false)"></div>
 <div class="shell">
   <nav class="sidebar" id="sidebar" hidden>
-    <div class="sidebar-h">Halaman
-      <button class="nav-close" type="button" aria-label="Tutup daftar halaman"
+    <div class="sidebar-h">Pages
+      <button class="nav-close" type="button" aria-label="Close page list"
               onclick="toggleNav(false)">&times;</button>
     </div>
     <div id="pgList"></div>
   </nav>
   <div class="content" id="content">
-    <div style="padding:40px;text-align:center;color:var(--muted)">Memuat…</div>
+    <div style="padding:40px;text-align:center;color:var(--muted)">Loading…</div>
   </div>
 </div>
 <div class="pg-foot" id="pgFoot" hidden>
@@ -229,11 +229,11 @@ button,input,select,textarea{font-family:inherit}
 <script src="/response-validation.js"></script>
 <script>
 const TOKEN=localStorage.getItem("eform_token");
-if(!TOKEN){document.getElementById("content").innerHTML='<p style="padding:40px;text-align:center;color:#b91c1c">Sesi habis. Silakan login ulang.</p>';}
+if(!TOKEN){document.getElementById("content").innerHTML='<p style="padding:40px;text-align:center;color:#b91c1c">Session expired. Please log in again.</p>';}
 
 const qp=new URLSearchParams(location.search);
 const FORM_ID=qp.get("form"), RESP_ID=qp.get("resp"), LINK_TYPE=qp.get("type");
-if(!FORM_ID||!RESP_ID){document.getElementById("content").innerHTML='<p style="padding:40px;text-align:center;color:#b91c1c">Parameter tidak lengkap.</p>';}
+if(!FORM_ID||!RESP_ID){document.getElementById("content").innerHTML='<p style="padding:40px;text-align:center;color:#b91c1c">Incomplete parameters.</p>';}
 
 const H={"Authorization":"Bearer "+TOKEN,"Content-Type":"application/json"};
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -241,10 +241,10 @@ const txt=v=>v==null?"":(typeof v==="object"?(v.id||Object.values(v)[0]||""):Str
 
 let MY_ROLE="", SCHEMA=null, RESP=null, CUR_PG=0;
 let EDIT_MODE=false;
-let editedAnswers={};  // berjalan saat edit mode, berisi salinan answers yang sedang diedit
-let VISIBLE_FIELDS=null;  // null = semua, Set = hanya field yang diizinkan (viewer terbatas)
+let editedAnswers={};  // active in edit mode; holds the copy of answers being edited
+let VISIBLE_FIELDS=null;  // null = all, Set = only the permitted fields (restricted viewer)
 
-/* ---- interpolasi {{nama}} / ${nama} pada rowTitle ---- */
+/* ---- {{name}} / ${name} interpolation in rowTitle ---- */
 function ancestorPrefixes(rowPrefix){
   const prefixes=[];let p=String(rowPrefix||"");
   while(p){prefixes.push(p);const m=p.match(/^(.*?)([^#]+#\d+#)$/);if(!m)break;p=m[1];}
@@ -278,8 +278,8 @@ function getMediaSource(val){
 function isImageMedia(c,src){
   return c.type==="photo"||c.type==="signature"||/^data:image\//i.test(src)||/\.(jpe?g|png|gif|webp|bmp|svg)(\?.*)?$/i.test(src);
 }
-// Parse nilai geopoint "lat, lng" (format yang disimpan tombol "Ambil Lokasi"
-// di form pengisian) menjadi {lat,lng} atau null.
+// Parse a geopoint value "lat, lng" (the format stored by the "Get Location" button
+// on the respondent form) into {lat,lng} or null.
 function parseGeoPoint(val){
   if(val==null||val==="")return null;
   const parts=String(val).split(",").map(s=>s.trim());
@@ -293,7 +293,7 @@ function parseGeoPoint(val){
 async function api(path,opts){
   opts=opts||{};
   const r=await fetch(path,{...opts,headers:{...H,...(opts.headers||{})}});
-  if(r.status===401){localStorage.removeItem("eform_token");location.replace("/login");throw new Error("sesi habis");}
+  if(r.status===401){localStorage.removeItem("eform_token");location.replace("/login");throw new Error("session expired");}
   const data=await r.json().catch(()=>({}));
   if(!r.ok)throw new Error(data.error||"HTTP "+r.status);
   return data;
@@ -302,10 +302,10 @@ async function api(path,opts){
 async function init(){
   try{
     const me=await api("/api/auth/me");
-    // Tipe akses untuk RESPONS INI ditentukan oleh query param `type` yang dikirim halaman
-    // pemanggil (viewer-responses.html/editor-responses.html sudah tahu persis tipenya) — bukan
-    // dari role global akun, karena satu akun sekarang bisa jadi viewer di satu kuesioner dan
-    // editor di kuesioner lain. `me.role` cuma fallback untuk tautan lama tanpa `type`.
+    // The access type for THIS RESPONSE comes from the `type` query parameter sent by the
+    // caller (viewer-responses.html/editor-responses.html already know the exact type) — not
+    // the account's global role, because one account can now be a viewer on one form and an
+    // editor on another. `me.role` is only a fallback for older links without `type`.
     MY_ROLE=(LINK_TYPE==="viewer"||LINK_TYPE==="editor")?LINK_TYPE:me.role;
 
     let formUrl, respUrl;
@@ -328,14 +328,14 @@ async function init(){
       VISIBLE_FIELDS=new Set(perm.visibleFields);
     }
 
-    const title=txt(form.title)||"Kuesioner";
-    document.title="Detail Jawaban · "+title;
+    const title=txt(form.title)||"Form";
+    document.title="Response Detail · "+title;
     document.getElementById("topTitle").textContent=title;
 
     const badge=document.getElementById("statusBadge");
     badge.hidden=false;
     badge.className="st-badge "+(resp.status==="draft"?"st-draft":"st-submitted");
-    badge.textContent=resp.status==="draft"?"Draf":"Terkirim";
+    badge.textContent=resp.status==="draft"?"Draft":"Submitted";
 
     if(MY_ROLE==="editor"){
       document.getElementById("btnToggleEdit").hidden=false;
@@ -357,11 +357,11 @@ async function init(){
 function toggleEdit(){
   if(EDIT_MODE){cancelEdit();return;}
   EDIT_MODE=true;
-  // Salin answers saat ini sebagai titik awal edit
+  // Copy the current answers as the starting point for editing
   editedAnswers=parseAnswers(RESP.answers);
   document.getElementById("modeBadge").className="edit-badge";
   document.getElementById("modeBadge").textContent="Mode Edit";
-  document.getElementById("btnToggleEdit").textContent="👁 Mode Lihat";
+  document.getElementById("btnToggleEdit").textContent="👁 View Mode";
   document.getElementById("btnSave").hidden=false;
   document.getElementById("btnSave").disabled=false;
   document.getElementById("btnCancel").hidden=false;
@@ -369,41 +369,41 @@ function toggleEdit(){
 }
 
 function cancelEdit(){
-  // Jika sedang edit, kumpulkan dulu nilai saat ini ke editedAnswers (untuk render ulang)
+  // While editing, first collect the current values into editedAnswers (for the re-render)
   EDIT_MODE=false;
   editedAnswers={};
   document.getElementById("modeBadge").className="ro-badge";
-  document.getElementById("modeBadge").textContent="Hanya Baca";
-  document.getElementById("btnToggleEdit").textContent="✏️ Mode Edit";
+  document.getElementById("modeBadge").textContent="Read Only";
+  document.getElementById("btnToggleEdit").textContent="✏️ Edit Mode";
   document.getElementById("btnSave").hidden=true;
   document.getElementById("btnCancel").hidden=true;
   renderPage();
 }
 
 async function saveEdits(){
-  // Kumpulkan nilai dari input di halaman saat ini sebelum simpan
+  // Collect the values from the current page's inputs before saving
   collectCurrentPageAnswers();
 
   const btn=document.getElementById("btnSave");
   btn.disabled=true;
-  btn.textContent="Menyimpan…";
+  btn.textContent="Saving…";
   try{
     await api(`/api/editor/forms/${FORM_ID}/responses/${RESP_ID}`,{
       method:"PATCH",
       body:JSON.stringify({answers:editedAnswers,status:RESP.status})
     });
-    // Perbarui RESP.answers dengan hasil edit
+    // Update RESP.answers with the edited result
     RESP.answers=editedAnswers;
     cancelEdit();
-    showToast("Jawaban berhasil disimpan","ok");
+    showToast("Response saved successfully","ok");
   }catch(e){
-    showToast("Gagal menyimpan: "+e.message,"err");
+    showToast("Failed to save: "+e.message,"err");
     btn.disabled=false;
-    btn.textContent="Simpan";
+    btn.textContent="Save";
   }
 }
 
-/* Kumpulkan nilai dari form input di halaman yang sedang ditampilkan ke editedAnswers */
+/* Collect the values from the current page's form inputs into editedAnswers */
 function collectCurrentPageAnswers(){
   if(!EDIT_MODE)return;
   const pages=(SCHEMA&&SCHEMA.pages)||[];
@@ -416,7 +416,7 @@ function collectFromNodes(comps,rp,out){
   for(const c of comps||[]){
     if(c.kind==="block"||c.kind==="section"){collectFromNodes(c.components||[],rp,out);continue;}
     if(c.kind==="roster"){
-      // Roster tidak diedit — skip
+      // Rosters are not editable — skip
       continue;
     }
     collectFieldValue(c,rp,out);
@@ -426,9 +426,9 @@ function collectFromNodes(comps,rp,out){
 function collectFieldValue(c,rp,out){
   if(c.type==="note"||c.type==="markdown"||c.type==="hidden")return;
   const key=rp+c.name;
-  // Radio/checkbox (termasuk boolean, dan radio/select dengan sedikit opsi yang
-  // dirender sebagai radio-group) tidak punya id pada elemen pembungkus — dicek
-  // lewat name pada input-nya, bukan getElementById (yang akan selalu null).
+  // Radio/checkbox groups (including booleans, and radio/select with few options
+  // rendered as a radio group) have no id on their wrapper element — they are found
+  // through the input's name, not getElementById (which would always be null).
   const groupInputs=document.querySelectorAll(`input[name="ed_${CSS.escape(key)}"]`);
   if(groupInputs.length){
     if(c.type==="checkbox"||c.type==="multiselect"){
@@ -449,20 +449,20 @@ function collectFieldValue(c,rp,out){
 }
 
 /* ---- render page ---- */
-/* ---- validasi jawaban ----
-   Seluruh evaluasi diserahkan ke fungsi halaman ini sendiri, supaya penilaian
-   validasi memakai skema, visibleWhen, dan skip-state yang sama persis dengan
-   yang dipakai untuk merender jawaban.
+/* ---- answer validation ----
+   All evaluation is delegated to this page's own functions, so the validation
+   review uses exactly the same schema, visibleWhen, and skip state that render the
+   answers.
 
-   canSee menyaring variabel di luar jatah viewer: jawabannya sudah disamarkan
-   server, jadi menilainya pasti keliru — dan labelnya pun tidak boleh bocor
-   lewat daftar temuan. */
+   canSee filters out fields beyond the viewer's allowance: the server already
+   masked the answer, so judging it would be wrong — and its label must not leak
+   through the findings list. */
 const DV_HELPERS={
   evalVisible,computePageSkipState,computeRosterRowSkipState,
   getRosterCount,rosterRowPrefix,txt,
   canSee:name=>!VISIBLE_FIELDS||VISIBLE_FIELDS.has(name),
 };
-let DV_ISSUES=new Map();  // kunci jawaban → temuan, dibaca renderNode
+let DV_ISSUES=new Map();  // answer key → finding, read by renderNode
 
 function renderPage(){
   const answers=EDIT_MODE?editedAnswers:parseAnswers(RESP.answers);
@@ -473,22 +473,22 @@ function renderPage(){
   if(CUR_PG>=pages.length)CUR_PG=Math.max(0,pages.length-1);
   const visIdx=Math.max(0,visited.indexOf(CUR_PG));
 
-  // Sidebar — hanya halaman yang benar-benar dilalui responden
+  // Sidebar — only the pages the respondent actually went through
   if(visited.length>1){
     document.getElementById("sidebar").hidden=false;
-    // Tombol menu hanya berguna kalau memang ada lebih dari satu halaman;
-    // CSS yang memutuskan tampil/tidaknya menurut lebar layar.
+    // The menu button is only useful when there really is more than one page;
+    // the CSS decides whether it shows, based on screen width.
     document.getElementById("btnMenu").hidden=false;
     document.getElementById("pgList").innerHTML=visited.map(i=>
-      `<div class="pg-item${i===CUR_PG?" active":""}" onclick="goPage(${i})">${esc(txt(pages[i].title)||pages[i].name||"Hal "+(i+1))}</div>`
+      `<div class="pg-item${i===CUR_PG?" active":""}" onclick="goPage(${i})">${esc(txt(pages[i].title)||pages[i].name||"Page "+(i+1))}</div>`
     ).join("");
   }
 
-  // Draf maupun jawaban terkirim sama-sama diperiksa: aturan validasi di
-  // kuesioner bisa berubah setelah jawaban dikirim, sehingga jawaban yang dulu
-  // lolos bisa melanggar aturan yang berlaku sekarang. Dihitung sebelum kartu
-  // meta (yang memuat tombolnya) dan sebelum body (renderNode membaca DV_ISSUES
-  // untuk menandai field yang bermasalah).
+  // Both drafts and submitted answers are checked: a form's validation
+  // rules can change after an answer was submitted, so an answer that once
+  // passed may break the rules that apply now. Computed before the meta card
+  // (which holds the button) and before the body (renderNode reads DV_ISSUES
+  // to mark the offending fields).
   let dvBtn="";
   DV_ISSUES=new Map();
   if(pages.length&&window.ResponseValidation){
@@ -501,7 +501,7 @@ function renderPage(){
   const email=meta.email?`<span class="meta-email">${esc(meta.email)}</span>`:""
   const timeStr=formatDate(RESP.submittedAt);
   const metaCard=`<div class="meta-card">
-    <span class="st-badge ${RESP.status==="draft"?"st-draft":"st-submitted"}">${RESP.status==="draft"?"Draf":"Terkirim"}</span>
+    <span class="st-badge ${RESP.status==="draft"?"st-draft":"st-submitted"}">${RESP.status==="draft"?"Draft":"Submitted"}</span>
     ${who}${email}<span class="meta-time">${timeStr}</span>${dvBtn}
   </div>`;
 
@@ -509,7 +509,7 @@ function renderPage(){
   if(pages.length){
     const p=pages[CUR_PG];
     const hiddenNames=computePageSkipState(p,answers).hidden;
-    body+=`<div class="page-title">${esc(txt(p.title)||p.name||"Halaman "+(CUR_PG+1))}</div>`;
+    body+=`<div class="page-title">${esc(txt(p.title)||p.name||"Page "+(CUR_PG+1))}</div>`;
     body+=renderNodes(p.components||[],answers,"",hiddenNames);
   } else {
     body=renderFlatAnswers(answers);
@@ -522,9 +522,9 @@ function renderPage(){
   if(visited.length>1){
     foot.hidden=false;
     document.getElementById("pgFootIn").innerHTML=
-      `<button class="btn" ${visIdx===0?"disabled":""} onclick="goPage(${visited[visIdx-1]})">← Sebelumnya</button>`+
-      `<span class="pg-prog">Halaman ${visIdx+1} / ${visited.length}</span>`+
-      `<button class="btn" ${visIdx>=visited.length-1?"disabled":""} onclick="goPage(${visited[visIdx+1]})">Selanjutnya →</button>`;
+      `<button class="btn" ${visIdx===0?"disabled":""} onclick="goPage(${visited[visIdx-1]})">← Previous</button>`+
+      `<span class="pg-prog">Page ${visIdx+1} / ${visited.length}</span>`+
+      `<button class="btn" ${visIdx>=visited.length-1?"disabled":""} onclick="goPage(${visited[visIdx+1]})">Next →</button>`;
   }else{
     foot.hidden=true;
   }
@@ -546,7 +546,7 @@ async function resolveEditOptions(){
     const cfg=JSON.parse(el.dataset.oa),curVal=el.dataset.cv||"";
     try{
       const opts=await fetchOpts(cfg);
-      el.innerHTML=`<option value="">— Pilih —</option>`+opts.map(o=>
+      el.innerHTML=`<option value="">— Select —</option>`+opts.map(o=>
         `<option value="${esc(o.value)}"${String(curVal)===String(o.value)?" selected":""}>${esc(o.label)}</option>`
       ).join("");
     }catch{el.innerHTML=`<option value="${esc(curVal)}">${esc(curVal)||"—"}</option>`;}
@@ -559,21 +559,21 @@ async function resolveEditOptions(){
       el.innerHTML=opts.map(o=>`<label class="ed-check-item">
         <input type="checkbox" name="${name}" value="${esc(o.value)}" ${selected.includes(String(o.value))?"checked":""}>
         ${esc(o.label)}</label>`).join("");
-    }catch{el.innerHTML=`<span style="color:var(--muted);font-size:12px">Gagal memuat opsi.</span>`;}
+    }catch{el.innerHTML=`<span style="color:var(--muted);font-size:12px">Failed to load options.</span>`;}
     delete el.dataset.oa;delete el.dataset.cv;delete el.dataset.multi;
   }
 }
 
 function goPage(idx){
   if(EDIT_MODE)collectCurrentPageAnswers();
-  toggleNav(false);  // tutup laci kalau halaman dipilih dari daftar
+  toggleNav(false);  // close the drawer when a page is picked from the list
   CUR_PG=idx;
   renderPage();
 }
 
-/* ---- laci daftar halaman (layar HP) ----
-   Di desktop sidebar selalu tampil dan tombol menunya disembunyikan CSS, jadi
-   fungsi ini hanya berdampak di layar sempit. */
+/* ---- page-list drawer (phone screens) ----
+   On desktop the sidebar is always visible and the CSS hides its menu button,
+   so this function only has an effect on narrow screens. */
 function toggleNav(open){
   const sb=document.getElementById("sidebar"),bd=document.getElementById("navBackdrop");
   if(!sb||sb.hidden)return;
@@ -605,20 +605,20 @@ function renderNode(c,answers,rp,hiddenNames){
     return`<div class="rv-section">${c.title?`<div class="rv-section-title">${esc(rowInterp(txt(c.title),answers,rp))}</div>`:""}${renderNodes(c.components||[],answers,rp,hiddenNames)}</div>`;
   if(c.kind==="roster")return renderRoster(c,answers,rp);
   const html=EDIT_MODE?renderEditField(c,answers,rp):renderReadField(c,answers,rp);
-  // Satu-satunya titik yang dilewati semua jenis field, jadi penandaan temuan
-  // validasi cukup dipasang di sini.
+  // The single point every kind of field passes through, so the validation temuan
+  // marker only needs installing here.
   return DV_ISSUES.size?ResponseValidation.wrapField(html,DV_ISSUES.get(rp+c.name)):html;
 }
 
-/* ---- expression engine (untuk evalVisible visibleWhen) ---- */
-const Expr=(function(){const FUNCS=new Set(["isempty","notempty","len","count","sum","avg","min","max","in","today","age","regex","if","number","round","abs","floor","ceil","contains","upper","lower","trim"]);function tokenize(src){const t=[];let i=0;const n=src.length;const id=c=>/[A-Za-z0-9_]/.test(c);while(i<n){let c=src[i];if(c===" "||c==="\t"||c==="\n"||c==="\r"){i++;continue;}if(c==="$"&&src[i+1]==="{"){let j=i+2,s="";while(j<n&&src[j]!=="}")s+=src[j++];i=j+1;t.push({t:"ref",v:s.trim()});continue;}if(c==="'"||c==='"'){const q=c;let j=i+1,s="";while(j<n&&src[j]!==q){if(src[j]==="\\"){s+=src[j+1];j+=2;}else s+=src[j++];}i=j+1;t.push({t:"str",v:s});continue;}if((c>="0"&&c<="9")||(c==="."&&src[i+1]>="0"&&src[i+1]<="9")){let j=i,s="";while(j<n&&((src[j]>="0"&&src[j]<="9")||src[j]===".")){s+=src[j++];}i=j;t.push({t:"num",v:parseFloat(s)});continue;}if(/[A-Za-z_]/.test(c)){let j=i,s="";while(j<n&&id(src[j]))s+=src[j++];i=j;if(s==="true")t.push({t:"bool",v:true});else if(s==="false")t.push({t:"bool",v:false});else if(s==="null")t.push({t:"null"});else t.push({t:"id",v:s});continue;}const two=src.substr(i,2);if(["==","!=","<=",">=","&&","||"].includes(two)){t.push({t:"op",v:two});i+=2;continue;}if("+-*/%<>!".includes(c)){t.push({t:"op",v:c});i++;continue;}if(c==="("){t.push({t:"lp"});i++;continue;}if(c===")"){t.push({t:"rp"});i++;continue;}if(c==="["){t.push({t:"lb"});i++;continue;}if(c==="]"){t.push({t:"rb"});i++;continue;}if(c===","){t.push({t:"comma"});i++;continue;}throw new Error("karakter tak dikenal: "+c);}return t;}function parse(src){const toks=tokenize(src);let p=0;const peek=()=>toks[p],next=()=>toks[p++];const expect=k=>{if(!toks[p]||toks[p].t!==k)throw new Error("diharapkan '"+k+"'");return toks[p++];};function or(){let l=and();while(peek()&&peek().t==="op"&&peek().v==="||"){next();l={type:"bin",op:"||",l,r:and()};}return l;}function and(){let l=eq();while(peek()&&peek().t==="op"&&peek().v==="&&"){next();l={type:"bin",op:"&&",l,r:eq()};}return l;}function eq(){let l=cmp();while(peek()&&peek().t==="op"&&(peek().v==="=="||peek().v==="!=")){const o=next().v;l={type:"bin",op:o,l,r:cmp()};}return l;}function cmp(){let l=add();while(peek()&&peek().t==="op"&&["<","<=",">",">="].includes(peek().v)){const o=next().v;l={type:"bin",op:o,l,r:add()};}return l;}function add(){let l=mul();while(peek()&&peek().t==="op"&&(peek().v==="+"||peek().v==="-")){const o=next().v;l={type:"bin",op:o,l,r:mul()};}return l;}function mul(){let l=un();while(peek()&&peek().t==="op"&&["*","/","%"].includes(peek().v)){const o=next().v;l={type:"bin",op:o,l,r:un()};}return l;}function un(){if(peek()&&peek().t==="op"&&(peek().v==="!"||peek().v==="-")){const o=next().v;return {type:"un",op:o,e:un()};}return prim();}function prim(){const k=peek();if(!k)throw new Error("ekspresi terpotong");if(k.t==="num"||k.t==="str"||k.t==="bool"){next();return {type:"lit",v:k.v};}if(k.t==="null"){next();return {type:"lit",v:null};}if(k.t==="ref"){next();return {type:"ref",name:k.v};}if(k.t==="lp"){next();const e=or();expect("rp");return e;}if(k.t==="lb"){next();const items=[];if(peek()&&peek().t!=="rb"){items.push(or());while(peek()&&peek().t==="comma"){next();items.push(or());}}expect("rb");return {type:"arr",items};}if(k.t==="id"){next();if(peek()&&peek().t==="lp"){const fn=k.v.toLowerCase();if(!FUNCS.has(fn))throw new Error("fungsi tak dikenal: "+k.v);next();const args=[];if(peek()&&peek().t!=="rp"){args.push(or());while(peek()&&peek().t==="comma"){next();args.push(or());}}expect("rp");return {type:"call",fn,args};}throw new Error("pakai ${...} untuk merujuk field");}throw new Error("token tak terduga");}const ast=or();return ast;}const toNum=v=>v===true?1:v===false?0:(v==null||v==="")?NaN:Number(v);const isEmp=x=>x==null||x===""||(Array.isArray(x)&&x.length===0);const flat=a=>{const o=[];a.forEach(x=>Array.isArray(x)?x.forEach(y=>o.push(y)):o.push(x));return o;};const nums=a=>flat(a).map(Number).filter(x=>!isNaN(x));const LIB={isempty:a=>isEmp(a[0]),notempty:a=>!isEmp(a[0]),len:a=>{const x=a[0];return Array.isArray(x)?x.length:(x==null?0:String(x).length);},count:a=>{const arr=Array.isArray(a[0])?a[0]:a;return arr.filter(x=>!isEmp(x)).length;},sum:a=>flat(a).reduce((s,x)=>s+(isEmp(x)?0:(Number(x)||0)),0),avg:a=>{const f=nums(a);return f.length?f.reduce((s,x)=>s+x,0)/f.length:0;},min:a=>{const f=nums(a);return f.length?Math.min(...f):0;},max:a=>{const f=nums(a);return f.length?Math.max(...f):0;},in:a=>{const x=a[0];const rest=a.length===2&&Array.isArray(a[1])?a[1]:a.slice(1);return rest.map(String).includes(String(x));},today:()=>new Date().toISOString().slice(0,10),age:a=>{const d=new Date(a[0]);if(isNaN(d))return NaN;const t=new Date();let g=t.getFullYear()-d.getFullYear();const m=t.getMonth()-d.getMonth();if(m<0||(m===0&&t.getDate()<d.getDate()))g--;return g;},regex:a=>{try{return new RegExp(a[1]).test(String(a[0]??""));}catch(_){return false;}},if:a=>a[0]?a[1]:a[2],number:a=>{const x=Number(a[0]);return isNaN(x)?0:x;},round:a=>{const f=Math.pow(10,a[1]||0);return Math.round((Number(a[0])||0)*f)/f;},abs:a=>Math.abs(Number(a[0])||0),floor:a=>Math.floor(Number(a[0])||0),ceil:a=>Math.ceil(Number(a[0])||0),contains:a=>{const h=a[0];return Array.isArray(h)?h.map(String).includes(String(a[1])):String(h??"").includes(String(a[1]));},upper:a=>String(a[0]??"").toUpperCase(),lower:a=>String(a[0]??"").toLowerCase(),trim:a=>String(a[0]??"").trim()};function eqv(a,b){if(typeof a==="number"||typeof b==="number"){const x=toNum(a),y=toNum(b);if(!isNaN(x)&&!isNaN(y))return x===y;}if(typeof a==="boolean"||typeof b==="boolean")return Boolean(a)===Boolean(b);if(a==null||b==null)return a==null&&b==null;return String(a)===String(b);}function ev(n,res){switch(n.type){case "lit":return n.v;case "ref":return res(n.name);case "arr":return n.items.map(x=>ev(x,res));case "un":{const v=ev(n.e,res);return n.op==="!"?!v:-toNum(v);}case "call":return LIB[n.fn](n.args.map(a=>ev(a,res)));case "bin":{const op=n.op;if(op==="&&")return !!ev(n.l,res)&&!!ev(n.r,res);if(op==="||")return !!ev(n.l,res)||!!ev(n.r,res);const a=ev(n.l,res),b=ev(n.r,res);switch(op){case "+":return toNum(a)+toNum(b);case "-":return toNum(a)-toNum(b);case "*":return toNum(a)*toNum(b);case "/":return toNum(a)/toNum(b);case "%":return toNum(a)%toNum(b);case "<":return toNum(a)<toNum(b);case "<=":return toNum(a)<=toNum(b);case ">":return toNum(a)>toNum(b);case ">=":return toNum(a)>=toNum(b);case "==":return eqv(a,b);case "!=":return !eqv(a,b);}}}}const cache=new Map();function parseCached(src){if(cache.has(src))return cache.get(src);const a=parse(src);cache.set(src,a);return a;}return{evalSrc(src,res){if(!src)return undefined;let a;try{a=parseCached(src);}catch(_){return undefined;}try{return ev(a,res);}catch(_){return undefined;}}};})();
+/* ---- expression engine (for evalVisible / visibleWhen) ---- */
+const Expr=(function(){const FUNCS=new Set(["isempty","notempty","len","count","sum","avg","min","max","in","today","age","regex","if","number","round","abs","floor","ceil","contains","upper","lower","trim"]);function tokenize(src){const t=[];let i=0;const n=src.length;const id=c=>/[A-Za-z0-9_]/.test(c);while(i<n){let c=src[i];if(c===" "||c==="\t"||c==="\n"||c==="\r"){i++;continue;}if(c==="$"&&src[i+1]==="{"){let j=i+2,s="";while(j<n&&src[j]!=="}")s+=src[j++];i=j+1;t.push({t:"ref",v:s.trim()});continue;}if(c==="'"||c==='"'){const q=c;let j=i+1,s="";while(j<n&&src[j]!==q){if(src[j]==="\\"){s+=src[j+1];j+=2;}else s+=src[j++];}i=j+1;t.push({t:"str",v:s});continue;}if((c>="0"&&c<="9")||(c==="."&&src[i+1]>="0"&&src[i+1]<="9")){let j=i,s="";while(j<n&&((src[j]>="0"&&src[j]<="9")||src[j]===".")){s+=src[j++];}i=j;t.push({t:"num",v:parseFloat(s)});continue;}if(/[A-Za-z_]/.test(c)){let j=i,s="";while(j<n&&id(src[j]))s+=src[j++];i=j;if(s==="true")t.push({t:"bool",v:true});else if(s==="false")t.push({t:"bool",v:false});else if(s==="null")t.push({t:"null"});else t.push({t:"id",v:s});continue;}const two=src.substr(i,2);if(["==","!=","<=",">=","&&","||"].includes(two)){t.push({t:"op",v:two});i+=2;continue;}if("+-*/%<>!".includes(c)){t.push({t:"op",v:c});i++;continue;}if(c==="("){t.push({t:"lp"});i++;continue;}if(c===")"){t.push({t:"rp"});i++;continue;}if(c==="["){t.push({t:"lb"});i++;continue;}if(c==="]"){t.push({t:"rb"});i++;continue;}if(c===","){t.push({t:"comma"});i++;continue;}throw new Error("karakter tak dikenal: "+c);}return t;}function parse(src){const toks=tokenize(src);let p=0;const peek=()=>toks[p],next=()=>toks[p++];const expect=k=>{if(!toks[p]||toks[p].t!==k)throw new Error("diharapkan '"+k+"'");return toks[p++];};function or(){let l=and();while(peek()&&peek().t==="op"&&peek().v==="||"){next();l={type:"bin",op:"||",l,r:and()};}return l;}function and(){let l=eq();while(peek()&&peek().t==="op"&&peek().v==="&&"){next();l={type:"bin",op:"&&",l,r:eq()};}return l;}function eq(){let l=cmp();while(peek()&&peek().t==="op"&&(peek().v==="=="||peek().v==="!=")){const o=next().v;l={type:"bin",op:o,l,r:cmp()};}return l;}function cmp(){let l=add();while(peek()&&peek().t==="op"&&["<","<=",">",">="].includes(peek().v)){const o=next().v;l={type:"bin",op:o,l,r:add()};}return l;}function add(){let l=mul();while(peek()&&peek().t==="op"&&(peek().v==="+"||peek().v==="-")){const o=next().v;l={type:"bin",op:o,l,r:mul()};}return l;}function mul(){let l=un();while(peek()&&peek().t==="op"&&["*","/","%"].includes(peek().v)){const o=next().v;l={type:"bin",op:o,l,r:un()};}return l;}function un(){if(peek()&&peek().t==="op"&&(peek().v==="!"||peek().v==="-")){const o=next().v;return {type:"un",op:o,e:un()};}return prim();}function prim(){const k=peek();if(!k)throw new Error("ekspresi terpotong");if(k.t==="num"||k.t==="str"||k.t==="bool"){next();return {type:"lit",v:k.v};}if(k.t==="null"){next();return {type:"lit",v:null};}if(k.t==="ref"){next();return {type:"ref",name:k.v};}if(k.t==="lp"){next();const e=or();expect("rp");return e;}if(k.t==="lb"){next();const items=[];if(peek()&&peek().t!=="rb"){items.push(or());while(peek()&&peek().t==="comma"){next();items.push(or());}}expect("rb");return {type:"arr",items};}if(k.t==="id"){next();if(peek()&&peek().t==="lp"){const fn=k.v.toLowerCase();if(!FUNCS.has(fn))throw new Error("fungsi tak dikenal: "+k.v);next();const args=[];if(peek()&&peek().t!=="rp"){args.push(or());while(peek()&&peek().t==="comma"){next();args.push(or());}}expect("rp");return {type:"call",fn,args};}throw new Error("use ${...} to reference a field");}throw new Error("token tak terduga");}const ast=or();return ast;}const toNum=v=>v===true?1:v===false?0:(v==null||v==="")?NaN:Number(v);const isEmp=x=>x==null||x===""||(Array.isArray(x)&&x.length===0);const flat=a=>{const o=[];a.forEach(x=>Array.isArray(x)?x.forEach(y=>o.push(y)):o.push(x));return o;};const nums=a=>flat(a).map(Number).filter(x=>!isNaN(x));const LIB={isempty:a=>isEmp(a[0]),notempty:a=>!isEmp(a[0]),len:a=>{const x=a[0];return Array.isArray(x)?x.length:(x==null?0:String(x).length);},count:a=>{const arr=Array.isArray(a[0])?a[0]:a;return arr.filter(x=>!isEmp(x)).length;},sum:a=>flat(a).reduce((s,x)=>s+(isEmp(x)?0:(Number(x)||0)),0),avg:a=>{const f=nums(a);return f.length?f.reduce((s,x)=>s+x,0)/f.length:0;},min:a=>{const f=nums(a);return f.length?Math.min(...f):0;},max:a=>{const f=nums(a);return f.length?Math.max(...f):0;},in:a=>{const x=a[0];const rest=a.length===2&&Array.isArray(a[1])?a[1]:a.slice(1);return rest.map(String).includes(String(x));},today:()=>new Date().toISOString().slice(0,10),age:a=>{const d=new Date(a[0]);if(isNaN(d))return NaN;const t=new Date();let g=t.getFullYear()-d.getFullYear();const m=t.getMonth()-d.getMonth();if(m<0||(m===0&&t.getDate()<d.getDate()))g--;return g;},regex:a=>{try{return new RegExp(a[1]).test(String(a[0]??""));}catch(_){return false;}},if:a=>a[0]?a[1]:a[2],number:a=>{const x=Number(a[0]);return isNaN(x)?0:x;},round:a=>{const f=Math.pow(10,a[1]||0);return Math.round((Number(a[0])||0)*f)/f;},abs:a=>Math.abs(Number(a[0])||0),floor:a=>Math.floor(Number(a[0])||0),ceil:a=>Math.ceil(Number(a[0])||0),contains:a=>{const h=a[0];return Array.isArray(h)?h.map(String).includes(String(a[1])):String(h??"").includes(String(a[1]));},upper:a=>String(a[0]??"").toUpperCase(),lower:a=>String(a[0]??"").toLowerCase(),trim:a=>String(a[0]??"").trim()};function eqv(a,b){if(typeof a==="number"||typeof b==="number"){const x=toNum(a),y=toNum(b);if(!isNaN(x)&&!isNaN(y))return x===y;}if(typeof a==="boolean"||typeof b==="boolean")return Boolean(a)===Boolean(b);if(a==null||b==null)return a==null&&b==null;return String(a)===String(b);}function ev(n,res){switch(n.type){case "lit":return n.v;case "ref":return res(n.name);case "arr":return n.items.map(x=>ev(x,res));case "un":{const v=ev(n.e,res);return n.op==="!"?!v:-toNum(v);}case "call":return LIB[n.fn](n.args.map(a=>ev(a,res)));case "bin":{const op=n.op;if(op==="&&")return !!ev(n.l,res)&&!!ev(n.r,res);if(op==="||")return !!ev(n.l,res)||!!ev(n.r,res);const a=ev(n.l,res),b=ev(n.r,res);switch(op){case "+":return toNum(a)+toNum(b);case "-":return toNum(a)-toNum(b);case "*":return toNum(a)*toNum(b);case "/":return toNum(a)/toNum(b);case "%":return toNum(a)%toNum(b);case "<":return toNum(a)<toNum(b);case "<=":return toNum(a)<=toNum(b);case ">":return toNum(a)>toNum(b);case ">=":return toNum(a)>=toNum(b);case "==":return eqv(a,b);case "!=":return !eqv(a,b);}}}}const cache=new Map();function parseCached(src){if(cache.has(src))return cache.get(src);const a=parse(src);cache.set(src,a);return a;}return{evalSrc(src,res){if(!src)return undefined;let a;try{a=parseCached(src);}catch(_){return undefined;}try{return ev(a,res);}catch(_){return undefined;}}};})();
 function coerceVal(v){if(v==="true")return true;if(v==="false")return false;if(typeof v==="string"&&v.trim()!==""&&!isNaN(Number(v)))return Number(v);return v;}
 function evalVisible(src,rp,answers){if(!src)return true;const res=n=>{const k=(rp||"")+n;const val=k in answers?answers[k]:(n in answers?answers[n]:undefined);return coerceVal(val);};const v=Expr.evalSrc(src,res);return v===undefined?true:!!v;}
 
-/* ---- skip-to: replay memakai jawaban final, supaya field/halaman yang
-   sebenarnya tidak pernah ditampilkan ke responden (dilewati skip-to) tidak
-   ikut dirender seolah kosong. Tidak memakai heuristik "pending" milik form
-   pengisian karena di sini datanya sudah final. ---- */
+/* ---- skip-to: replayed against the final answers, so pages/fields the respondent
+   was never actually shown (jumped over by a skip-to) are not rendered as if they
+   were merely blank. The respondent form's "pending" heuristic is not used here,
+   because the data is already final. ---- */
 const CHOICE_TYPES=new Set(["select","multiselect","radio","checkbox"]);
 function nodeContainsName(node,target){if(node.name===target)return true;return(node.components||[]).some(c=>nodeContainsName(c,target));}
 function pageIndexOfTarget(target,pages){
@@ -744,7 +744,7 @@ function renderReadField(c,answers,rp){
     return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer-box">${esc(display)}</div></div>`;
   }
   if(c.type==="boolean"){
-    const items=[{value:"true",label:"Ya"},{value:"false",label:"Tidak"}].map(o=>{
+    const items=[{value:"true",label:"Yes"},{value:"false",label:"No"}].map(o=>{
       const sel=String(val)===o.value;
       return`<div class="rv-choice-item ${sel?"selected":"unsel"}"><span class="rv-choice-icon"></span>${o.label}</div>`;
     }).join("");
@@ -755,10 +755,10 @@ function renderReadField(c,answers,rp){
     const src=getMediaSource(val);
     if(!src)return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer empty">—</div></div>`;
     if(isImageMedia(c,src)){
-      return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-photo-wrap"><img class="rv-photo" src="${src}" onclick="openPhotoModal(this.src)" title="Klik untuk perbesar"></div></div>`;
+      return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-photo-wrap"><img class="rv-photo" src="${src}" onclick="openPhotoModal(this.src)" title="Click to enlarge"></div></div>`;
     }
     const mime=(src.match(/^data:([^;]+)/)||[])[1]||"file";
-    return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer"><a href="${src}" download="file" style="color:var(--accent)">Unduh file (${esc(mime)})</a></div></div>`;
+    return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer"><a href="${src}" download="file" style="color:var(--accent)">Download file (${esc(mime)})</a></div></div>`;
   }
 
   // Geopoint — koordinat + peta interaktif
@@ -791,20 +791,20 @@ function renderEditField(c,answers,rp){
   if(c.type==="radio"||c.type==="select"){
     const opts=getOptions(c,answers,rp);
     if(opts.length){
-      // Untuk sedikit opsi: radio buttons. Untuk banyak: <select>
+      // Few options: radio buttons. Many: a <select>
       if(opts.length<=6){
         const items=opts.map(o=>`<label class="ed-radio-item">
           <input type="radio" name="ed_${safeKey}" value="${esc(o.value)}" ${String(val)===String(o.value)?"checked":""}>
           ${esc(o.label)}</label>`).join("");
         return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<div class="ed-radio-group">${items}</div></div>`;
       }
-      const optHtml=`<option value="">— Pilih —</option>`+opts.map(o=>
+      const optHtml=`<option value="">— Select —</option>`+opts.map(o=>
         `<option value="${esc(o.value)}"${String(val)===String(o.value)?" selected":""}>${esc(o.label)}</option>`
       ).join("");
       return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<select id="ed_${safeKey}" class="ed-select">${optHtml}</select></div>`;
     }
     if(c.optionsApi&&c.optionsApi.url){
-      return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<select id="ed_${safeKey}" class="ed-select ed-async" data-oa="${esc(JSON.stringify(c.optionsApi))}" data-cv="${esc(String(val??""))}"><option value="">Memuat opsi…</option></select></div>`;
+      return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<select id="ed_${safeKey}" class="ed-select ed-async" data-oa="${esc(JSON.stringify(c.optionsApi))}" data-cv="${esc(String(val??""))}"><option value="">Loading options…</option></select></div>`;
     }
     // Fallback ke text
     return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<input id="ed_${safeKey}" class="ed-input" value="${esc(val??"")}"></div>`;
@@ -821,13 +821,13 @@ function renderEditField(c,answers,rp){
       return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<div class="ed-check-group">${items}</div></div>`;
     }
     if(c.optionsApi&&c.optionsApi.url){
-      return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<div id="ed_${safeKey}" class="ed-check-group ed-async" data-oa="${esc(JSON.stringify(c.optionsApi))}" data-cv="${esc(JSON.stringify(selected))}" data-multi="1"><span style="color:var(--muted);font-size:12px">Memuat opsi…</span></div></div>`;
+      return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<div id="ed_${safeKey}" class="ed-check-group ed-async" data-oa="${esc(JSON.stringify(c.optionsApi))}" data-cv="${esc(JSON.stringify(selected))}" data-multi="1"><span style="color:var(--muted);font-size:12px">Loading options…</span></div></div>`;
     }
   }
 
   // Boolean
   if(c.type==="boolean"){
-    const items=[{value:"true",label:"Ya"},{value:"false",label:"Tidak"}].map(o=>
+    const items=[{value:"true",label:"Yes"},{value:"false",label:"No"}].map(o=>
       `<label class="ed-radio-item">
         <input type="radio" name="ed_${safeKey}" value="${o.value}" ${String(val)===o.value?"checked":""}>
         ${o.label}</label>`
@@ -845,14 +845,14 @@ function renderEditField(c,answers,rp){
     return`<div class="ed-field"><div class="ed-label">${label} <span style="font-size:10px;color:var(--muted)">(dihitung otomatis)</span></div>${desc}<div class="rv-answer">${d}</div></div>`;
   }
 
-  // Photo / File / Signature — read-only preview saat edit
+  // Photo / File / Signature — read-only preview while editing
   if(c.type==="photo"||c.type==="file"||c.type==="signature"){
     const src=getMediaSource(val);
     if(!src)return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<div class="rv-answer empty">—</div></div>`;
     if(isImageMedia(c,src))
-      return`<div class="ed-field"><div class="ed-label">${label} <span style="font-size:10px;color:var(--muted)">(tidak dapat diubah di sini)</span></div>${desc}<div class="rv-photo-wrap"><img class="rv-photo" src="${src}" onclick="openPhotoModal(this.src)" title="Klik untuk perbesar"></div></div>`;
+      return`<div class="ed-field"><div class="ed-label">${label} <span style="font-size:10px;color:var(--muted)">(cannot be edited here)</span></div>${desc}<div class="rv-photo-wrap"><img class="rv-photo" src="${src}" onclick="openPhotoModal(this.src)" title="Click to enlarge"></div></div>`;
     const mime=(src.match(/^data:([^;]+)/)||[])[1]||"file";
-    return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<div class="rv-answer"><a href="${src}" download="file" style="color:var(--accent)">Unduh file (${esc(mime)})</a></div></div>`;
+    return`<div class="ed-field"><div class="ed-label">${label}</div>${desc}<div class="rv-answer"><a href="${src}" download="file" style="color:var(--accent)">Download file (${esc(mime)})</a></div></div>`;
   }
 
   // Number / Integer / Decimal / Currency / Float
@@ -885,7 +885,7 @@ function renderEditField(c,answers,rp){
     const g=parseGeoPoint(val);
     const d=g?`${g.lat.toFixed(6)}, ${g.lng.toFixed(6)}`:"—";
     const map=g?`<div class="geo-map" data-lat="${g.lat}" data-lng="${g.lng}"></div>`:"";
-    return`<div class="ed-field"><div class="ed-label">${label} <span style="font-size:10px;color:var(--muted)">(koordinat, tidak dapat diubah di sini)</span></div>${desc}<div class="rv-answer">${d}</div>${map}</div>`;
+    return`<div class="ed-field"><div class="ed-label">${label} <span style="font-size:10px;color:var(--muted)">(coordinates, cannot be edited here)</span></div>${desc}<div class="rv-answer">${d}</div>${map}</div>`;
   }
 
   // Barcode — read-only
@@ -903,23 +903,23 @@ function renderRoster(r,answers,rp){
   rp=rp||"";
   const count=getRosterCount(r,answers,rp);
   const title=esc(rowInterp(txt(r.title)||r.name,answers,rp));
-  let html=`<div class="rv-roster"><div class="rv-roster-title">${title} <span style="font-weight:400;font-size:12px">(${count} baris)</span></div>`;
-  if(count<=0){html+=`<div class="rv-empty">Tidak ada data</div>`;}
+  let html=`<div class="rv-roster"><div class="rv-roster-title">${title} <span style="font-weight:400;font-size:12px">(${count} rows)</span></div>`;
+  if(count<=0){html+=`<div class="rv-empty">No data</div>`;}
   else{
-    const rowLbl=(i,childRp)=>r.rowTitle?`${esc(rowInterp(txt(r.rowTitle),answers,childRp))} #${i+1}`:`Baris #${i+1}`;
+    const rowLbl=(i,childRp)=>r.rowTitle?`${esc(rowInterp(txt(r.rowTitle),answers,childRp))} #${i+1}`:`Row #${i+1}`;
     for(let i=0;i<count;i++){
       const childRp=rosterRowPrefix(r,i,rp);
       const rowHidden=computeRosterRowSkipState(r,i,answers,rp);
       html+=`<div class="rv-row"><div class="rv-row-num">${rowLbl(i,childRp)}</div>${renderNodes(r.components||[],answers,childRp,rowHidden)}</div>`;
     }
   }
-  if(EDIT_MODE)html+=`<div class="roster-edit-note">Data roster tidak dapat diubah melalui tampilan ini.</div>`;
+  if(EDIT_MODE)html+=`<div class="roster-edit-note">Roster data cannot be edited from this view.</div>`;
   return html+`</div>`;
 }
 
 function renderFlatAnswers(answers){
   const entries=Object.entries(answers).filter(([k])=>!k.includes("#"));
-  if(!entries.length)return`<div class="rv-block"><div class="rv-empty">Tidak ada data</div></div>`;
+  if(!entries.length)return`<div class="rv-block"><div class="rv-empty">No data</div></div>`;
   return`<div class="rv-block">`+entries.map(([k,v])=>
     `<div class="rv-field"><div class="rv-label" style="font-family:var(--mono);font-size:11.5px">${esc(k)}</div><div class="rv-answer">${esc(valStr(v))}</div></div>`
   ).join("")+`</div>`;
@@ -1042,5 +1042,6 @@ function showToast(msg,type){
 
 if(FORM_ID&&RESP_ID)init();
 </script>
+<script src="/i18n.js"></script>
 </body>
 </html>

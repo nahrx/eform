@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="id">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -9,7 +9,7 @@
 <body>
 <header>
   <h1>eForm · Dashboard</h1>
-  <button class="btn primary" id="btnNewForm" onclick="location.href='/builder'" title="Kuesioner baru">+ <span class="btn-label">Kuesioner baru</span></button>
+  <button class="btn primary" id="btnNewForm" onclick="location.href='/builder'" title="New form">+ <span class="btn-label">New form</span></button>
   <div class="user-menu" id="userMenu">
     <button class="user-btn" id="userBtn">
       <span class="user-avatar" id="userAvatar">?</span>
@@ -24,14 +24,14 @@
       </div>
       <div class="udd-sep"></div>
       <div class="udd-lang">
-        <span class="udd-lang-label">Bahasa</span>
+        <span class="udd-lang-label">Language</span>
         <div class="udd-lang-seg">
           <button type="button" class="udd-lang-opt" data-lang-btn="id">ID</button>
           <button type="button" class="udd-lang-opt" data-lang-btn="en">EN</button>
         </div>
       </div>
       <div class="udd-sep"></div>
-      <button class="udd-item danger" id="logout">Keluar</button>
+      <button class="udd-item danger" id="logout">Log out</button>
     </div>
   </div>
 </header>
@@ -41,15 +41,15 @@
     <nav class="app-nav">
       <button class="app-nav-item active" id="navFormsBtn" type="button">
         <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="7" y1="5" x2="17" y2="5"/><line x1="7" y1="10" x2="17" y2="10"/><line x1="7" y1="15" x2="17" y2="15"/><circle cx="3.5" cy="5" r="1"/><circle cx="3.5" cy="10" r="1"/><circle cx="3.5" cy="15" r="1"/></svg>
-        Kuesioner
+        Form
       </button>
       <button class="app-nav-item" id="navUsersBtn" type="button" hidden>
         <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="6.5" r="3"/><path d="M3.5 17c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/></svg>
-        Manajemen User
+        User Management
       </button>
       <button class="app-nav-item" id="navAuditBtn" type="button" hidden>
         <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7.5"/><polyline points="10,5.5 10,10 13,12"/></svg>
-        Riwayat Aksi
+        Activity Log
       </button>
     </nav>
   </aside>
@@ -58,56 +58,56 @@
     <div class="inner">
 
       <section id="formsSection">
-        <div class="bar"><h2>Daftar Kuesioner</h2><button class="btn" id="refresh">↻ Muat ulang</button></div>
+        <div class="bar"><h2>Form List</h2><button class="btn" id="refresh">↻ Reload</button></div>
         <div class="table-scroll">
-        <table id="tbl" class="cards"><thead><tr><th>Judul</th><th>Status</th><th>Diperbarui</th><th id="thAnswers">Jawaban</th><th></th></tr></thead>
-        <tbody id="rows"><tr><td colspan="5" class="empty">Memuat…</td></tr></tbody></table>
+        <table id="tbl" class="cards"><thead><tr><th>Title</th><th>Status</th><th>Updated</th><th id="thAnswers">Responses</th><th></th></tr></thead>
+        <tbody id="rows"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody></table>
         </div>
       </section>
 
       <section id="usersSection" hidden>
-        <div class="bar"><h2>Manajemen User</h2><button class="btn" id="refreshUsers" type="button">↻ Muat ulang</button></div>
+        <div class="bar"><h2>User Management</h2><button class="btn" id="refreshUsers" type="button">↻ Reload</button></div>
 
         <!-- Sub-section: Admin & Superadmin -->
         <div id="adminSubSection">
           <div class="user-card">
-            <div class="user-card-title">Buat User Admin</div>
+            <div class="user-card-title">Create Admin User</div>
             <div class="user-grid">
               <input id="uUsername" placeholder="Username" autocomplete="off">
-              <input id="uEmail" type="email" placeholder="Email (opsional)">
-              <input id="uPassword" type="password" placeholder="Password (min. 6 karakter)">
+              <input id="uEmail" type="email" placeholder="Email (optional)">
+              <input id="uPassword" type="password" placeholder="Password (min. 6 characters)">
               <select id="uRole">
                 <option value="admin">admin</option>
                 <option value="superadmin">superadmin</option>
               </select>
             </div>
             <div class="user-actions">
-              <button class="btn primary" id="btnCreateUser" type="button">+ Buat User</button>
+              <button class="btn primary" id="btnCreateUser" type="button">+ Create User</button>
             </div>
             <div class="muted" id="userMsg"></div>
           </div>
           <div class="table-scroll">
           <table class="cards">
-            <thead><tr><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Dibuat</th><th></th></tr></thead>
-            <tbody id="userRows"><tr><td colspan="6" class="empty">Memuat…</td></tr></tbody>
+            <thead><tr><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Created</th><th></th></tr></thead>
+            <tbody id="userRows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
           </table>
           </div>
         </div>
       </section>
 
       <section id="auditSection" hidden>
-        <div class="bar"><h2>Riwayat Aksi</h2><button class="btn" id="refreshAudit" type="button">↻ Muat ulang</button></div>
-        <div class="muted" style="margin-bottom:10px">Jejak aksi yang mengubah data atau mengeluarkan data dari sistem, termasuk unduhan CSV. Tercatat otomatis dan tidak dapat diubah dari aplikasi.</div>
+        <div class="bar"><h2>Activity Log</h2><button class="btn" id="refreshAudit" type="button">↻ Reload</button></div>
+        <div class="muted" style="margin-bottom:10px">A trail of actions that change data or take data out of the system, including CSV downloads. Recorded automatically and cannot be altered from the application.</div>
         <div class="table-scroll">
         <table class="cards">
-          <thead><tr><th>Waktu</th><th>Pelaku</th><th>Aksi</th><th>Sasaran</th><th>IP</th><th>Keterangan</th></tr></thead>
-          <tbody id="auditRows"><tr><td colspan="6" class="empty">Memuat…</td></tr></tbody>
+          <thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>IP</th><th>Details</th></tr></thead>
+          <tbody id="auditRows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
         </table>
         </div>
         <div class="bar" style="margin-top:12px;justify-content:flex-end">
-          <button class="btn" id="auditPrev" type="button">‹ Sebelumnya</button>
+          <button class="btn" id="auditPrev" type="button">‹ Previous</button>
           <span class="muted" id="auditPageInfo"></span>
-          <button class="btn" id="auditNext" type="button">Berikutnya ›</button>
+          <button class="btn" id="auditNext" type="button">Next ›</button>
         </div>
       </section>
 
@@ -116,15 +116,15 @@
 </div>
 
 <div class="row-menu" id="rowMenu" hidden>
-  <button class="udd-item" type="button" onclick="openBuilderFromMenu()">Buka Builder</button>
-  <button class="udd-item" type="button" onclick="openResponsesFromMenu()">Lihat Jawaban</button>
+  <button class="udd-item" type="button" onclick="openBuilderFromMenu()">Open Builder</button>
+  <button class="udd-item" type="button" onclick="openResponsesFromMenu()">View Responses</button>
 </div>
 
 <dialog id="confirmDlg" style="border:none;border-radius:12px;padding:28px 24px;max-width:380px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.2)">
   <p id="confirmMsg" style="margin:0 0 20px;font-size:15px;line-height:1.5"></p>
   <div style="display:flex;gap:10px;justify-content:flex-end">
-    <button id="confirmNo" class="btn" type="button">Batal</button>
-    <button id="confirmYes" class="btn danger" type="button">Ya, Lanjutkan</button>
+    <button id="confirmNo" class="btn" type="button">Cancel</button>
+    <button id="confirmYes" class="btn danger" type="button">Yes, Continue</button>
   </div>
 </dialog>
 

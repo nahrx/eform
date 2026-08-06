@@ -1,6 +1,6 @@
-/* Halaman pengelolaan satu kuesioner (Ringkasan/Bagikan/Akses Viewer/Akses Editor).
-   Mandiri seperti halaman lain di app ini (builder-bridge.js, admin.js) — helper
-   dasar (api/esc/adminToast/adminConfirm) sengaja diduplikasi, bukan diimpor. */
+/* The single-form management page (Overview/Share/Viewer Access/Editor Access).
+   Self-contained like the other pages in this app (builder-bridge.js, admin.js) — the basic
+   helpers (api/esc/adminToast/adminConfirm) are deliberately duplicated, not imported. */
 const token=localStorage.getItem("eform_token");
 if(!token) location.replace("/login");
 const H={"Authorization":"Bearer "+token,"Content-Type":"application/json"};
@@ -35,7 +35,7 @@ function adminConfirm(msg,onConfirm){
 
 async function api(path,opts={}){
   const r=await fetch(path,{...opts,headers:{...H,...(opts.headers||{})}});
-  if(r.status===401){localStorage.removeItem("eform_token");location.replace("/login");throw new Error("sesi habis");}
+  if(r.status===401){localStorage.removeItem("eform_token");location.replace("/login");throw new Error("session expired");}
   const ct=r.headers.get("content-type")||""; const data=ct.includes("json")?await r.json():null;
   if(!r.ok) throw new Error((data&&data.error)||("HTTP "+r.status));
   return data;
@@ -87,7 +87,7 @@ async function loadForm(){
     document.getElementById("mgSidebarTitle").textContent=f.title;
     renderOverview(f);
   }catch(e){
-    adminToast("Gagal memuat kuesioner: "+e.message,true);
+    adminToast("Failed to load form: "+e.message,true);
   }
 }
 
@@ -95,17 +95,17 @@ async function renderOverview(f){
   const statusEl=document.getElementById("ovStatus");
   statusEl.textContent=f.status;
   statusEl.className="tag "+f.status;
-  document.getElementById("ovUpdated").textContent="Diperbarui "+new Date(f.updatedAt).toLocaleString("id-ID");
+  document.getElementById("ovUpdated").textContent="Updated "+new Date(f.updatedAt).toLocaleString("id-ID");
   const pubBtn=document.getElementById("ovPubBtn");
-  pubBtn.textContent=f.status==="published"?"Tarik":"Publikasikan";
+  pubBtn.textContent=f.status==="published"?"Unpublish":"Publish";
   const respEl=document.getElementById("ovResponses");
   const delBtn=document.getElementById("ovDeleteBtn");
-  respEl.textContent="Memuat jumlah jawaban…";
+  respEl.textContent="Loading response count…";
   try{
     const d=await api("/api/forms/"+FORM_ID+"/responses?limit=1");
-    respEl.textContent=d.total+" jawaban";
+    respEl.textContent=d.total+" responses";
     delBtn.disabled=d.total>0;
-    delBtn.title=d.total>0?"Tidak dapat dihapus karena sudah ada jawaban":"";
+    delBtn.title=d.total>0?"Cannot be deleted because it already has responses":"";
   }catch(e){respEl.textContent="";}
 }
 
@@ -116,7 +116,7 @@ async function togglePub(){
 }
 
 function delForm(){
-  adminConfirm("Hapus kuesioner \""+FORM_TITLE+"\"? Kuesioner hanya dapat dihapus jika belum ada jawaban.",async()=>{
+  adminConfirm("Delete form \""+FORM_TITLE+"\"? A form can only be deleted while it has no responses.",async()=>{
     try{await api("/api/forms/"+FORM_ID,{method:"DELETE"});location.href="/admin";}catch(e){adminToast(e.message,true);}
   });
 }
@@ -147,7 +147,7 @@ function switchSection(sec){
 }
 
 /* ======================================================
-   BAGIKAN (dulu shareDlg)
+   SHARE (formerly shareDlg)
    ====================================================== */
 
 function initShareSection(){
@@ -156,8 +156,8 @@ function initShareSection(){
 
 function openShareCreateDlg(){
   $("#shareNote").innerHTML = FORM_STATUS==="published"
-    ? "Kuesioner sudah <b>published</b> — tautan bisa langsung diakses publik."
-    : "⚠️ Kuesioner masih <b>draft</b>. Tautan dibuat, tapi publik baru bisa membuka setelah dipublikasikan.";
+    ? "The form is already <b>published</b> — the link can be accessed publicly right away."
+    : "⚠️ The form is still <b>draft</b>. The link has been created, but the public can only open it once it's published.";
   $("#shareLabel").value="";$("#sharePw").value="";
   $("#shareMulti").checked=false;$("#shareAllow").checked=true;
   document.getElementById("shareAccessPublic").checked=true;
@@ -182,14 +182,14 @@ function renderPendingEmails(){
         <td class="muted">${esc(e.note)}</td>
         <td><button class="btn danger btn-xs" onclick="removePending(${i})">✕</button></td>
       </tr>`).join("")}</tbody></table>`
-    :"<div class='muted' style='font-size:12px;padding:4px 0'>Belum ada email ditambahkan.</div>";
+    :"<div class='muted' style='font-size:12px;padding:4px 0'>No emails added yet.</div>";
 }
 function removePending(i){pendingEmails.splice(i,1);renderPendingEmails();}
 $("#btnAddNewEmail").addEventListener("click",()=>{
   const email=$("#newEmailInput").value.trim().toLowerCase();
   const note=$("#newEmailNote").value.trim();
   if(!email){$("#newEmailInput").focus();return;}
-  if(pendingEmails.some(e=>e.email===email)){adminToast("Email sudah ada di daftar",true);return;}
+  if(pendingEmails.some(e=>e.email===email)){adminToast("Email is already in the list",true);return;}
   pendingEmails.push({email,note});
   $("#newEmailInput").value="";$("#newEmailNote").value="";
   $("#newEmailInput").focus();
@@ -220,7 +220,7 @@ async function saveShareEdit(id,hasPassword){
   const expInput=(document.getElementById("eexp_"+id)?.value||"");
   const expiresAt=expInput?new Date(expInput).toISOString():"";
   const btn=document.getElementById("esave_"+id);
-  if(btn){btn.disabled=true;btn.textContent="Menyimpan…";}
+  if(btn){btn.disabled=true;btn.textContent="Saving…";}
   try{
     await api("/api/shares/"+id,{method:"PATCH",body:JSON.stringify({
       label,allowResponses,multiResponse,accessMode,
@@ -228,7 +228,7 @@ async function saveShareEdit(id,hasPassword){
       updateExpiry:true,expiresAt
     })});
     editingShareId=null;refreshShares();
-  }catch(e){adminToast(e.message,true);if(btn){btn.disabled=false;btn.textContent="Simpan";}}
+  }catch(e){adminToast(e.message,true);if(btn){btn.disabled=false;btn.textContent="Save";}}
 }
 
 const ICON_LOCK='<svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="9" width="11" height="8" rx="1.5"/><path d="M7 9V6a3 3 0 0 1 6 0v3"/></svg>';
@@ -236,14 +236,14 @@ const ICON_COPY='<svg viewBox="0 0 20 20" width="15" height="15" fill="none" str
 const ICON_EYE_SM='<svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 10 Q10 2 18.5 10 Q10 18 1.5 10 Z"/><circle cx="10" cy="10" r="2.3"/></svg>';
 
 function copyShareUrl(url){
-  navigator.clipboard.writeText(url).then(()=>adminToast("Tautan disalin")).catch(()=>adminToast("Gagal menyalin",true));
+  navigator.clipboard.writeText(url).then(()=>adminToast("Link copied")).catch(()=>adminToast("Copy failed",true));
 }
 
 async function refreshShares(){
   try{
     const {shares}=await api("/api/forms/"+FORM_ID+"/shares");
     if(!shares||!shares.length){
-      $("#shareList").innerHTML='<div class="share-empty muted">Belum ada tautan share. Klik "+ Buat Tautan Share" untuk membuat yang pertama.</div>';
+      $("#shareList").innerHTML='<div class="share-empty muted">No share links yet. Click "+ Create Share Link" to create the first one.</div>';
       return;
     }
     const emailMap={};
@@ -262,7 +262,7 @@ async function refreshShares(){
           <input id="elabel_${s.id}" value="${esc(s.label||"")}" style="flex:1">
         </div>
         <div class="edit-row" style="gap:16px;flex-wrap:wrap">
-          <label class="muted"><input type="checkbox" id="eallow_${s.id}" ${s.allowResponses?"checked":""}> Terima jawaban</label>
+          <label class="muted"><input type="checkbox" id="eallow_${s.id}" ${s.allowResponses?"checked":""}> Accepting responses</label>
           <label class="muted"><input type="checkbox" id="emulti_${s.id}" ${s.multiResponse?"checked":""}> Multi-respons</label>
         </div>
         <div class="edit-row" style="gap:16px;flex-wrap:wrap">
@@ -270,19 +270,19 @@ async function refreshShares(){
           <label class="muted"><input type="radio" name="eacc_${s.id}" value="public" ${s.accessMode!=="restricted"?"checked":""}> Publik</label>
           <label class="muted"><input type="radio" name="eacc_${s.id}" value="restricted" ${s.accessMode==="restricted"?"checked":""}> Terbatas</label>
         </div>
-        <div class="edit-row"><span class="edit-lbl">Password baru</span>
-          <input id="epw_${s.id}" type="text" placeholder="${s.hasPassword?"Password sudah diatur — isi untuk ubah":"Opsional"}" style="flex:1">
+        <div class="edit-row"><span class="edit-lbl">New password</span>
+          <input id="epw_${s.id}" type="text" placeholder="${s.hasPassword?"Password already set — fill in to change":"Opsional"}" style="flex:1">
         </div>
         ${s.hasPassword?`<div class="edit-row"><span class="edit-lbl"></span>
-          <label class="muted"><input type="checkbox" id="eclearpw_${s.id}"> Hapus password yang ada</label>
+          <label class="muted"><input type="checkbox" id="eclearpw_${s.id}"> Remove the existing password</label>
         </div>`:""}
-        <div class="edit-row"><span class="edit-lbl">Kedaluwarsa</span>
+        <div class="edit-row"><span class="edit-lbl">Expires</span>
           <input id="eexp_${s.id}" type="datetime-local" value="${toLocalDT(s.expiresAt)}" style="flex:1">
-          <span class="muted" style="font-size:11px">Kosongkan = tidak ada batas</span>
+          <span class="muted" style="font-size:11px">Leave empty = no limit</span>
         </div>
         <div class="acts" style="margin-top:10px">
-          <button class="btn primary btn-sm" id="esave_${s.id}" onclick="saveShareEdit('${s.id}',${s.hasPassword})">Simpan</button>
-          <button class="btn btn-sm" onclick="cancelEdit()">Batal</button>
+          <button class="btn primary btn-sm" id="esave_${s.id}" onclick="saveShareEdit('${s.id}',${s.hasPassword})">Save</button>
+          <button class="btn btn-sm" onclick="cancelEdit()">Cancel</button>
         </div>
       </div>`:"";
 
@@ -291,14 +291,14 @@ async function refreshShares(){
         const emails=emailMap[s.id]||[];
         const rows=emails.length
           ?emails.map(e=>`<tr><td>${esc(e.email)}</td><td class="muted">${esc(e.note)}</td><td><button class="btn danger btn-xs" onclick="removeEmail('${e.id}')">✕</button></td></tr>`).join("")
-          :`<tr><td colspan="3" class="muted" style="padding:6px 0">Belum ada akun terdaftar.</td></tr>`;
+          :`<tr><td colspan="3" class="muted" style="padding:6px 0">No accounts registered yet.</td></tr>`;
         emailSection=`<div class="email-sect">
-          <div class="email-sect-h">Akun yang diizinkan (${emails.length})</div>
+          <div class="email-sect-h">Allowed accounts (${emails.length})</div>
           <table class="email-tbl"><tbody>${rows}</tbody></table>
           <div class="row" style="gap:6px;margin-top:8px">
-            <input id="addIn_${s.id}" type="email" placeholder="email@contoh.com" style="flex:2">
-            <input id="addNote_${s.id}" placeholder="Catatan" style="flex:2">
-            <button class="btn btn-xs" onclick="addEmailToShare('${s.id}')">+ Tambah</button>
+            <input id="addIn_${s.id}" type="email" placeholder="email@example.com" style="flex:2">
+            <input id="addNote_${s.id}" placeholder="Note" style="flex:2">
+            <button class="btn btn-xs" onclick="addEmailToShare('${s.id}')">+ Add</button>
           </div>
         </div>`;
       }
@@ -306,23 +306,23 @@ async function refreshShares(){
       return `<div class="share-card">
         <div class="share-card-top">
           <div class="share-card-title">
-            <b>${esc(s.label||"(tanpa label)")}</b>
-            <span class="tag ${s.isActive?"published":"archived"}">${s.isActive?"Aktif":"Nonaktif"}</span>
+            <b>${esc(s.label||"(no label)")}</b>
+            <span class="tag ${s.isActive?"published":"archived"}">${s.isActive?"Active":"Inactive"}</span>
           </div>
           ${s.isActive&&!isEditing?`<button class="btn btn-xs" onclick="startEdit('${s.id}')">Edit</button>`:""}
         </div>
         ${badges.length?`<div class="share-badges">${badges.join("")}</div>`:""}
         <div class="share-url-row">
           <code class="share-url">${esc(s.shareUrl)}</code>
-          <button class="share-copy-btn" type="button" title="Salin tautan" onclick="copyShareUrl('${esc(s.shareUrl)}')">${ICON_COPY}</button>
+          <button class="share-copy-btn" type="button" title="Copy link" onclick="copyShareUrl('${esc(s.shareUrl)}')">${ICON_COPY}</button>
         </div>
         <div class="share-meta muted">${ICON_EYE_SM} ${s.viewCount}× dibuka</div>
         ${editSection}${emailSection}
         <div class="acts" style="margin-top:10px">
-          <a class="btn" href="${esc(s.shareUrl)}" target="_blank">Buka</a>
+          <a class="btn" href="${esc(s.shareUrl)}" target="_blank">Open</a>
           ${!isEditing?(s.isActive
-            ?`<button class="btn danger" onclick="revoke('${s.id}')">Cabut</button>`
-            :`<button class="btn" onclick="reactivateShare('${s.id}')">Aktifkan Kembali</button><button class="btn danger" onclick="deleteShare('${s.id}')">Hapus</button>`
+            ?`<button class="btn danger" onclick="revoke('${s.id}')">Revoke</button>`
+            :`<button class="btn" onclick="reactivateShare('${s.id}')">Reactivate</button><button class="btn danger" onclick="deleteShare('${s.id}')">Delete</button>`
           ):""}
         </div>
       </div>`;
@@ -347,11 +347,11 @@ async function removeEmail(id){
 }
 async function revoke(id){ try{await api("/api/shares/"+id,{method:"DELETE"});refreshShares();}catch(e){adminToast(e.message,true);} }
 async function reactivateShare(id){
-  try{await api("/api/shares/"+id+"/reactivate",{method:"POST"});refreshShares();adminToast("Tautan diaktifkan kembali");}
+  try{await api("/api/shares/"+id+"/reactivate",{method:"POST"});refreshShares();adminToast("Link reactivated");}
   catch(e){adminToast(e.message,true);}
 }
 async function deleteShare(id){
-  adminConfirm("Hapus permanen tautan ini beserta semua konfigurasinya?",async()=>{
+  adminConfirm("Permanently delete this link and all its configuration?",async()=>{
     try{await api("/api/shares/"+id+"/permanent",{method:"DELETE"});refreshShares();}catch(e){adminToast(e.message,true);}
   });
 }
@@ -376,18 +376,18 @@ $("#makeShare").addEventListener("click",async()=>{
     $("#restrictedSection").style.display="none";
     shareCreateDlg.close();
     refreshShares();
-    adminToast("Tautan share dibuat");
+    adminToast("Share link created");
   }catch(e){adminToast(e.message,true);}
 });
 
 /* ======================================================
-   AKSES EDITOR — sisa yang masih dipakai tabel gabungan User
+   EDITOR ACCESS — what the combined User table still uses
    ====================================================== */
 
 let _epPermCache=[];
 
 async function removeEditorPerm(permId,name){
-  adminConfirm(`Cabut akses editor "${name}" dari kuesioner ini?`,async()=>{
+  adminConfirm(`Revoke editor access for "${name}" on this form?`,async()=>{
     try{
       await api("/api/editor-permissions/"+permId,{method:"DELETE"});
       await refreshUserPermList();
@@ -398,7 +398,7 @@ async function removeEditorPerm(permId,name){
 }
 
 /* ======================================================
-   AKSES VIEWER — sisa yang masih dipakai tabel gabungan User
+   VIEWER ACCESS — what the combined User table still uses
    ====================================================== */
 
 let _vpdFilters={};
@@ -409,7 +409,7 @@ function renderFilterChips(containerId,filters,removeFn){
   if(!el)return;
   const entries=Object.entries(filters||{});
   if(!entries.length){
-    el.innerHTML='<span style="font-size:11px;color:var(--muted)">Belum ada batasan filter.</span>';
+    el.innerHTML='<span style="font-size:11px;color:var(--muted)">No filter restrictions yet.</span>';
     return;
   }
   el.innerHTML=entries.map(([k,v])=>`
@@ -432,7 +432,7 @@ function buildFieldOptions(schema,selectId){
   }
   for(const p of schema?.pages||[])walk(p.components||[]);
   const cur=sel.value;
-  sel.innerHTML='<option value="">— variabel —</option>'+
+  sel.innerHTML='<option value="">— field —</option>'+
     fields.map(f=>`<option value="${esc(f.name)}">${esc(f.label)}</option>`).join('');
   sel.value=cur;
 }
@@ -440,7 +440,7 @@ function buildFieldOptions(schema,selectId){
 function addVpdFilter(){
   const field=document.getElementById("vpdFilterField").value;
   const value=(document.getElementById("vpdFilterValue").value||"").trim();
-  if(!field||!value){adminToast("Pilih variabel dan masukkan nilai",true);return;}
+  if(!field||!value){adminToast("Select a field and enter a value",true);return;}
   _vpdFilters[field]=value;
   document.getElementById("vpdFilterValue").value="";
   renderFilterChips("vpdFilterList",_vpdFilters,"removeVpdFilter");
@@ -453,7 +453,7 @@ function removeVpdFilter(field){
 function addEpdFilter(){
   const field=document.getElementById("epdFilterField").value;
   const value=(document.getElementById("epdFilterValue").value||"").trim();
-  if(!field||!value){adminToast("Pilih variabel dan masukkan nilai",true);return;}
+  if(!field||!value){adminToast("Select a field and enter a value",true);return;}
   _epdFilters[field]=value;
   document.getElementById("epdFilterValue").value="";
   renderFilterChips("epdFilterList",_epdFilters,"removeEpdFilter");
@@ -485,12 +485,12 @@ async function openEpDetail(permId,editorName){
 
     const picker=document.getElementById("epdRespondentPicker");
     const allowed=new Set((allowedData.respondents||[]).map(r=>r.respondentId));
-    picker.innerHTML=`<option value="">— pilih responden —</option>`+
+    picker.innerHTML=`<option value="">— select respondent —</option>`+
       (respondentsData.respondents||[]).filter(r=>!allowed.has(r.id)).map(r=>
         `<option value="${esc(r.id)}">${esc(r.name||r.email||r.id)}</option>`).join("");
 
     epDetailDlg.showModal();
-  }catch(e){adminToast("Gagal memuat: "+e.message,true);}
+  }catch(e){adminToast("Failed to load: "+e.message,true);}
 }
 
 document.querySelectorAll("input[name='epdRA']").forEach(rb=>{
@@ -503,7 +503,7 @@ function toggleEditorRespondentSection(show){
 
 function renderAllowedEditorRespondents(list){
   const el=document.getElementById("epdRespondentList");
-  if(!list.length){el.innerHTML='<div class="muted" style="font-size:11px">Belum ada responden dipilih.</div>';return;}
+  if(!list.length){el.innerHTML='<div class="muted" style="font-size:11px">No respondents selected yet.</div>';return;}
   el.innerHTML=list.map(r=>`
     <div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px">
       <span style="flex:1">${esc(r.name||r.email||r.respondentId)}</span>
@@ -525,7 +525,7 @@ async function addAllowedEditorRespondent(){
     renderAllowedEditorRespondents(perm.respondents||[]);
     const picker=document.getElementById("epdRespondentPicker");
     const allowed=new Set((perm.respondents||[]).map(r=>r.respondentId));
-    picker.innerHTML=`<option value="">— pilih responden —</option>`+
+    picker.innerHTML=`<option value="">— select respondent —</option>`+
       (formRespondents.respondents||[]).filter(r=>!allowed.has(r.id)).map(r=>
         `<option value="${esc(r.id)}">${esc(r.name||r.email||r.id)}</option>`).join("");
   }catch(e){adminToast("Gagal: "+e.message,true);}
@@ -541,7 +541,7 @@ async function removeAllowedEditorRespondent(id){
     renderAllowedEditorRespondents(perm.respondents||[]);
     const picker=document.getElementById("epdRespondentPicker");
     const allowed=new Set((perm.respondents||[]).map(r=>r.respondentId));
-    picker.innerHTML=`<option value="">— pilih responden —</option>`+
+    picker.innerHTML=`<option value="">— select respondent —</option>`+
       (formRespondents.respondents||[]).filter(r=>!allowed.has(r.id)).map(r=>
         `<option value="${esc(r.id)}">${esc(r.name||r.email||r.id)}</option>`).join("");
   }catch(e){adminToast("Gagal: "+e.message,true);}
@@ -555,16 +555,16 @@ async function saveEpDetail(){
     });
     epDetailDlg.close();
     await refreshUserPermList();
-  }catch(e){adminToast("Gagal menyimpan: "+e.message,true);}
+  }catch(e){adminToast("Failed to save: "+e.message,true);}
 }
 
 function convertEpToViewer(){
-  adminConfirm("Ubah akses ini menjadi Viewer? Akses editor yang lama akan dihapus dan digantikan akses viewer baru dengan pengaturan yang sama.",async()=>{
+  adminConfirm("Convert this access to Viewer? The existing editor access is removed and replaced by a new viewer access with the same settings.",async()=>{
     try{
       await api("/api/editor-permissions/"+_epdPermId+"/convert-to-viewer",{method:"POST"});
       epDetailDlg.close();
       await refreshUserPermList();
-      adminToast("Akses diubah menjadi viewer");
+      adminToast("Access switched to viewer");
     }catch(e){adminToast("Gagal: "+e.message,true);}
   });
 }
@@ -572,14 +572,14 @@ function convertEpToViewer(){
 let _vpPermCache=[];
 
 async function removeViewerPerm(permId,viewerName){
-  adminConfirm(`Cabut akses "${viewerName}" dari kuesioner ini?`,async()=>{
+  adminConfirm(`Revoke access for "${viewerName}" on this form?`,async()=>{
     try{await api("/api/viewer-permissions/"+permId,{method:"DELETE"});await refreshUserPermList();}
     catch(e){adminToast("Gagal: "+e.message,true);}
   });
 }
 
 /* ======================================================
-   USER — daftar gabungan viewer + editor untuk kuesioner ini
+   USERS — the combined viewer + editor list for this form
    ====================================================== */
 
 async function initUserSection(){
@@ -588,7 +588,7 @@ async function initUserSection(){
 
 async function refreshUserPermList(){
   const el=document.getElementById("userPermList");
-  el.innerHTML='<tr><td colspan="5" class="empty">Memuat…</td></tr>';
+  el.innerHTML='<tr><td colspan="5" class="empty">Loading…</td></tr>';
   try{
     const [vRes,eRes]=await Promise.all([
       api("/api/forms/"+FORM_ID+"/viewer-permissions"),
@@ -609,14 +609,14 @@ function renderUserPermTable(){
     ..._epPermCache.map(p=>({...p,role:"editor"})),
   ];
   if(!rows.length){
-    el.innerHTML='<tr><td colspan="5" class="empty">Belum ada user yang ditambahkan.</td></tr>';
+    el.innerHTML='<tr><td colspan="5" class="empty">No users added yet.</td></tr>';
     return;
   }
   el.innerHTML=rows.map(p=>{
     const isViewer=p.role==="viewer";
     const email=isViewer?p.viewerUsername:(p.editorName||"(editor)");
-    const respAccess=p.respondentAccess==="all"?"Semua responden":`${p.allowedCount} responden dipilih`;
-    const varAccess=isViewer?(p.visibleFields&&p.visibleFields.length?p.visibleFields.length+" variabel":"Semua variabel"):"-";
+    const respAccess=p.respondentAccess==="all"?"All respondents":`${p.allowedCount} respondents selected`;
+    const varAccess=isViewer?(p.visibleFields&&p.visibleFields.length?p.visibleFields.length+" variabel":"All fields"):"-";
     const detailFn=isViewer?"openVpDetail":"openEpDetail";
     const removeFn=isViewer?"removeViewerPerm":"removeEditorPerm";
     return`<tr>
@@ -625,8 +625,8 @@ function renderUserPermTable(){
       <td class="muted">${respAccess}</td>
       <td class="muted">${varAccess}</td>
       <td class="acts">
-        <button class="btn btn-xs" onclick="${detailFn}('${p.id}','${esc(email)}')">Konfigurasi</button>
-        <button class="btn danger btn-xs" onclick="${removeFn}('${p.id}','${esc(email)}')">Hapus</button>
+        <button class="btn btn-xs" onclick="${detailFn}('${p.id}','${esc(email)}')">Configure</button>
+        <button class="btn danger btn-xs" onclick="${removeFn}('${p.id}','${esc(email)}')">Delete</button>
       </td>
     </tr>`;
   }).join("");
@@ -647,7 +647,7 @@ function toggleUaRespondentSection(show){
 
 function renderUaRespondents(){
   const el=document.getElementById("uaRespondentList");
-  if(!_uaSelectedRespondents.length){el.innerHTML='<div class="muted" style="font-size:11px">Belum ada responden dipilih.</div>';return;}
+  if(!_uaSelectedRespondents.length){el.innerHTML='<div class="muted" style="font-size:11px">No respondents selected yet.</div>';return;}
   el.innerHTML=_uaSelectedRespondents.map(r=>`
     <div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px">
       <span style="flex:1">${esc(r.name||r.email||r.id)}</span>
@@ -655,7 +655,7 @@ function renderUaRespondents(){
     </div>`).join("");
   const picker=document.getElementById("uaRespondentPicker");
   const chosen=new Set(_uaSelectedRespondents.map(r=>r.id));
-  picker.innerHTML=`<option value="">— pilih responden —</option>`+
+  picker.innerHTML=`<option value="">— select respondent —</option>`+
     _uaAllRespondents.filter(r=>!chosen.has(r.id)).map(r=>
       `<option value="${esc(r.id)}">${esc(r.name||r.email||r.id)}</option>`).join("");
 }
@@ -681,7 +681,7 @@ function uaCheckAll(on){
 function addUaFilter(){
   const field=document.getElementById("uaFilterField").value;
   const value=(document.getElementById("uaFilterValue").value||"").trim();
-  if(!field||!value){adminToast("Pilih variabel dan masukkan nilai",true);return;}
+  if(!field||!value){adminToast("Select a field and enter a value",true);return;}
   _uaFilters[field]=value;
   document.getElementById("uaFilterValue").value="";
   renderFilterChips("uaFilterList",_uaFilters,"removeUaFilter");
@@ -702,7 +702,7 @@ async function openUserAddDlg(){
   _uaSelectedRespondents=[];
   _uaAllRespondents=[];
   renderUaRespondents();
-  document.getElementById("uaRespondentPicker").innerHTML='<option value="">— pilih responden —</option>';
+  document.getElementById("uaRespondentPicker").innerHTML='<option value="">— select respondent —</option>';
 
   buildFieldCheckboxes("uaFieldList",FORM_SCHEMA,[]);
 
@@ -733,10 +733,10 @@ async function submitUserAdd(){
     const total=document.querySelectorAll("#uaFieldList input").length;
     visibleFields=checked.length===total?[]:checked;
   }
-  if(!email){adminToast("Email wajib diisi",true);return;}
-  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){adminToast("Format email tidak valid",true);return;}
+  if(!email){adminToast("Email is required",true);return;}
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){adminToast("Invalid email format",true);return;}
   const btn=document.getElementById("uaSaveBtn");
-  btn.disabled=true;btn.textContent="Menyimpan…";
+  btn.disabled=true;btn.textContent="Saving…";
   try{
     const path=role==="viewer"
       ?"/api/forms/"+FORM_ID+"/viewer-permissions/bulk"
@@ -759,7 +759,7 @@ async function submitUserAdd(){
     await refreshUserPermList();
     adminToast("User ditambahkan");
   }catch(e){adminToast("Gagal: "+e.message,true);}
-  finally{btn.disabled=false;btn.textContent="Tambah";}
+  finally{btn.disabled=false;btn.textContent="Add";}
 }
 
 let _vpdPermId=null;
@@ -787,12 +787,12 @@ async function openVpDetail(permId,viewerName){
 
     const picker=document.getElementById("vpdRespondentPicker");
     const allowed=new Set((allowedData.respondents||[]).map(r=>r.respondentId));
-    picker.innerHTML=`<option value="">— pilih responden —</option>`+
+    picker.innerHTML=`<option value="">— select respondent —</option>`+
       (respondentsData.respondents||[]).filter(r=>!allowed.has(r.id)).map(r=>
         `<option value="${esc(r.id)}">${esc(r.name||r.email||r.id)}</option>`).join("");
 
     vpDetailDlg.showModal();
-  }catch(e){adminToast("Gagal memuat: "+e.message,true);}
+  }catch(e){adminToast("Failed to load: "+e.message,true);}
 }
 
 document.querySelectorAll("input[name='vpdRA']").forEach(rb=>{
@@ -805,7 +805,7 @@ function toggleRespondentSection(show){
 
 function renderAllowedRespondents(list){
   const el=document.getElementById("vpdRespondentList");
-  if(!list.length){el.innerHTML='<div class="muted" style="font-size:11px">Belum ada responden dipilih.</div>';return;}
+  if(!list.length){el.innerHTML='<div class="muted" style="font-size:11px">No respondents selected yet.</div>';return;}
   el.innerHTML=list.map(r=>`
     <div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px">
       <span style="flex:1">${esc(r.name||r.email||r.respondentId)}</span>
@@ -827,7 +827,7 @@ async function addAllowedRespondent(){
     renderAllowedRespondents(perm.respondents||[]);
     const picker=document.getElementById("vpdRespondentPicker");
     const allowed=new Set((perm.respondents||[]).map(r=>r.respondentId));
-    picker.innerHTML=`<option value="">— pilih responden —</option>`+
+    picker.innerHTML=`<option value="">— select respondent —</option>`+
       (formRespondents.respondents||[]).filter(r=>!allowed.has(r.id)).map(r=>
         `<option value="${esc(r.id)}">${esc(r.name||r.email||r.id)}</option>`).join("");
   }catch(e){adminToast("Gagal: "+e.message,true);}
@@ -843,7 +843,7 @@ async function removeAllowedRespondent(id){
     renderAllowedRespondents(perm.respondents||[]);
     const picker=document.getElementById("vpdRespondentPicker");
     const allowed=new Set((perm.respondents||[]).map(r=>r.respondentId));
-    picker.innerHTML=`<option value="">— pilih responden —</option>`+
+    picker.innerHTML=`<option value="">— select respondent —</option>`+
       (formRespondents.respondents||[]).filter(r=>!allowed.has(r.id)).map(r=>
         `<option value="${esc(r.id)}">${esc(r.name||r.email||r.id)}</option>`).join("");
   }catch(e){adminToast("Gagal: "+e.message,true);}
@@ -861,7 +861,7 @@ function buildFieldCheckboxes(containerId,schema,checked){
     }
   }
   for(const p of schema?.pages||[])walk(p.components||[]);
-  if(!fields.length){el.innerHTML='<div style="font-size:12px;color:var(--muted)">Tidak ada variabel di kuesioner ini.</div>';return;}
+  if(!fields.length){el.innerHTML='<div style="font-size:12px;color:var(--muted)">There are no fields in this form.</div>';return;}
   el.innerHTML=fields.map(f=>`
     <label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;cursor:pointer">
       <input type="checkbox" value="${esc(f.name)}" ${!checked.length||checked.includes(f.name)?"checked":""}>
@@ -886,25 +886,25 @@ async function savePermDetail(){
     });
     vpDetailDlg.close();
     await refreshUserPermList();
-  }catch(e){adminToast("Gagal menyimpan: "+e.message,true);}
+  }catch(e){adminToast("Failed to save: "+e.message,true);}
 }
 
 function convertVpToEditor(){
-  adminConfirm("Ubah akses ini menjadi Editor? Akses viewer yang lama akan dihapus dan digantikan akses editor baru dengan pengaturan yang sama.",async()=>{
+  adminConfirm("Convert this access to Editor? The existing viewer access is removed and replaced by a new editor access with the same settings.",async()=>{
     try{
       await api("/api/viewer-permissions/"+_vpdPermId+"/convert-to-editor",{method:"POST"});
       vpDetailDlg.close();
       await refreshUserPermList();
-      adminToast("Akses diubah menjadi editor");
+      adminToast("Access switched to editor");
     }catch(e){adminToast("Gagal: "+e.message,true);}
   });
 }
 
 /* ======================================================
-   API — key untuk sistem eksternal menarik jawaban kuesioner ini
+   API — keys for external systems to pull this form's responses
    ====================================================== */
 
-let _akEditingId=null;            // null = sedang membuat key baru
+let _akEditingId=null;            // null = currently creating a new key
 let _akFilters={};
 let _akSelectedRespondents=[];
 let _akAllRespondents=[];
@@ -915,8 +915,8 @@ function initApiSection(){
   refreshApiKeys();
 }
 
-// apiUsageSnippet menyusun contoh curl memakai key sungguhan (saat baru dibuat) atau
-// placeholder (di dokumentasi bagian bawah).
+// apiUsageSnippet builds a curl example using the real key (right after creation) or
+// placeholder (in the documentation at the bottom).
 function apiUsageSnippet(key){
   const base=location.origin;
   return `curl -H "Authorization: Bearer ${key}" \\
@@ -926,14 +926,14 @@ function apiUsageSnippet(key){
 curl -H "Authorization: Bearer ${key}" \\
   "${base}/api/v1/forms/${FORM_ID}/responses.csv" -o responses.csv
 
-# cek konfigurasi key tanpa menarik data
+# check the key configuration without pulling data
 curl -H "Authorization: Bearer ${key}" "${base}/api/v1/me"`;
 }
 
 function akStatus(k){
-  if(!k.isActive) return{cls:"archived",text:"Nonaktif"};
-  if(k.expiresAt&&new Date(k.expiresAt)<new Date()) return{cls:"archived",text:"Kedaluwarsa"};
-  return{cls:"published",text:"Aktif"};
+  if(!k.isActive) return{cls:"archived",text:"Inactive"};
+  if(k.expiresAt&&new Date(k.expiresAt)<new Date()) return{cls:"archived",text:"Expires"};
+  return{cls:"published",text:"Active"};
 }
 
 async function refreshApiKeys(){
@@ -942,24 +942,24 @@ async function refreshApiKeys(){
     const{apiKeys}=await api("/api/forms/"+FORM_ID+"/api-keys");
     document.getElementById("apiDoc").hidden=!(apiKeys&&apiKeys.length);
     if(!apiKeys||!apiKeys.length){
-      el.innerHTML='<div class="share-empty muted">Belum ada API key. Klik "+ Buat API Key" untuk membuat yang pertama.</div>';
+      el.innerHTML='<div class="share-empty muted">No API keys yet. Click "+ Create API Key" to create the first one.</div>';
       return;
     }
     el.innerHTML=apiKeys.map(k=>{
       const st=akStatus(k);
       const badges=[];
-      badges.push(`<span class="tag">${k.respondentAccess==="all"?"Semua responden":`${k.allowedCount||0} responden`}</span>`);
-      badges.push(`<span class="tag">${k.visibleFields&&k.visibleFields.length?`${k.visibleFields.length} variabel`:"Semua variabel"}</span>`);
-      if(!k.includeRespondent) badges.push('<span class="tag">Tanpa identitas</span>');
+      badges.push(`<span class="tag">${k.respondentAccess==="all"?"All respondents":`${k.allowedCount||0} respondents`}</span>`);
+      badges.push(`<span class="tag">${k.visibleFields&&k.visibleFields.length?`${k.visibleFields.length} variabel`:"All fields"}</span>`);
+      if(!k.includeRespondent) badges.push('<span class="tag">No identity</span>');
       if(k.allowedIps&&k.allowedIps.length) badges.push(`<span class="tag">${k.allowedIps.length} IP</span>`);
       if(k.fieldFilters&&Object.keys(k.fieldFilters).length) badges.push(`<span class="tag">${Object.keys(k.fieldFilters).length} filter</span>`);
       const used=k.lastUsedAt
-        ? `Terakhir dipakai ${new Date(k.lastUsedAt).toLocaleString("id-ID")}${k.lastUsedIp?" dari "+esc(k.lastUsedIp):""}`
-        : "Belum pernah dipakai";
+        ? `Last used ${new Date(k.lastUsedAt).toLocaleString("id-ID")}${k.lastUsedIp?" from "+esc(k.lastUsedIp):""}`
+        : "Never used";
       return`<div class="share-card">
         <div class="share-card-top">
           <div class="share-card-title">
-            <b>${esc(k.label||"(tanpa label)")}</b>
+            <b>${esc(k.label||"(no label)")}</b>
             <span class="tag ${st.cls}">${st.text}</span>
           </div>
         </div>
@@ -967,10 +967,10 @@ async function refreshApiKeys(){
         <div class="share-url-row"><code class="share-url">eform_${esc(k.keyPrefix)}…</code></div>
         <div class="share-meta muted">${used} · ${k.requestCount||0}× permintaan${k.expiresAt?` · berlaku sampai ${new Date(k.expiresAt).toLocaleString("id-ID")}`:""}</div>
         <div class="acts" style="margin-top:10px">
-          <button class="btn" type="button" onclick="openApiKeyDlg('${k.id}')">Konfigurasi</button>
-          <button class="btn" type="button" onclick="openApiLogDlg('${k.id}','${esc(k.label||k.keyPrefix)}')">Log Akses</button>
-          <button class="btn" type="button" onclick="rotateApiKey('${k.id}','${esc(k.label||k.keyPrefix)}')">Rotasi</button>
-          <button class="btn danger" type="button" onclick="deleteApiKey('${k.id}','${esc(k.label||k.keyPrefix)}')">Hapus</button>
+          <button class="btn" type="button" onclick="openApiKeyDlg('${k.id}')">Configure</button>
+          <button class="btn" type="button" onclick="openApiLogDlg('${k.id}','${esc(k.label||k.keyPrefix)}')">Access Log</button>
+          <button class="btn" type="button" onclick="rotateApiKey('${k.id}','${esc(k.label||k.keyPrefix)}')">Rotate</button>
+          <button class="btn danger" type="button" onclick="deleteApiKey('${k.id}','${esc(k.label||k.keyPrefix)}')">Delete</button>
         </div>
       </div>`;
     }).join("");
@@ -987,7 +987,7 @@ function akCheckAll(on){
 
 function renderAkRespondents(){
   const el=document.getElementById("akRespondentList");
-  if(!_akSelectedRespondents.length){el.innerHTML='<div class="muted" style="font-size:11px">Belum ada responden dipilih.</div>';}
+  if(!_akSelectedRespondents.length){el.innerHTML='<div class="muted" style="font-size:11px">No respondents selected yet.</div>';}
   else{
     el.innerHTML=_akSelectedRespondents.map(r=>`
       <div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px">
@@ -997,7 +997,7 @@ function renderAkRespondents(){
   }
   const picker=document.getElementById("akRespondentPicker");
   const chosen=new Set(_akSelectedRespondents.map(r=>r.id));
-  picker.innerHTML=`<option value="">— pilih responden —</option>`+
+  picker.innerHTML=`<option value="">— select respondent —</option>`+
     _akAllRespondents.filter(r=>!chosen.has(r.id)).map(r=>
       `<option value="${esc(r.id)}">${esc(r.name||r.email||r.id)}</option>`).join("");
 }
@@ -1019,7 +1019,7 @@ function removeAkRespondent(id){
 function addAkFilter(){
   const field=document.getElementById("akFilterField").value;
   const value=(document.getElementById("akFilterValue").value||"").trim();
-  if(!field||!value){adminToast("Pilih variabel dan masukkan nilai",true);return;}
+  if(!field||!value){adminToast("Select a field and enter a value",true);return;}
   _akFilters[field]=value;
   document.getElementById("akFilterValue").value="";
   renderFilterChips("akFilterList",_akFilters,"removeAkFilter");
@@ -1029,12 +1029,12 @@ function removeAkFilter(field){
   renderFilterChips("akFilterList",_akFilters,"removeAkFilter");
 }
 
-// openApiKeyDlg dipakai untuk membuat (keyId kosong) maupun mengubah key yang ada.
+// openApiKeyDlg serves both creation (empty keyId) and editing an existing key.
 async function openApiKeyDlg(keyId){
   _akEditingId=keyId||null;
   const isEdit=!!_akEditingId;
-  document.getElementById("akDlgTitle").textContent=isEdit?"Konfigurasi API Key":"Buat API Key";
-  document.getElementById("akSaveBtn").textContent=isEdit?"Simpan":"Buat API Key";
+  document.getElementById("akDlgTitle").textContent=isEdit?"Configure API Key":"Create API Key";
+  document.getElementById("akSaveBtn").textContent=isEdit?"Save":"Create API Key";
   document.getElementById("akActiveRow").style.display=isEdit?"flex":"none";
 
   let k={label:"",respondentAccess:"all",visibleFields:[],fieldFilters:{},
@@ -1049,7 +1049,7 @@ async function openApiKeyDlg(keyId){
       const found=(list.apiKeys||[]).find(x=>x.id===_akEditingId);
       if(found) k=found;
       allowedRespondents=(allowed.respondents||[]).map(r=>({id:r.respondentId,name:r.name,email:r.email}));
-    }catch(e){adminToast("Gagal memuat: "+e.message,true);return;}
+    }catch(e){adminToast("Failed to load: "+e.message,true);return;}
   }
 
   document.getElementById("akLabel").value=k.label||"";
@@ -1082,7 +1082,7 @@ async function openApiKeyDlg(keyId){
   }catch(e){}
 }
 
-// collectApiKeyForm membaca seluruh isian dialog jadi payload API.
+// collectApiKeyForm reads the whole dialog into an API payload.
 function collectApiKeyForm(){
   const checked=[...document.querySelectorAll("#akFieldList input:checked")].map(cb=>cb.value);
   const total=document.querySelectorAll("#akFieldList input").length;
@@ -1090,7 +1090,7 @@ function collectApiKeyForm(){
   return{
     label:document.getElementById("akLabel").value.trim(),
     respondentAccess:document.querySelector("input[name='akRA']:checked")?.value||"all",
-    // Semua tercentang = tanpa pembatasan kolom, sama seperti permission viewer.
+    // Everything ticked = no column restriction, exactly like a viewer permission.
     visibleFields:checked.length===total?[]:checked,
     fieldFilters:_akFilters,
     includeRespondent:document.getElementById("akIncludeRespondent").checked,
@@ -1110,7 +1110,7 @@ async function submitApiKey(){
       await api("/api/api-keys/"+_akEditingId,{method:"PUT",body:JSON.stringify(body)});
       await syncAkRespondents(_akEditingId);
       apiKeyDlg.close();
-      adminToast("API key diperbarui");
+      adminToast("API key updated");
     }else{
       const res=await api("/api/forms/"+FORM_ID+"/api-keys",{method:"POST",body:JSON.stringify(body)});
       await syncAkRespondents(res.apiKey.id);
@@ -1122,7 +1122,7 @@ async function submitApiKey(){
   finally{btn.disabled=false;}
 }
 
-// syncAkRespondents menyamakan daftar responden di server dengan yang dipilih di dialog.
+// syncAkRespondents reconciles the respondent list on the server with the dialog's selection.
 async function syncAkRespondents(keyId){
   if(document.querySelector("input[name='akRA']:checked")?.value!=="selected") return;
   let existing=[];
@@ -1153,12 +1153,12 @@ function showApiKeyReveal(key){
 
 function copyApiKey(){
   navigator.clipboard.writeText(_akRevealedKey)
-    .then(()=>adminToast("API key disalin"))
-    .catch(()=>adminToast("Gagal menyalin",true));
+    .then(()=>adminToast("API key copied"))
+    .catch(()=>adminToast("Copy failed",true));
 }
 
 function rotateApiKey(id,label){
-  adminConfirm(`Rotasi API key "${label}"? Key yang lama langsung berhenti berfungsi dan sistem yang memakainya harus diperbarui.`,async()=>{
+  adminConfirm(`Rotate API key "${label}"? The old key stops working immediately and any system using it must be updated.`,async()=>{
     try{
       const res=await api("/api/api-keys/"+id+"/rotate",{method:"POST"});
       await refreshApiKeys();
@@ -1168,11 +1168,11 @@ function rotateApiKey(id,label){
 }
 
 function deleteApiKey(id,label){
-  adminConfirm(`Hapus API key "${label}"? Sistem yang memakainya akan langsung kehilangan akses.`,async()=>{
+  adminConfirm(`Delete API key "${label}"? Any system using it loses access immediately.`,async()=>{
     try{
       await api("/api/api-keys/"+id,{method:"DELETE"});
       await refreshApiKeys();
-      adminToast("API key dihapus");
+      adminToast("API key deleted");
     }catch(e){adminToast("Gagal: "+e.message,true);}
   });
 }
@@ -1180,12 +1180,12 @@ function deleteApiKey(id,label){
 async function openApiLogDlg(id,label){
   document.getElementById("alKeyLabel").textContent=label;
   const rows=document.getElementById("apiLogRows");
-  rows.innerHTML='<tr><td colspan="5" class="empty">Memuat…</td></tr>';
+  rows.innerHTML='<tr><td colspan="5" class="empty">Loading…</td></tr>';
   apiLogDlg.showModal();
   try{
     const{logs}=await api("/api/api-keys/"+id+"/logs?limit=100");
     if(!logs||!logs.length){
-      rows.innerHTML='<tr><td colspan="5" class="empty">Belum ada panggilan API.</td></tr>';
+      rows.innerHTML='<tr><td colspan="5" class="empty">No API calls yet.</td></tr>';
       return;
     }
     rows.innerHTML=logs.map(l=>{

@@ -12,95 +12,95 @@ import (
 	"github.com/nahrx/eform/internal/config"
 )
 
-func serverInstansi(nama, panggilan string) *Server {
+func orgServer(name, nickname string) *Server {
 	return &Server{cfg: &config.Config{
-		OrganisationName:     nama,
-		OrganisationNickname: panggilan,
+		OrganisationName:     name,
+		OrganisationNickname: nickname,
 	}}
 }
 
-func tulisHTML(t *testing.T, isi string) string {
+func writeHTML(t *testing.T, content string) string {
 	t.Helper()
-	p := filepath.Join(t.TempDir(), "halaman.html")
-	if err := os.WriteFile(p, []byte(isi), 0o600); err != nil {
+	p := filepath.Join(t.TempDir(), "page.html")
+	if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return p
 }
 
-func sajikan(t *testing.T, s *Server, path string) *httptest.ResponseRecorder {
+func serveOnce(t *testing.T, s *Server, path string) *httptest.ResponseRecorder {
 	t.Helper()
 	w := httptest.NewRecorder()
 	s.serveHTML(w, httptest.NewRequest(http.MethodGet, "/", nil), path)
 	return w
 }
 
-func TestServeHTMLMenggantiPlaceholderInstansi(t *testing.T) {
-	s := serverInstansi("BPS Provinsi Jawa Barat", "BPS Jabar")
-	p := tulisHTML(t, "<title>eForm · {{ORG_NAME}}</title><h1>eForm {{ORG_NICK}}</h1>")
+func TestServeHTMLSubstitutesOrganisationPlaceholders(t *testing.T) {
+	s := orgServer("BPS Provinsi Jawa Barat", "BPS Jabar")
+	p := writeHTML(t, "<title>eForm · {{ORG_NAME}}</title><h1>eForm {{ORG_NICK}}</h1>")
 
-	body := sajikan(t, s, p).Body.String()
+	body := serveOnce(t, s, p).Body.String()
 
 	if !strings.Contains(body, "eForm · BPS Provinsi Jawa Barat") {
-		t.Errorf("nama instansi tidak tersubstitusi: %q", body)
+		t.Errorf("organisation name was not substituted: %q", body)
 	}
 	if !strings.Contains(body, "eForm BPS Jabar") {
-		t.Errorf("nama panggilan tidak tersubstitusi: %q", body)
+		t.Errorf("organisation nickname was not substituted: %q", body)
 	}
-	// Yang paling penting: placeholder mentah tidak boleh sampai ke browser.
+	// Most important of all: a raw placeholder must never reach the browser.
 	if strings.Contains(body, "{{ORG_") {
-		t.Errorf("masih ada placeholder yang belum diganti: %q", body)
+		t.Errorf("an unsubstituted placeholder remains: %q", body)
 	}
 }
 
-// Tiap placeholder bisa muncul berkali-kali dalam satu berkas (public.html
-// memakainya di empat tempat), jadi semuanya harus ikut terganti.
-func TestServeHTMLMenggantiSemuaKemunculan(t *testing.T) {
-	s := serverInstansi("Instansi X", "IX")
-	p := tulisHTML(t, "{{ORG_NAME}} a {{ORG_NAME}} b {{ORG_NICK}} c {{ORG_NICK}}")
+// A placeholder can appear many times in one file (public.html uses them in four
+// places), so every occurrence must be substituted.
+func TestServeHTMLSubstitutesEveryOccurrence(t *testing.T) {
+	s := orgServer("Organisation X", "IX")
+	p := writeHTML(t, "{{ORG_NAME}} a {{ORG_NAME}} b {{ORG_NICK}} c {{ORG_NICK}}")
 
-	body := sajikan(t, s, p).Body.String()
+	body := serveOnce(t, s, p).Body.String()
 
-	if got := strings.Count(body, "Instansi X"); got != 2 {
-		t.Errorf("nama instansi muncul %d kali, ingin 2 — %q", got, body)
+	if got := strings.Count(body, "Organisation X"); got != 2 {
+		t.Errorf("organisation name appears %d times, want 2 — %q", got, body)
 	}
 	if got := strings.Count(body, "IX"); got != 2 {
-		t.Errorf("nama panggilan muncul %d kali, ingin 2 — %q", got, body)
+		t.Errorf("organisation nickname appears %d times, want 2 — %q", got, body)
 	}
 }
 
-// Cache dikunci modTime berkas; menyunting HTML saat pengembangan harus langsung
-// terlihat tanpa perlu me-restart server.
-func TestServeHTMLMenyegarkanCacheSaatBerkasBerubah(t *testing.T) {
-	s := serverInstansi("Instansi X", "IX")
-	p := tulisHTML(t, "<p>versi satu {{ORG_NICK}}</p>")
+// The cache is keyed by the file modTime; editing HTML during development must show
+// up immediately without restarting the server.
+func TestServeHTMLRefreshesCacheWhenFileChanges(t *testing.T) {
+	s := orgServer("Organisation X", "IX")
+	p := writeHTML(t, "<p>version one {{ORG_NICK}}</p>")
 
-	if body := sajikan(t, s, p).Body.String(); !strings.Contains(body, "versi satu") {
-		t.Fatalf("isi awal tidak tersaji: %q", body)
+	if body := serveOnce(t, s, p).Body.String(); !strings.Contains(body, "version one") {
+		t.Fatalf("initial content was not served: %q", body)
 	}
 
-	if err := os.WriteFile(p, []byte("<p>versi dua {{ORG_NICK}}</p>"), 0o600); err != nil {
+	if err := os.WriteFile(p, []byte("<p>version two {{ORG_NICK}}</p>"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// Pastikan modTime benar-benar berbeda walau berkasnya kecil dan cepat ditulis.
-	baru := time.Now().Add(2 * time.Second)
-	if err := os.Chtimes(p, baru, baru); err != nil {
+	// Make sure the modTime really differs, even though the file is small and written fast.
+	newer := time.Now().Add(2 * time.Second)
+	if err := os.Chtimes(p, newer, newer); err != nil {
 		t.Fatal(err)
 	}
 
-	body := sajikan(t, s, p).Body.String()
-	if !strings.Contains(body, "versi dua") {
-		t.Errorf("perubahan berkas tidak terbaca, cache basi: %q", body)
+	body := serveOnce(t, s, p).Body.String()
+	if !strings.Contains(body, "version two") {
+		t.Errorf("file change was not picked up, stale cache: %q", body)
 	}
 	if strings.Contains(body, "{{ORG_") {
-		t.Errorf("placeholder tidak diganti setelah cache disegarkan: %q", body)
+		t.Errorf("placeholder was not substituted after the cache refreshed: %q", body)
 	}
 }
 
-func TestServeHTMLBerkasTidakAdaJadi404(t *testing.T) {
-	s := serverInstansi("Instansi X", "IX")
-	w := sajikan(t, s, filepath.Join(t.TempDir(), "tidak-ada.html"))
+func TestServeHTMLMissingFileIs404(t *testing.T) {
+	s := orgServer("Organisation X", "IX")
+	w := serveOnce(t, s, filepath.Join(t.TempDir(), "does-not-exist.html"))
 	if w.Code != http.StatusNotFound {
-		t.Errorf("status = %d, ingin 404", w.Code)
+		t.Errorf("status = %d, want 404", w.Code)
 	}
 }

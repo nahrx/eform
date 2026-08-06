@@ -98,8 +98,8 @@
   .btn-sm{padding:5px 12px;font-size:12.5px}
   :root{--panel:#fff;--panel-2:#f8fafc;--surface:#f8fafc;--radius:12px;--radius-sm:8px;--radius-lg:16px;--bad:#b91c1c;--line-2:#eef1f5;--shadow-sm:0 1px 2px rgba(15,23,42,.04),0 1px 3px rgba(15,23,42,.06);--shadow-md:0 12px 32px rgba(15,23,42,.14)}
 
-  /* Shell sidebar navigasi — dipakai bersama oleh admin.html (dashboard) dan
-     manage.html (halaman pengelolaan satu kuesioner). */
+  /* The navigation sidebar shell — shared by admin.html (the dashboard) and
+     manage.html (the single-form management page). */
   .app-shell{display:flex;align-items:flex-start;min-height:calc(100vh - 60px)}
   .app-sidebar{width:240px;flex:none;background:#fff;border-right:1px solid var(--line);padding:20px 12px;position:sticky;top:60px;height:calc(100vh - 60px);overflow-y:auto}
   .app-sidebar-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;padding:16px 12px 8px}
@@ -118,20 +118,20 @@
   .fade-in{animation:fadeIn .18s ease}
 
   /* ==========================================================
-     RESPONSIF
-     Tiga tingkat: tablet (≤860px) menumpuk sidebar jadi tab strip,
-     ≤600px mengubah tabel jadi kartu, ≤480px memadatkan header & dialog.
+     RESPONSIVE
+     Three tiers: tablet (≤860px) collapses the sidebar into a tab strip,
+     ≤600px turns tables into cards, ≤480px tightens headers & dialogs.
      ========================================================== */
 
   @media (max-width: 860px){
     .user-grid{grid-template-columns:1fr}
     .user-actions{justify-content:stretch}
     .user-actions .btn{width:100%}
-    /* align-items:stretch (bukan flex-start seperti mode desktop) supaya konten
-       melebar penuh dan tidak menyusut ke lebar min-content. */
+    /* align-items:stretch (rather than the desktop flex-start) so the content
+       spans the full width instead of shrinking to min-content. */
     .app-shell{flex-direction:column;align-items:stretch;min-height:0}
-    /* Sidebar jadi strip tab horizontal yang bisa digeser, bukan daftar
-       vertikal yang memakan tinggi layar. */
+    /* The sidebar becomes a scrollable horizontal tab strip rather than a
+       vertical list that eats screen height. */
     .app-sidebar{width:100%;height:auto;position:static;border-right:none;border-bottom:1px solid var(--line);padding:8px 12px;display:flex;flex-wrap:wrap;align-items:center;gap:8px;overflow:visible}
     .app-nav{flex-direction:row;flex-wrap:nowrap;width:100%;gap:6px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
     .app-nav::-webkit-scrollbar{display:none}
@@ -140,8 +140,8 @@
     .app-content{padding:20px 16px}
   }
 
-  /* Tabel jadi kartu: tiap baris satu kartu, label kolom diambil dari <th>
-     oleh responsive-tables.js dan ditampilkan lewat ::before. */
+  /* Tables become cards: one card per row, with the column labels taken from the
+     <th> by responsive-tables.js and rendered through ::before. */
   @media (max-width: 600px){
     .table-scroll{overflow-x:visible}
     .table-scroll>table.cards{min-width:0}
@@ -153,7 +153,7 @@
     table.cards td{border:none;padding:4px 0;font-size:13px;display:flex;align-items:flex-start;justify-content:space-between;gap:14px;text-align:right;min-width:0;word-break:break-word}
     table.cards td::before{content:attr(data-l);flex:none;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);padding-top:1px}
     table.cards td:not([data-l])::before{display:none}
-    /* Kolom pertama jadi judul kartu, kolom aksi jadi baris tombol. */
+    /* The first column becomes the card title, the action column a row of buttons. */
     table.cards td:first-child:not([colspan]){display:block;text-align:left;font-size:14px;padding-bottom:8px}
     table.cards td:first-child::before{display:none}
     table.cards td:last-child:not([data-l]):not([colspan]):not(:first-child){justify-content:flex-end;flex-wrap:wrap;gap:6px;padding-top:10px;margin-top:6px;border-top:1px solid var(--line-2);text-align:left}
@@ -161,14 +161,14 @@
     table.cards td.empty{padding:28px 12px;text-align:center;font-size:13px}
     table.cards tr:hover{background:#fff}
     table.cards .acts .btn,table.cards td:last-child .btn{flex:1;justify-content:center;min-height:36px}
-    /* Daftar kuesioner: tombol menu ⋮ dipindah ke pojok kanan atas kartu. */
+    /* Form list: the ⋮ menu button moves to the card's top-right corner. */
     #tbl.cards tr{position:relative}
     #tbl.cards td:last-child:not([colspan]){position:absolute;top:10px;right:10px;width:auto;padding:0;margin:0;border-top:none;display:block}
     #tbl.cards td:first-child:not([colspan]){padding-right:38px}
     .email-tbl td{word-break:break-word}
   }
 
-  /* Di header sempit, tombol "+ Kuesioner baru" menyusut jadi ikon "+" saja. */
+  /* In a narrow header, the "+ New form" button shrinks to just a "+" icon. */
   @media (max-width: 560px){
     .btn-label{display:none}
     #btnNewForm{padding:8px 13px;font-size:16px;line-height:1}
@@ -187,18 +187,18 @@
     .user-card{padding:14px}
     th,td{padding:10px;font-size:12.5px}
     .row{gap:6px}
-    /* Tombol & kolom isian dibuat cukup besar untuk disentuh. */
+    /* Buttons & inputs are made large enough to tap. */
     .btn{padding:9px 14px;min-height:38px}
     .btn-sm,.btn-xs,.acts .btn{padding:7px 12px;font-size:12px;min-height:34px}
     .row-menu-btn{width:34px;height:34px}
     .app-nav-item{min-height:38px}
-    /* 16px mencegah iOS auto-zoom saat kolom isian difokuskan; sebagian input
-       memakai style inline, jadi perlu !important. */
+    /* 16px stops iOS from auto-zooming when an input is focused; some inputs carry
+       inline styles, hence !important. */
     input,select,textarea{font-size:16px!important;padding:9px 10px}
     input[type=checkbox],input[type=radio]{width:18px;height:18px;padding:0}
     .udd-lang-opt{padding:6px 12px}
-    /* Dialog panjang (yang punya header .dlg-h) jadi lembar penuh dari bawah
-       layar; dialog konfirmasi kecil tetap di tengah. */
+    /* Long dialogs (those with a .dlg-h header) become full sheets rising from the
+       bottom of the screen; small confirmation dialogs stay centred. */
     dialog.sheet{width:100%;max-width:none!important;margin:auto auto 0;border-radius:var(--radius-lg) var(--radius-lg) 0 0;max-height:94vh}
     dialog{width:96%}
     .dlg-b{padding:14px 16px;max-height:calc(94vh - 110px)!important}

@@ -13,7 +13,7 @@ type User struct {
 	Note              string    `json:"note,omitempty"`
 	Role              string    `json:"role"`
 	IsActive          bool      `json:"isActive"`
-	TokenVersion      int       `json:"-"`                 // dinaikkan untuk mencabut sesi lama
+	TokenVersion      int       `json:"-"`                 // bumped to revoke existing sessions
 	PreferredLanguage string    `json:"preferredLanguage"` // 'id' | 'en' — bahasa UI builder/dashboard
 	CreatedAt         time.Time `json:"createdAt"`
 	UpdatedAt         time.Time `json:"updatedAt"`
@@ -31,8 +31,8 @@ type Form struct {
 	ColumnConfig json.RawMessage `json:"columnConfig,omitempty"`
 	CreatedAt    time.Time       `json:"createdAt"`
 	UpdatedAt    time.Time       `json:"updatedAt"`
-	// ResponseCount diisi saat listing (jumlah jawaban terkirim), supaya dashboard
-	// tidak perlu memanggil endpoint jumlah satu per satu.
+	// ResponseCount is filled during listing (the number of submitted responses), so the
+	// dashboard does not have to call a count endpoint per row.
 	ResponseCount int64 `json:"responseCount"`
 }
 
@@ -49,7 +49,7 @@ type Share struct {
 	ExpiresAt      *time.Time `json:"expiresAt,omitempty"`
 	ViewCount      int64      `json:"viewCount"`
 	CreatedAt      time.Time  `json:"createdAt"`
-	// internal saja, tidak diserialisasi
+	// internal only, never serialised
 	PasswordHash *string `json:"-"`
 }
 
@@ -97,23 +97,23 @@ type Respondent struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
-// ViewerFormPermission menyimpan hak akses seorang viewer ke satu kuesioner.
+// ViewerFormPermission holds one viewer's access rights to a single form.
 type ViewerFormPermission struct {
 	ID               string            `json:"id"`
 	ViewerID         string            `json:"viewerId"`
 	FormID           string            `json:"formId"`
 	RespondentAccess string            `json:"respondentAccess"` // 'all' | 'selected'
-	VisibleFields    []string          `json:"visibleFields"`    // nil = semua field
-	FieldFilters     map[string]string `json:"fieldFilters"`     // fieldName → nilai wajib (exact match)
+	VisibleFields    []string          `json:"visibleFields"`    // nil = every field
+	FieldFilters     map[string]string `json:"fieldFilters"`     // fieldName → required value (exact match)
 	CreatedBy        *string           `json:"createdBy,omitempty"`
 	CreatedAt        time.Time         `json:"createdAt"`
-	// Diisi saat listing (join)
+	// filled during listing (join)
 	ViewerUsername string `json:"viewerUsername,omitempty"`
 	FormTitle      string `json:"formTitle,omitempty"`
 	AllowedCount   int    `json:"allowedCount,omitempty"`
 }
 
-// ViewerAllowedRespondent adalah satu responden yang diizinkan dalam mode 'selected'.
+// ViewerAllowedRespondent is a single respondent allowed under 'selected' mode.
 type ViewerAllowedRespondent struct {
 	ID           string    `json:"id"`
 	PermissionID string    `json:"permissionId"`
@@ -123,13 +123,13 @@ type ViewerAllowedRespondent struct {
 	CreatedAt    time.Time `json:"createdAt"`
 }
 
-// EditorFormPermission menyimpan hak kelola seorang editor ke satu kuesioner.
+// EditorFormPermission holds one editor's management rights over a single form.
 type EditorFormPermission struct {
 	ID               string            `json:"id"`
 	EditorID         string            `json:"editorId"`
 	FormID           string            `json:"formId"`
 	RespondentAccess string            `json:"respondentAccess"` // 'all' | 'selected'
-	FieldFilters     map[string]string `json:"fieldFilters"`     // fieldName → nilai wajib (exact match)
+	FieldFilters     map[string]string `json:"fieldFilters"`     // fieldName → required value (exact match)
 	CreatedBy        *string           `json:"createdBy,omitempty"`
 	CreatedAt        time.Time         `json:"createdAt"`
 	EditorName       string            `json:"editorName,omitempty"`
@@ -137,7 +137,7 @@ type EditorFormPermission struct {
 	AllowedCount     int               `json:"allowedCount,omitempty"`
 }
 
-// EditorAllowedRespondent adalah satu responden yang diizinkan dalam mode 'selected'.
+// EditorAllowedRespondent is a single respondent allowed under 'selected' mode.
 type EditorAllowedRespondent struct {
 	ID           string    `json:"id"`
 	PermissionID string    `json:"permissionId"`
@@ -147,22 +147,22 @@ type EditorAllowedRespondent struct {
 	CreatedAt    time.Time `json:"createdAt"`
 }
 
-// FormAPIKey adalah kredensial yang dipakai sistem eksternal untuk menarik jawaban
-// satu kuesioner lewat /api/v1. Cakupan datanya mengikuti model ViewerFormPermission.
+// FormAPIKey is the credential an external system uses to pull one form's responses
+// through /api/v1. Its data scope follows the ViewerFormPermission model.
 //
-// Key aslinya tidak pernah disimpan: yang ada di DB hanya SHA-256 hex-nya (KeyHash,
-// tidak diserialisasi) dan KeyPrefix untuk identifikasi. Key plaintext hanya
-// dikembalikan sekali oleh handler pembuatan/rotasi.
+// The real key is never stored: the database holds only its SHA-256 hex digest
+// (KeyHash, not serialised) and KeyPrefix for identification. The plaintext key is
+// returned exactly once, by the create/rotate handler.
 type FormAPIKey struct {
 	ID                string            `json:"id"`
 	FormID            string            `json:"formId"`
 	Label             string            `json:"label"`
 	KeyPrefix         string            `json:"keyPrefix"`
 	RespondentAccess  string            `json:"respondentAccess"` // 'all' | 'selected'
-	VisibleFields     []string          `json:"visibleFields"`    // nil = semua variabel
-	FieldFilters      map[string]string `json:"fieldFilters"`     // fieldName → nilai wajib (exact match)
+	VisibleFields     []string          `json:"visibleFields"`    // nil = every field
+	FieldFilters      map[string]string `json:"fieldFilters"`     // fieldName → required value (exact match)
 	IncludeRespondent bool              `json:"includeRespondent"`
-	AllowedIPs        []string          `json:"allowedIps"` // kosong = semua IP; isi = IP atau CIDR
+	AllowedIPs        []string          `json:"allowedIps"` // empty = any IP; set = IP or CIDR
 	RateLimitPerMin   int               `json:"rateLimitPerMin"`
 	IsActive          bool              `json:"isActive"`
 	ExpiresAt         *time.Time        `json:"expiresAt,omitempty"`
@@ -171,13 +171,13 @@ type FormAPIKey struct {
 	RequestCount      int64             `json:"requestCount"`
 	CreatedBy         *string           `json:"createdBy,omitempty"`
 	CreatedAt         time.Time         `json:"createdAt"`
-	// Diisi saat listing (join)
+	// filled during listing (join)
 	AllowedCount int `json:"allowedCount,omitempty"`
-	// internal saja, tidak diserialisasi
+	// internal only, never serialised
 	KeyHash string `json:"-"`
 }
 
-// APIKeyAllowedRespondent adalah satu responden yang diizinkan dalam mode 'selected'.
+// APIKeyAllowedRespondent is a single respondent allowed under 'selected' mode.
 type APIKeyAllowedRespondent struct {
 	ID           string    `json:"id"`
 	PermissionID string    `json:"permissionId"`
@@ -187,8 +187,8 @@ type APIKeyAllowedRespondent struct {
 	CreatedAt    time.Time `json:"createdAt"`
 }
 
-// ResponseRevision menyimpan satu perubahan jawaban oleh editor, lengkap dengan nilai
-// sebelum dan sesudahnya, supaya koreksi data bisa ditelusuri.
+// ResponseRevision records one answer change made by an editor, including the before
+// and after values, so data corrections can be traced.
 type ResponseRevision struct {
 	ID            string          `json:"id"`
 	ResponseID    string          `json:"responseId"`
@@ -199,12 +199,12 @@ type ResponseRevision struct {
 	AnswersAfter  json.RawMessage `json:"answersAfter"`
 	IP            string          `json:"ip"`
 	CreatedAt     time.Time       `json:"createdAt"`
-	// Diisi saat listing: nama variabel yang berubah, agar UI tidak perlu membandingkan sendiri.
+	// Filled during listing: the names of the changed fields, so the UI does not have to diff them itself.
 	ChangedFields []string `json:"changedFields,omitempty"`
 }
 
-// ActivityLog mencatat satu aksi admin/superadmin yang mengubah data atau
-// mengeluarkan data dari sistem (mis. ekspor CSV).
+// ActivityLog records one admin/superadmin action that changes data or takes data
+// out of the system (e.g. a CSV export).
 type ActivityLog struct {
 	ID          string    `json:"id"`
 	ActorID     *string   `json:"actorId,omitempty"`
@@ -220,7 +220,7 @@ type ActivityLog struct {
 	CreatedAt   time.Time `json:"createdAt"`
 }
 
-// APIAccessLog mencatat satu panggilan ke /api/v1, termasuk yang ditolak.
+// APIAccessLog records one call to /api/v1, including rejected ones.
 type APIAccessLog struct {
 	ID        string    `json:"id"`
 	APIKeyID  *string   `json:"apiKeyId,omitempty"`

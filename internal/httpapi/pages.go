@@ -10,15 +10,15 @@ import (
 	"time"
 )
 
-/* Penyajian halaman HTML dengan identitas instansi disuntikkan.
+/* Serving HTML pages with the organisation identity injected.
 
-   Berkas HTML di web/ dan public/ memakai placeholder {{ORG_NAME}} dan
-   {{ORG_NICK}}; nilainya diganti di sini, saat berkas disajikan. Sengaja tidak
-   di-build ke dalam berkas: mengganti nama instansi cukup mengubah env lalu
-   me-restart server, tanpa menyunting satu berkas HTML pun.
+   The HTML files under web/ and public/ use the {{ORG_NAME}} and {{ORG_NICK}}
+   placeholders; the values are substituted here, as the file is served. This is
+   deliberately not baked into the files: changing the organisation name only
+   takes an environment change and a restart, without editing any HTML.
 
-   Hanya berkas .html yang diproses. Aset lain (CSS/JS) tetap lewat
-   http.ServeFile seperti sebelumnya — di sana tidak ada yang perlu diganti. */
+   Only .html files go through this. Other assets (CSS/JS) still use
+   http.ServeFile as before — there is nothing to substitute in them. */
 
 const (
 	phOrgName = "{{ORG_NAME}}"
@@ -30,11 +30,12 @@ type renderedPage struct {
 	modTime time.Time
 }
 
-// pageCache menyimpan hasil substitusi supaya berkas tidak dibaca ulang tiap
-// permintaan. Kuncinya path; entri dibuang begitu modTime berkasnya berubah,
-// jadi menyunting HTML saat pengembangan tetap langsung terlihat.
-// Cache menempel di Server (bukan variabel paket) karena nilai substitusinya
-// berasal dari config — dua Server dengan config berbeda tidak boleh berbagi.
+// pageCache holds the substituted result so files are not re-read on every
+// request. It is keyed by path; an entry is dropped as soon as the file's modTime
+// changes, so editing HTML during development still shows up immediately.
+// The cache lives on the Server (not in a package variable) because the
+// substituted values come from config — two Servers with different configs must
+// not share it.
 type pageCache struct{ m sync.Map }
 
 func (s *Server) renderPage(path string) ([]byte, time.Time, error) {
@@ -59,9 +60,9 @@ func (s *Server) renderPage(path string) ([]byte, time.Time, error) {
 	return body, fi.ModTime(), nil
 }
 
-// serveHTML menyajikan satu berkas HTML setelah placeholder-nya diganti.
-// Memakai ServeContent (bukan Write biasa) supaya Last-Modified dan permintaan
-// bersyarat tetap berjalan seperti saat masih ServeFile.
+// serveHTML serves a single HTML file once its placeholders are substituted.
+// It uses ServeContent (rather than a plain Write) so Last-Modified and
+// conditional requests keep working exactly as they did with ServeFile.
 func (s *Server) serveHTML(w http.ResponseWriter, r *http.Request, path string) {
 	body, mod, err := s.renderPage(path)
 	if err != nil {

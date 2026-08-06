@@ -18,7 +18,7 @@ import (
 	"github.com/nahrx/eform/internal/models"
 )
 
-// offlineSettingsOf membaca settings.offline.enabled dari schema instrumen (JSON bebas bentuk).
+// offlineSettingsOf reads settings.offline.enabled from the instrument schema (free-form JSON).
 func offlineSettingsOf(schema json.RawMessage) bool {
 	if len(schema) == 0 {
 		return false
@@ -36,9 +36,9 @@ func offlineSettingsOf(schema json.RawMessage) bool {
 	return parsed.Settings.Offline.Enabled
 }
 
-// resolvePWAForm memvalidasi share + form dan memastikan mode offline benar-benar aktif untuk
-// kombinasi ini (form published, share multi-respons, dan toggle offline diaktifkan di builder).
-// Endpoint manifest/ikon divalidasi di sini juga (bukan hanya di sisi client) sebagai defense-in-depth.
+// resolvePWAForm validates the share + form and confirms that offline mode is genuinely enabled for
+// this combination (form published, share set to multi-response, and the offline toggle on in the builder).
+// The manifest/icon endpoints validate this server-side too (not only in the client) as defence in depth.
 func (s *Server) resolvePWAForm(w http.ResponseWriter, r *http.Request) (*models.Form, bool) {
 	sh, ok := s.resolveShare(w, r)
 	if !ok {
@@ -57,7 +57,7 @@ func (s *Server) resolvePWAForm(w http.ResponseWriter, r *http.Request) (*models
 }
 
 // GET /api/public/forms/{token}/manifest.webmanifest -- Web App Manifest dinamis per share,
-// hanya tersedia bila mode offline diaktifkan di instrumen dan share-nya multi-respons.
+// only available when offline mode is enabled on the instrument and the share is multi-response.
 func (s *Server) publicManifest(w http.ResponseWriter, r *http.Request) {
 	f, ok := s.resolvePWAForm(w, r)
 	if !ok {
@@ -67,7 +67,7 @@ func (s *Server) publicManifest(w http.ResponseWriter, r *http.Request) {
 	scope := "/f/" + token
 	name := f.Title
 	if name == "" {
-		name = "Kuesioner"
+		name = "Form"
 	}
 	shortName := name
 	if len(shortName) > 24 {
@@ -93,8 +93,8 @@ func (s *Server) publicManifest(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET /api/public/forms/{token}/icon.png?size=192|512 -- ikon PWA digambar di server: kotak warna
-// aksen dengan huruf/angka pertama judul kuesioner di tengah, supaya tiap kuesioner yang di-install
-// punya ikon yang berbeda (tanpa perlu admin mengunggah gambar apa pun).
+// accent colour with the form title's first letter/digit in the middle, so every installed form
+// gets a distinct icon without an admin having to upload any image.
 func (s *Server) publicIcon(w http.ResponseWriter, r *http.Request) {
 	f, ok := s.resolvePWAForm(w, r)
 	if !ok {
@@ -118,8 +118,8 @@ func (s *Server) publicIcon(w http.ResponseWriter, r *http.Request) {
 	_ = png.Encode(w, img)
 }
 
-// iconInitial mengambil huruf/angka pertama yang bermakna dari judul kuesioner
-// (dikapitalkan) sebagai identitas visual ikon; "K" (Kuesioner) sebagai fallback.
+// iconInitial takes the first meaningful letter/digit from the form title
+// (dikapitalkan) sebagai identitas visual ikon; "F" (Form) as the fallback.
 func iconInitial(title string) string {
 	for _, r := range strings.TrimSpace(title) {
 		if unicode.IsLetter(r) || unicode.IsDigit(r) {
@@ -129,11 +129,11 @@ func iconInitial(title string) string {
 	return "K"
 }
 
-// drawIconInitial menggambar huruf besar di tengah ikon persegi, dengan label
-// kecil "- eForm -" di bawahnya (keduanya diperlakukan sebagai satu grup dan
-// dipusatkan bersama secara vertikal). Gagal-diam (ikon tetap berupa kotak
-// polos) bila font tak bisa dimuat/di-render, supaya endpoint ikon tidak
-// pernah error hanya karena masalah rendering teks.
+// drawIconInitial draws a capital letter in the centre of the square icon, with a small
+// "- eForm -" label beneath it (the two are treated as one group and
+// centred together vertically). It fails quietly (the icon stays a plain
+// plain) if the font cannot be loaded or rendered, so the icon endpoint never
+// fails merely because of a text-rendering problem.
 func drawIconInitial(img *image.NRGBA, letter string, fg color.NRGBA, size int) {
 	fnt, err := opentype.Parse(goregular.TTF)
 	if err != nil {

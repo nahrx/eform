@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="id">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Detail Jawaban · eForm</title>
+    <title>Response Detail · eForm</title>
     <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
     <style>
       :root {
@@ -65,8 +65,8 @@
         gap: 10px;
         padding: 10px 18px;
         min-height: 50px;
-        /* Tanpa ini deretan tombol memaksa topbar lebih lebar dari layar HP,
-           dan seluruh halaman ikut bisa digeser ke samping. */
+        /* Without this the row of buttons forces the top bar wider than a phone
+           screen, and the whole page becomes horizontally scrollable. */
         flex-wrap: wrap;
       }
       .topbar-title {
@@ -76,7 +76,7 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        /* judul boleh menyusut, tapi tidak sampai hilang sama sekali */
+        /* the title may shrink, but never disappear entirely */
         min-width: 90px;
       }
       .btn {
@@ -93,7 +93,7 @@
         align-items: center;
         gap: 5px;
         transition: 0.12s;
-        /* label tombol jangan patah di tengah kata saat topbar membungkus */
+        /* button labels must not break mid-word when the top bar wraps */
         white-space: nowrap;
       }
       .btn:hover {
@@ -157,15 +157,15 @@
         opacity: 0.6;
         cursor: default;
       }
-      /* display:inline-flex pada .btn mengalahkan gaya bawaan [hidden] milik
-         browser, sehingga atribut hidden tidak berpengaruh apa-apa. Tanpa aturan
-         ini tombol Simpan/Batal ikut tampil di luar mode edit. */
+      /* display:inline-flex on .btn beats the browser's built-in [hidden] style,
+         so the hidden attribute has no effect at all. Without this rule the Save
+         and Cancel buttons show up outside edit mode. */
       .btn[hidden] {
         display: none;
       }
 
-      /* tombol ikon menu (daftar halaman) — hanya dipakai di layar HP, tempat
-         sidebar berubah jadi laci geser */
+      /* menu icon button (page list) — only used on phone screens, where the
+         sidebar becomes a sliding drawer */
       .icon-btn {
         display: none;
         padding: 6px 8px;
@@ -192,9 +192,9 @@
           height: 100dvh;
         }
       }
-      /* Kalau laci sedang terbuka lalu layar melebar (rotasi tablet, jendela
-         diperbesar), sidebar kembali menetap tapi kelas .open masih menempel di
-         latar — tanpa aturan ini latar gelapnya ikut menutupi halaman desktop. */
+      /* If the drawer is open when the screen widens (tablet rotation, window
+         resize), the sidebar becomes static again but the .open class is still on
+         the backdrop — without this rule the dark overlay would cover the desktop page. */
       @media (min-width: 681px) {
         .nav-backdrop {
           display: none;
@@ -346,7 +346,7 @@
         justify-content: space-between;
         gap: 8px;
       }
-      /* tombol tutup laci — di desktop sidebar selalu tampil, jadi tak perlu */
+      /* drawer close button — on desktop the sidebar is always visible, so it is unnecessary */
       .nav-close {
         display: none;
         border: none;
@@ -691,11 +691,10 @@
       }
 
       @media (max-width: 680px) {
-        /* Sidebar tidak lagi disembunyikan, tapi berubah jadi laci geser yang
-           dibuka lewat tombol menu — supaya lompat antar-halaman tetap bisa
-           dilakukan di HP, bukan hanya lewat tombol Sebelumnya/Selanjutnya.
-           DOM-nya sama persis dengan versi desktop, jadi #pgList cukup dirender
-           sekali oleh renderPage(). */
+        /* The sidebar is no longer hidden; it becomes a sliding drawer opened by
+           the menu button — so jumping between pages is still possible on a phone,
+           not just Previous/Next. The DOM is exactly the desktop one, so #pgList
+           only needs rendering once, by renderPage(). */
         .icon-btn,
         .nav-close {
           display: inline-flex;
@@ -712,7 +711,7 @@
           padding-top: 18px;
           border-right: 1px solid var(--line);
           box-shadow: 10px 0 34px rgba(19, 23, 30, 0.16);
-          /* visibility mengeluarkan isi laci dari urutan Tab selama tertutup */
+          /* visibility takes the drawer's contents out of the Tab order while closed */
           transform: translateX(-100%);
           visibility: hidden;
           transition: transform 0.22s ease, visibility 0.22s ease;
@@ -735,9 +734,9 @@
         }
       }
 
-      /* ---- layar HP ----
-         Topbar sudah membungkus sendiri; di sini isinya dirapatkan supaya tidak
-         memakan terlalu banyak tinggi, dan navigasi bawah dibuat muat di 360px. */
+      /* ---- phone screens ----
+         The top bar already wraps on its own; here its contents are tightened so it
+         does not eat too much height, and the bottom navigation is made to fit 360px. */
       @media (max-width: 640px) {
         .topbar {
           gap: 6px;
@@ -751,7 +750,7 @@
           font-size: 12.5px;
         }
         .content {
-          /* ruang bawah mengikuti navigasi yang kini lebih pendek */
+          /* bottom spacing follows the now-shorter navigation */
           padding: 14px 12px 76px;
         }
         .meta-card {
@@ -767,8 +766,8 @@
           padding: 9px 0 10px;
         }
         .pg-foot-in .btn {
-          /* kedua tombol berbagi sisa ruang secara merata; teks progres di
-             tengah memakai lebar seadanya. */
+          /* both buttons share the remaining space evenly; the progress text in
+             the middle takes only what it needs. */
           flex: 1 1 0;
           min-width: 0;
           justify-content: center;
@@ -811,7 +810,7 @@
         class="btn icon-btn"
         id="btnMenu"
         hidden
-        aria-label="Daftar halaman"
+        aria-label="Page list"
         aria-expanded="false"
         onclick="toggleNav()"
       >
@@ -827,10 +826,10 @@
           <path d="M3 5.5h14M3 10h14M3 14.5h14" />
         </svg>
       </button>
-      <span class="ro-badge" id="modeBadge">Hanya Baca</span>
-      <span class="topbar-title" id="topTitle">Memuat…</span>
+      <span class="ro-badge" id="modeBadge">Read Only</span>
+      <span class="topbar-title" id="topTitle">Loading…</span>
       <button class="btn" id="btnToggleEdit" hidden onclick="toggleEdit()">
-        ✏️ Mode Edit
+        ✏️ Edit Mode
       </button>
       <button
         class="btn primary"
@@ -839,10 +838,10 @@
         disabled
         onclick="saveEdits()"
       >
-        Simpan
+        Save
       </button>
       <button class="btn danger" id="btnCancelEdit" hidden onclick="cancelEdit()">
-        Batal
+        Cancel
       </button>
       <button
         class="btn danger"
@@ -850,19 +849,19 @@
         hidden
         onclick="deleteResponse()"
       >
-        Hapus Jawaban
+        Delete Response
       </button>
-      <button class="btn" onclick="window.close()">✕ Tutup</button>
+      <button class="btn" onclick="window.close()">✕ Close</button>
     </header>
     <div class="nav-backdrop" id="navBackdrop" onclick="toggleNav(false)"></div>
     <div class="shell">
       <nav class="sidebar" id="sidebar" hidden>
         <div class="sidebar-h">
-          Halaman
+          Pages
           <button
             class="nav-close"
             type="button"
-            aria-label="Tutup daftar halaman"
+            aria-label="Close page list"
             onclick="toggleNav(false)"
           >
             &times;
@@ -872,7 +871,7 @@
       </nav>
       <div class="content" id="content">
         <div style="padding: 40px; text-align: center; color: var(--muted)">
-          Memuat…
+          Loading…
         </div>
       </div>
     </div>
@@ -888,7 +887,7 @@
       const TOKEN = localStorage.getItem("eform_token");
       if (!TOKEN) {
         document.getElementById("content").innerHTML =
-          '<div style="padding:40px;text-align:center;color:#b91c1c">Sesi habis. Silakan login ulang.</div>';
+          '<div style="padding:40px;text-align:center;color:#b91c1c">Session expired. Please log in again.</div>';
       }
 
       const params = new URLSearchParams(location.search);
@@ -896,7 +895,7 @@
       const RESP_ID = params.get("resp");
       if (!FORM_ID || !RESP_ID) {
         document.getElementById("content").innerHTML =
-          '<div style="padding:40px;text-align:center;color:#b91c1c">Parameter tidak lengkap.</div>';
+          '<div style="padding:40px;text-align:center;color:#b91c1c">Incomplete parameters.</div>';
       }
 
       const H = { Authorization: "Bearer " + TOKEN };
@@ -917,7 +916,7 @@
         RESP = null,
         CUR_PG = 0;
       let EDIT_MODE = false;
-      let editedAnswers = {}; // aktif saat mode edit, salinan answers yang sedang diubah
+      let editedAnswers = {}; // active in edit mode; the copy of answers being changed
 
       async function api(path, opts) {
         opts = opts || {};
@@ -928,7 +927,7 @@
         if (r.status === 401) {
           localStorage.removeItem("eform_token");
           location.replace("/login");
-          throw new Error("sesi habis");
+          throw new Error("session expired");
         }
         const data = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(data.error || "HTTP " + r.status);
@@ -944,8 +943,8 @@
           ]);
           SCHEMA = form.schema;
           RESP = resp;
-          const title = txt(form.title) || "Kuesioner";
-          document.title = "Jawaban · " + title;
+          const title = txt(form.title) || "Form";
+          document.title = "Responses · " + title;
           document.getElementById("topTitle").textContent = title;
           if (me && (me.role === "superadmin" || me.role === "admin")) {
             document.getElementById("btnDelete").hidden = false;
@@ -965,11 +964,11 @@
         ovl.style.cssText =
           "position:fixed;inset:0;z-index:999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45)";
         ovl.innerHTML = `<div style="background:var(--panel);border-radius:12px;padding:28px 24px;max-width:380px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,.18)">
-          <div style="font-weight:700;font-size:15px;margin-bottom:10px;color:var(--ink)">Hapus Jawaban</div>
-          <div style="font-size:13.5px;color:var(--ink-soft);margin-bottom:20px">Hapus jawaban ini secara permanen? Tindakan ini tidak dapat dibatalkan.</div>
+          <div style="font-weight:700;font-size:15px;margin-bottom:10px;color:var(--ink)">Delete Response</div>
+          <div style="font-size:13.5px;color:var(--ink-soft);margin-bottom:20px">Permanently delete this response? This action cannot be undone.</div>
           <div style="display:flex;gap:10px;justify-content:flex-end">
-            <button id="delCfCancel" style="padding:8px 16px;border:1px solid var(--line);border-radius:7px;background:var(--panel);color:var(--ink);font-family:inherit;font-size:13px;cursor:pointer">Batal</button>
-            <button id="delCfOk" style="padding:8px 16px;border:none;border-radius:7px;background:#b91c1c;color:#fff;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">Hapus</button>
+            <button id="delCfCancel" style="padding:8px 16px;border:1px solid var(--line);border-radius:7px;background:var(--panel);color:var(--ink);font-family:inherit;font-size:13px;cursor:pointer">Cancel</button>
+            <button id="delCfOk" style="padding:8px 16px;border:none;border-radius:7px;background:#b91c1c;color:#fff;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">Delete</button>
           </div>
         </div>`;
         document.body.appendChild(ovl);
@@ -984,7 +983,7 @@
         const btn = document.getElementById("btnDelete");
         if (btn) {
           btn.disabled = true;
-          btn.textContent = "Menghapus…";
+          btn.textContent = "Deleting…";
         }
         try {
           const r = await fetch(`/api/forms/${FORM_ID}/responses/${RESP_ID}`, {
@@ -998,12 +997,12 @@
           }
           const data = await r.json().catch(() => ({}));
           if (!r.ok) throw new Error(data.error || "HTTP " + r.status);
-          document.getElementById("topTitle").textContent = "Jawaban Dihapus";
+          document.getElementById("topTitle").textContent = "Response Deleted";
           document.getElementById("content").innerHTML =
             `<div style="padding:80px 20px;text-align:center">
             <div style="font-size:48px;margin-bottom:16px;color:var(--ok)">✓</div>
-            <div style="font-weight:700;font-size:16px;color:var(--ink)">Jawaban berhasil dihapus.</div>
-            <div style="color:var(--muted);margin-top:8px;font-size:13px">Anda dapat menutup tab ini.</div>
+            <div style="font-weight:700;font-size:16px;color:var(--ink)">The response was deleted successfully.</div>
+            <div style="color:var(--muted);margin-top:8px;font-size:13px">You can close this tab.</div>
           </div>`;
           document.getElementById("pgFoot").hidden = true;
           document.getElementById("sidebar").hidden = true;
@@ -1012,15 +1011,15 @@
         } catch (e) {
           if (btn) {
             btn.disabled = false;
-            btn.textContent = "Hapus Jawaban";
+            btn.textContent = "Delete Response";
           }
           const ovl = document.createElement("div");
           ovl.style.cssText =
             "position:fixed;inset:0;z-index:999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45)";
           ovl.innerHTML = `<div style="background:var(--panel);border-radius:12px;padding:28px 24px;max-width:380px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,.18)">
-            <div style="font-weight:700;font-size:15px;margin-bottom:10px;color:#b91c1c">Gagal Menghapus</div>
+            <div style="font-weight:700;font-size:15px;margin-bottom:10px;color:#b91c1c">Delete Failed</div>
             <div style="font-size:13.5px;color:var(--ink-soft);margin-bottom:20px">${esc(e.message)}</div>
-            <div style="display:flex;justify-content:flex-end"><button onclick="this.closest('div[style]').remove()" style="padding:8px 16px;border:1px solid var(--line);border-radius:7px;background:var(--panel);color:var(--ink);font-family:inherit;font-size:13px;cursor:pointer">Tutup</button></div>
+            <div style="display:flex;justify-content:flex-end"><button onclick="this.closest('div[style]').remove()" style="padding:8px 16px;border:1px solid var(--line);border-radius:7px;background:var(--panel);color:var(--ink);font-family:inherit;font-size:13px;cursor:pointer">Close</button></div>
           </div>`;
           document.body.appendChild(ovl);
         }
@@ -1036,7 +1035,7 @@
         editedAnswers = parseAnswers(RESP.answers);
         document.getElementById("modeBadge").className = "edit-badge";
         document.getElementById("modeBadge").textContent = "Mode Edit";
-        document.getElementById("btnToggleEdit").textContent = "👁 Mode Lihat";
+        document.getElementById("btnToggleEdit").textContent = "👁 View Mode";
         document.getElementById("btnSave").hidden = false;
         document.getElementById("btnSave").disabled = false;
         document.getElementById("btnCancelEdit").hidden = false;
@@ -1047,8 +1046,8 @@
         EDIT_MODE = false;
         editedAnswers = {};
         document.getElementById("modeBadge").className = "ro-badge";
-        document.getElementById("modeBadge").textContent = "Hanya Baca";
-        document.getElementById("btnToggleEdit").textContent = "✏️ Mode Edit";
+        document.getElementById("modeBadge").textContent = "Read Only";
+        document.getElementById("btnToggleEdit").textContent = "✏️ Edit Mode";
         document.getElementById("btnSave").hidden = true;
         document.getElementById("btnCancelEdit").hidden = true;
         renderPage();
@@ -1058,7 +1057,7 @@
         collectCurrentPageAnswers();
         const btn = document.getElementById("btnSave");
         btn.disabled = true;
-        btn.textContent = "Menyimpan…";
+        btn.textContent = "Saving…";
         try {
           await api(`/api/forms/${FORM_ID}/responses/${RESP_ID}`, {
             method: "PATCH",
@@ -1066,11 +1065,11 @@
           });
           RESP.answers = editedAnswers;
           cancelEdit();
-          showToast("Jawaban berhasil disimpan", "ok");
+          showToast("Response saved successfully", "ok");
         } catch (e) {
-          showToast("Gagal menyimpan: " + e.message, "err");
+          showToast("Failed to save: " + e.message, "err");
           btn.disabled = false;
-          btn.textContent = "Simpan";
+          btn.textContent = "Save";
         }
       }
 
@@ -1082,7 +1081,7 @@
         setTimeout(() => t.remove(), 3000);
       }
 
-      /* Kumpulkan nilai dari input di halaman yang sedang ditampilkan ke editedAnswers */
+      /* Collect the values from the inputs on the current page into editedAnswers */
       function collectCurrentPageAnswers() {
         if (!EDIT_MODE) return;
         const pages = (SCHEMA && SCHEMA.pages) || [];
@@ -1097,7 +1096,7 @@
             collectFromNodes(c.components || [], rp, out);
             continue;
           }
-          if (c.kind === "roster") continue; // roster tidak diedit di sini
+          if (c.kind === "roster") continue; // rosters are not edited here
           collectFieldValue(c, rp, out);
         }
       }
@@ -1106,9 +1105,9 @@
         if (c.type === "note" || c.type === "markdown" || c.type === "hidden")
           return;
         const key = rp + c.name;
-        // Radio/checkbox (termasuk boolean, dan radio/select dengan sedikit opsi
-        // yang dirender sebagai radio-group) tidak punya id pada elemen pembungkus
-        // — dicek lewat name pada input-nya, bukan getElementById.
+        // Radio/checkbox groups (including booleans, and radio/select with few options
+        // rendered as a radio group) have no id on their wrapper element
+        // — they are found through the input's name, not getElementById.
         const groupInputs = document.querySelectorAll(
           `input[name="ed_${CSS.escape(key)}"]`,
         );
@@ -1159,7 +1158,7 @@
           try {
             const opts = await fetchOpts(cfg);
             el.innerHTML =
-              `<option value="">— Pilih —</option>` +
+              `<option value="">— Select —</option>` +
               opts
                 .map(
                   (o) =>
@@ -1188,16 +1187,16 @@
               )
               .join("");
           } catch {
-            el.innerHTML = `<span style="color:var(--muted);font-size:12px">Gagal memuat opsi.</span>`;
+            el.innerHTML = `<span style="color:var(--muted);font-size:12px">Failed to load options.</span>`;
           }
           delete el.dataset.oa;
           delete el.dataset.cv;
         }
       }
 
-      /* ---- laci daftar halaman (layar HP) ----
-         Di desktop sidebar selalu tampil dan tombol menunya disembunyikan CSS,
-         jadi fungsi ini hanya berdampak di layar sempit. */
+      /* ---- page-list drawer (phone screens) ----
+         On desktop the sidebar is always visible and the CSS hides its menu button,
+         so this function only has an effect on narrow screens. */
       function toggleNav(open) {
         const sb = document.getElementById("sidebar");
         const bd = document.getElementById("navBackdrop");
@@ -1218,10 +1217,10 @@
         if (e.key === "Escape") toggleNav(false);
       });
 
-      /* ---- validasi jawaban ----
-         Seluruh evaluasi diserahkan ke fungsi halaman ini sendiri, supaya
-         penilaian validasi memakai skema, visibleWhen, dan skip-state yang sama
-         persis dengan yang dipakai untuk merender jawaban. */
+      /* ---- answer validation ----
+         All evaluation is delegated to this page's own functions, so the validation
+         review uses exactly the same schema, visibleWhen, and skip state that render
+         the answers. */
       const DV_HELPERS = {
         evalVisible,
         computePageSkipState,
@@ -1230,7 +1229,7 @@
         rosterRowPrefix,
         txt,
       };
-      let DV_ISSUES = new Map(); // kunci jawaban → temuan, dibaca renderNode
+      let DV_ISSUES = new Map(); // answer key → finding, read by renderNode
 
       function renderPage() {
         const answers = EDIT_MODE ? editedAnswers : parseAnswers(RESP.answers);
@@ -1244,18 +1243,18 @@
         if (CUR_PG < 0) CUR_PG = 0;
         const visIdx = Math.max(0, visited.indexOf(CUR_PG));
 
-        // Sidebar — hanya halaman yang benar-benar dilalui responden
-        // (visibleWhen halaman terpenuhi & tidak dilompati oleh skip-to)
+        // Sidebar — only the pages the respondent actually went through
+        // (the page's visibleWhen holds and it was not jumped over by a skip-to)
         if (visited.length > 1) {
           const sidebar = document.getElementById("sidebar");
           sidebar.hidden = false;
-          // Tombol menu hanya berguna kalau memang ada lebih dari satu halaman;
-          // CSS yang memutuskan tampil/tidaknya menurut lebar layar.
+          // The menu button is only useful when there really is more than one page;
+          // the CSS decides whether it shows, based on screen width.
           document.getElementById("btnMenu").hidden = false;
           document.getElementById("pgList").innerHTML = visited
             .map(
               (i) =>
-                `<div class="pg-item${i === CUR_PG ? " active" : ""}" onclick="goPage(${i})">${esc(txt(pages[i].title) || pages[i].name || "Halaman " + (i + 1))}</div>`,
+                `<div class="pg-item${i === CUR_PG ? " active" : ""}" onclick="goPage(${i})">${esc(txt(pages[i].title) || pages[i].name || "Page " + (i + 1))}</div>`,
             )
             .join("");
         }
@@ -1263,14 +1262,14 @@
         // Status badge
         const isDraft = RESP.status === "draft";
         const badge = isDraft
-          ? `<span class="st-badge st-draft">Draf</span>`
-          : `<span class="st-badge st-submitted">Terkirim</span>`;
+          ? `<span class="st-badge st-draft">Draft</span>`
+          : `<span class="st-badge st-submitted">Submitted</span>`;
 
-        // Draf maupun jawaban terkirim sama-sama diperiksa: aturan validasi di
-        // kuesioner bisa berubah setelah jawaban dikirim, sehingga jawaban yang
-        // dulu lolos bisa melanggar aturan yang berlaku sekarang.
-        // Dihitung sebelum body dirender karena renderNode membaca DV_ISSUES
-        // untuk menandai field yang bermasalah.
+        // Both drafts and submitted answers are checked: a form's validation
+        // rules can change after an answer was submitted, so an answer that once
+        // passed may break the rules that apply now.
+        // Computed before the body is rendered, because renderNode reads DV_ISSUES
+        // to mark the offending fields.
         let dvBtn = "";
         DV_ISSUES = new Map();
         if (pages.length && window.ResponseValidation) {
@@ -1298,7 +1297,7 @@
         if (pages.length) {
           const p = pages[CUR_PG];
           const hiddenNames = computePageSkipState(p, answers).hidden;
-          body += `<div class="page-title">${esc(rowInterp(txt(p.title) || p.name || "Halaman " + (CUR_PG + 1), answers, ""))}</div>`;
+          body += `<div class="page-title">${esc(rowInterp(txt(p.title) || p.name || "Page " + (CUR_PG + 1), answers, ""))}</div>`;
           body += renderNodes(p.components || [], answers, "", hiddenNames);
         } else {
           body = renderFlatAnswers(answers);
@@ -1311,9 +1310,9 @@
         if (visited.length > 1) {
           foot.hidden = false;
           document.getElementById("pgFootIn").innerHTML =
-            `<button class="btn" ${visIdx === 0 ? "disabled" : ""} onclick="goPage(${visited[visIdx - 1]})">← Sebelumnya</button>` +
-            `<span class="pg-prog">Halaman ${visIdx + 1} / ${visited.length}</span>` +
-            `<button class="btn" ${visIdx >= visited.length - 1 ? "disabled" : ""} onclick="goPage(${visited[visIdx + 1]})">Selanjutnya →</button>`;
+            `<button class="btn" ${visIdx === 0 ? "disabled" : ""} onclick="goPage(${visited[visIdx - 1]})">← Previous</button>` +
+            `<span class="pg-prog">Page ${visIdx + 1} / ${visited.length}</span>` +
+            `<button class="btn" ${visIdx >= visited.length - 1 ? "disabled" : ""} onclick="goPage(${visited[visIdx + 1]})">Next →</button>`;
         } else {
           foot.hidden = true;
         }
@@ -1324,12 +1323,12 @@
 
       function goPage(idx) {
         if (EDIT_MODE) collectCurrentPageAnswers();
-        toggleNav(false); // tutup laci kalau halaman dipilih dari daftar
+        toggleNav(false); // close the drawer when a page is picked from the list
         CUR_PG = idx;
         renderPage();
       }
 
-      /* ---- expression engine (untuk evalVisible visibleWhen) ---- */
+      /* ---- expression engine (for evalVisible / visibleWhen) ---- */
       const Expr = (function () {
         const FUNCS = new Set([
           "isempty",
@@ -1592,7 +1591,7 @@
                 expect("rp");
                 return { type: "call", fn, args };
               }
-              throw new Error("pakai ${...} untuk merujuk field");
+              throw new Error("use ${...} to reference a field");
             }
             throw new Error("token tak terduga");
           }
@@ -1795,10 +1794,10 @@
         return v === undefined ? true : !!v;
       }
 
-      /* ---- skip-to: replay memakai jawaban final (bukan heuristik "pending"
-         milik form pengisian) untuk menentukan halaman/field mana yang
-         sebenarnya TIDAK PERNAH ditampilkan ke responden, supaya detail
-         jawaban tidak menampilkan field yang di-skip seolah kosong. ---- */
+      /* ---- skip-to: replayed against the final answers (not the respondent form's
+         belonging to the respondent form) to work out which pages/fields were
+         NEVER shown to the respondent, so the detail view does not present a
+         skipped field as if it were merely blank. ---- */
       const CHOICE_TYPES = new Set(["select", "multiselect", "radio", "checkbox"]);
       function nodeContainsName(node, target) {
         if (node.name === target) return true;
@@ -1837,8 +1836,8 @@
         })(node);
         return fields;
       }
-      // Field mana di halaman ini yang tersembunyi karena skip aktif, dan target
-      // halaman lain bila skip yang aktif belum "selesai" sampai akhir halaman.
+      // Which fields on this page are hidden by an active skip, and the target
+      // page when an active skip has not "finished" by the end of the page.
       function computePageSkipState(page, answers) {
         const hidden = new Set();
         const fields = flatFields(page);
@@ -1869,8 +1868,8 @@
         }
         return { hidden, crossPageTarget: skipActive ? crossPageTarget : null };
       }
-      // Field dalam satu baris roster yang tersembunyi karena skip-to (skip di
-      // dalam roster hanya berlaku sampai akhir baris yang sama, target "__end").
+      // Fields within one roster row hidden by a skip-to (a skip inside a roster
+      // only applies to the end of that same row, target "__end").
       function computeRosterRowSkipState(roster, rowIdx, answers, parentRp) {
         const rp = rosterRowPrefix(roster, rowIdx, parentRp || "");
         const allRowFields = flatFields(roster);
@@ -1899,8 +1898,8 @@
         }
         return hidden;
       }
-      // Urutan halaman yang benar-benar dilalui responden: mulai dari halaman
-      // pertama, ikuti visibleWhen halaman + lompatan skip-to lintas-halaman.
+      // The order of pages the respondent actually went through: start at the first
+      // page, following each page's visibleWhen plus any cross-page skip-to jumps.
       function computeVisitedPages(pages, answers) {
         const visited = [];
         const guard = new Set();
@@ -1943,8 +1942,8 @@
         const html = EDIT_MODE
           ? renderEditField(c, answers, rp)
           : renderField(c, answers, rp);
-        // Satu-satunya titik yang dilewati semua jenis field, jadi penandaan
-        // temuan validasi cukup dipasang di sini.
+        // The single point every kind of field passes through, so the validation
+        // the validation marker only needs installing here.
         return DV_ISSUES.size
           ? ResponseValidation.wrapField(html, DV_ISSUES.get(rp + c.name))
           : html;
@@ -1984,7 +1983,7 @@
             return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer">${esc(String(val))}</div></div>`;
         }
 
-        // Select (dropdown) — tampilkan label pilihan, bukan value mentah
+        // Select (dropdown) — show the option label, not the raw value
         if (c.type === "select") {
           const opts = getOptions(c, answers, rp);
           const found = opts.find((o) => String(o.value) === String(val));
@@ -2014,7 +2013,7 @@
               .join("");
             return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-choice-list">${items}</div></div>`;
           }
-          // Tanpa opsi — tampilkan nilai mentah
+          // No options — show the raw value
           const display = selected.length ? selected.join(", ") : "—";
           return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer-box">${esc(display)}</div></div>`;
         }
@@ -2023,8 +2022,8 @@
         if (c.type === "boolean") {
           const yes = val === "true" || val === true;
           const items = [
-            { value: "true", label: "Ya" },
-            { value: "false", label: "Tidak" },
+            { value: "true", label: "Yes" },
+            { value: "false", label: "No" },
           ]
             .map((o) => {
               const sel = String(val) === o.value;
@@ -2058,14 +2057,14 @@
           return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-photo-wrap"><a class="rv-photo-link" href="${esc(src)}" target="_blank" rel="noreferrer">Buka gambar</a><img class="rv-photo-img" src="${esc(src)}" alt="${alt}"></div></div>`;
         }
 
-        // File (non-gambar): tautan unduh, bukan teks path mentah
+        // Files (non-image): a download link rather than the raw path text
         if (c.type === "file") {
           const src = getMediaSource(val);
           if (!src) {
             return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer empty">—</div></div>`;
           }
           const mime = (src.match(/^data:([^;]+)/) || [])[1] || "file";
-          return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer"><a href="${esc(src)}" download="file" style="color:var(--accent)">Unduh file (${esc(mime)})</a></div></div>`;
+          return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer"><a href="${esc(src)}" download="file" style="color:var(--accent)">Download file (${esc(mime)})</a></div></div>`;
         }
 
         // Textarea / text / number / date / dsb
@@ -2111,7 +2110,7 @@
               return `<div class="ed-field"><div class="ed-label">${label}</div>${desc}<div class="ed-radio-group">${items}</div></div>`;
             }
             const optHtml =
-              `<option value="">— Pilih —</option>` +
+              `<option value="">— Select —</option>` +
               opts
                 .map(
                   (o) =>
@@ -2121,7 +2120,7 @@
             return `<div class="ed-field"><div class="ed-label">${label}</div>${desc}<select id="ed_${safeKey}" class="ed-select">${optHtml}</select></div>`;
           }
           if (c.optionsApi && c.optionsApi.url) {
-            return `<div class="ed-field"><div class="ed-label">${label}</div>${desc}<select id="ed_${safeKey}" class="ed-select ed-async" data-oa="${esc(JSON.stringify(c.optionsApi))}" data-cv="${esc(String(val ?? ""))}"><option value="">Memuat opsi…</option></select></div>`;
+            return `<div class="ed-field"><div class="ed-label">${label}</div>${desc}<select id="ed_${safeKey}" class="ed-select ed-async" data-oa="${esc(JSON.stringify(c.optionsApi))}" data-cv="${esc(String(val ?? ""))}"><option value="">Loading options…</option></select></div>`;
           }
           return `<div class="ed-field"><div class="ed-label">${label}</div>${desc}<input id="ed_${safeKey}" class="ed-input" value="${esc(val ?? "")}"></div>`;
         }
@@ -2145,15 +2144,15 @@
             return `<div class="ed-field"><div class="ed-label">${label}</div>${desc}<div class="ed-check-group">${items}</div></div>`;
           }
           if (c.optionsApi && c.optionsApi.url) {
-            return `<div class="ed-field"><div class="ed-label">${label}</div>${desc}<div id="ed_${safeKey}" class="ed-check-group ed-async" data-oa="${esc(JSON.stringify(c.optionsApi))}" data-cv="${esc(JSON.stringify(selected))}" data-multi="1"><span style="color:var(--muted);font-size:12px">Memuat opsi…</span></div></div>`;
+            return `<div class="ed-field"><div class="ed-label">${label}</div>${desc}<div id="ed_${safeKey}" class="ed-check-group ed-async" data-oa="${esc(JSON.stringify(c.optionsApi))}" data-cv="${esc(JSON.stringify(selected))}" data-multi="1"><span style="color:var(--muted);font-size:12px">Loading options…</span></div></div>`;
           }
         }
 
         // Boolean
         if (c.type === "boolean") {
           const items = [
-            { value: "true", label: "Ya" },
-            { value: "false", label: "Tidak" },
+            { value: "true", label: "Yes" },
+            { value: "false", label: "No" },
           ]
             .map(
               (o) => `<label class="ed-radio-item">
@@ -2174,15 +2173,15 @@
           return `<div class="ed-field"><div class="ed-label">${label} <span style="font-size:10px;color:var(--muted)">(dihitung otomatis)</span></div>${desc}<div class="rv-answer">${d}</div></div>`;
         }
 
-        // Photo / File / Signature — read-only preview saat edit
+        // Photo / File / Signature — read-only preview while editing
         if (c.type === "photo" || c.type === "file" || c.type === "signature") {
           const src = getMediaSource(val);
           if (!src)
             return `<div class="ed-field"><div class="ed-label">${label}</div>${desc}<div class="rv-answer empty">—</div></div>`;
           if (isImageSrc(src))
-            return `<div class="ed-field"><div class="ed-label">${label} <span style="font-size:10px;color:var(--muted)">(tidak dapat diubah di sini)</span></div>${desc}<div class="rv-photo-wrap"><img class="rv-photo-img" src="${esc(src)}" onclick="openPhotoModal(this.src)" title="Klik untuk perbesar"></div></div>`;
+            return `<div class="ed-field"><div class="ed-label">${label} <span style="font-size:10px;color:var(--muted)">(cannot be edited here)</span></div>${desc}<div class="rv-photo-wrap"><img class="rv-photo-img" src="${esc(src)}" onclick="openPhotoModal(this.src)" title="Click to enlarge"></div></div>`;
           const mime = (src.match(/^data:([^;]+)/) || [])[1] || "file";
-          return `<div class="ed-field"><div class="ed-label">${label}</div>${desc}<div class="rv-answer"><a href="${esc(src)}" download="file" style="color:var(--accent)">Unduh file (${esc(mime)})</a></div></div>`;
+          return `<div class="ed-field"><div class="ed-label">${label}</div>${desc}<div class="rv-answer"><a href="${esc(src)}" download="file" style="color:var(--accent)">Download file (${esc(mime)})</a></div></div>`;
         }
 
         // Number / Integer / Decimal / Currency / Float
@@ -2226,7 +2225,7 @@
           const map = g
             ? `<div class="geo-map" data-lat="${g.lat}" data-lng="${g.lng}"></div>`
             : "";
-          return `<div class="ed-field"><div class="ed-label">${label} <span style="font-size:10px;color:var(--muted)">(koordinat, tidak dapat diubah di sini)</span></div>${desc}<div class="rv-answer">${d}</div>${map}</div>`;
+          return `<div class="ed-field"><div class="ed-label">${label} <span style="font-size:10px;color:var(--muted)">(coordinates, cannot be edited here)</span></div>${desc}<div class="rv-answer">${d}</div>${map}</div>`;
         }
 
         // Barcode — read-only
@@ -2243,14 +2242,14 @@
         rp = rp || "";
         const count = getRosterCount(r, answers, rp);
         const title = esc(rowInterp(txt(r.title) || r.name, answers, rp));
-        let html = `<div class="rv-roster"><div class="rv-roster-title">${title} <span style="font-weight:400;font-size:12px">(${count} baris)</span></div>`;
+        let html = `<div class="rv-roster"><div class="rv-roster-title">${title} <span style="font-weight:400;font-size:12px">(${count} rows)</span></div>`;
         if (count <= 0) {
-          html += `<div class="rv-empty">Tidak ada data</div>`;
+          html += `<div class="rv-empty">No data</div>`;
         } else {
           const rowLbl = (i, childRp) =>
             r.rowTitle
               ? `${esc(rowInterp(txt(r.rowTitle), answers, childRp))} #${i + 1}`
-              : `Baris #${i + 1}`;
+              : `Row #${i + 1}`;
           for (let i = 0; i < count; i++) {
             const childRp = rosterRowPrefix(r, i, rp);
             const rowHidden = computeRosterRowSkipState(r, i, answers, rp);
@@ -2258,7 +2257,7 @@
           }
         }
         if (EDIT_MODE)
-          html += `<div class="roster-edit-note">Data roster tidak dapat diubah melalui tampilan ini.</div>`;
+          html += `<div class="roster-edit-note">Roster data cannot be edited from this view.</div>`;
         return html + `</div>`;
       }
 
@@ -2267,7 +2266,7 @@
           ([k]) => !k.includes("#"),
         );
         if (!entries.length)
-          return `<div class="rv-block"><div class="rv-empty">Tidak ada data</div></div>`;
+          return `<div class="rv-block"><div class="rv-empty">No data</div></div>`;
         return (
           `<div class="rv-block">` +
           entries
@@ -2559,8 +2558,8 @@
         if (val == null || val === "") return null;
         return String(val);
       }
-      // Parse nilai geopoint "lat, lng" (format yang disimpan oleh tombol
-      // "Ambil Lokasi" di form pengisian) menjadi {lat,lng} atau null.
+      // Parse a geopoint value "lat, lng" (the format stored by the
+      // "Get Location" button on the respondent form) into {lat,lng} or null.
       function parseGeoPoint(val) {
         if (val == null || val === "") return null;
         const parts = String(val).split(",").map((s) => s.trim());
@@ -2637,5 +2636,6 @@
 
       if (FORM_ID && RESP_ID) init();
     </script>
-  </body>
+  <script src="/i18n.js"></script>
+</body>
 </html>

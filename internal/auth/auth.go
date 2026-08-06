@@ -29,19 +29,19 @@ func (m *Manager) WithRespondentTTL(d time.Duration) *Manager {
 type Claims struct {
 	Username string `json:"username"`
 	Role     string `json:"role"`
-	// TokenVersion mengikat token ke users.token_version. Server menaikkan angka itu
-	// saat akun dinonaktifkan atau passwordnya diganti, sehingga token lama langsung
-	// tidak berlaku tanpa perlu menunggu masa berlakunya habis.
+	// TokenVersion ties the token to users.token_version. The server bumps that number
+	// when an account is deactivated or its password changes, so older tokens stop
+	// working immediately instead of lingering until they expire.
 	TokenVersion int `json:"tv"`
 	jwt.RegisteredClaims
 }
 
-// MinPasswordLen adalah panjang minimum password akun admin/superadmin.
+// MinPasswordLen is the minimum password length for admin/superadmin accounts.
 const MinPasswordLen = 10
 
-// commonPasswords adalah daftar pendek password yang paling sering dipakai/ditebak.
-// Sengaja tidak panjang: tujuannya menjaring pilihan yang jelas buruk, bukan
-// menggantikan daftar kebocoran yang lengkap.
+// commonPasswords is a short list of the most frequently used and guessed passwords.
+// Deliberately short: it exists to catch obviously bad choices, not to replace a
+// full breach corpus.
 var commonPasswords = map[string]bool{
 	"password": true, "password1": true, "password123": true, "passw0rd": true,
 	"qwerty123": true, "1234567890": true, "123456789": true, "12345678": true,
@@ -50,29 +50,29 @@ var commonPasswords = map[string]bool{
 	"iloveyou1": true, "abcd123456": true, "qwertyuiop": true, "asdfghjkl": true,
 }
 
-// ValidatePassword menerapkan kebijakan password akun admin.
+// ValidatePassword enforces the password policy for admin accounts.
 //
-// Mengikuti anjuran NIST: yang ditekankan panjang dan tidak mudah ditebak, bukan
-// kombinasi huruf besar/angka/simbol yang justru mendorong pola seperti "Passw0rd!".
+// Follows NIST guidance: length and unpredictability matter, not a mix of upper case,
+// digits, and symbols, which mostly encourages patterns like "Passw0rd!".
 func ValidatePassword(pw, username, email string) error {
 	if len([]rune(pw)) < MinPasswordLen {
-		return fmt.Errorf("password minimal %d karakter", MinPasswordLen)
+		return fmt.Errorf("password must be at least %d characters", MinPasswordLen)
 	}
 	low := strings.ToLower(pw)
 	if commonPasswords[low] {
-		return errors.New("password terlalu umum, pilih yang lain")
+		return errors.New("password is too common, please choose another")
 	}
 	if u := strings.ToLower(strings.TrimSpace(username)); u != "" && strings.Contains(low, u) {
-		return errors.New("password tidak boleh memuat username")
+		return errors.New("password must not contain the username")
 	}
 	if e := strings.ToLower(strings.TrimSpace(email)); e != "" {
 		if local, _, ok := strings.Cut(e, "@"); ok && local != "" && strings.Contains(low, local) {
-			return errors.New("password tidak boleh memuat alamat email")
+			return errors.New("password must not contain the email address")
 		}
 	}
-	// Satu karakter berulang ("aaaaaaaaaa") panjangnya memenuhi syarat tapi tidak aman.
+	// A single repeated character ("aaaaaaaaaa") satisfies the length rule but is not safe.
 	if isSingleRuneRepeat(pw) {
-		return errors.New("password tidak boleh berupa satu karakter yang diulang")
+		return errors.New("password must not be a single repeated character")
 	}
 	return nil
 }
@@ -111,7 +111,7 @@ func (m *Manager) Generate(userID, username, role string, tokenVersion int) (str
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(m.secret)
 }
 
-var ErrInvalidToken = errors.New("token tidak valid")
+var ErrInvalidToken = errors.New("invalid token")
 
 func (m *Manager) Parse(tokenStr string) (*Claims, error) {
 	claims := &Claims{}
@@ -127,7 +127,7 @@ func (m *Manager) Parse(tokenStr string) (*Claims, error) {
 	return claims, nil
 }
 
-// --- Respondent (publik, login via Google OAuth) ---
+// --- Respondent (public, signs in via Google OAuth) ---
 
 type RespondentClaims struct {
 	RespondentID string `json:"respondentId"`
@@ -137,7 +137,7 @@ type RespondentClaims struct {
 	jwt.RegisteredClaims
 }
 
-// GenerateRespondent menerbitkan JWT untuk responden publik, TTL dikonfigurasi via Manager.
+// GenerateRespondent issues a JWT for a public respondent; the TTL is configured on the Manager.
 func (m *Manager) GenerateRespondent(respondentID, email, name, picture string) (string, error) {
 	now := time.Now()
 	claims := RespondentClaims{

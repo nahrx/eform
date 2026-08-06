@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="id">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Jawaban · eForm</title>
+<title>Responses · eForm</title>
 <style>
 :root{
   --ink:#13171e;--ink-soft:#4a525e;--muted:#79828f;
@@ -83,10 +83,10 @@ table.resp-tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:600p
 .st-submitted{background:var(--ok-soft);color:var(--ok)}
 .st-draft{background:var(--warn-soft);color:var(--warn-ink)}
 
-/* pager bawah */
+/* bottom pager */
 .tbl-foot{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);background:var(--panel-2)}
 
-/* kolom picker */
+/* column picker */
 .col-wrap{position:relative}
 .col-panel{position:absolute;top:calc(100% + 6px);right:0;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);width:280px;z-index:100;display:none}
 .col-panel.open{display:block}
@@ -106,12 +106,12 @@ table.resp-tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:600p
 <div class="shell">
   <header class="topbar">
     <a class="btn" href="/admin">← Admin</a>
-    <span class="form-title" id="formTitle">Memuat…</span>
+    <span class="form-title" id="formTitle">Loading…</span>
     <span class="count-badge" id="countBadge" hidden></span>
     <div class="col-wrap" id="colWrap" hidden>
-      <button class="btn" id="btnKolom">Kolom ▾</button>
+      <button class="btn" id="btnKolom">Columns ▾</button>
       <div class="col-panel" id="colPanel">
-        <div class="col-panel-h">Pilih kolom tambahan <span style="font-weight:400">(maks 5)</span></div>
+        <div class="col-panel-h">Choose extra columns <span style="font-weight:400">(maks 5)</span></div>
         <div class="col-list" id="colList"></div>
         <div class="col-panel-foot">
           <button class="btn-sm" id="btnColReset">Reset</button>
@@ -135,51 +135,51 @@ table.resp-tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:600p
     </div>
   </header>
 
-  <!-- Ringkasan filter aktif; tersembunyi selama belum ada filter dipakai -->
+  <!-- Active filter summary; hidden until a filter is applied -->
   <div class="active-bar" id="activeBar" hidden>
     <div class="active-chips" id="filterChips"></div>
-    <button class="btn-reset" id="btnReset" onclick="resetFilters()">✕ Reset semua</button>
+    <button class="btn-reset" id="btnReset" onclick="resetFilters()">✕ Reset all</button>
   </div>
 
   <div class="tbl-outer">
     <div class="tbl-wrap" id="tblWrap">
-      <div class="loading">Memuat…</div>
+      <div class="loading">Loading…</div>
     </div>
   </div>
 </div>
 
-<!-- Laci filter -->
+<!-- Filter drawer -->
 <div class="drawer-backdrop" id="drawerBackdrop"></div>
-<aside class="filter-drawer" id="filterDrawer" aria-hidden="true" aria-label="Filter jawaban">
+<aside class="filter-drawer" id="filterDrawer" aria-hidden="true" aria-label="Filter responses">
   <div class="drawer-h">
     <span>Filter</span>
-    <button class="drawer-close" id="btnDrawerClose" aria-label="Tutup filter">✕</button>
+    <button class="drawer-close" id="btnDrawerClose" aria-label="Close filter">✕</button>
   </div>
   <div class="drawer-b">
     <div class="drawer-sect">
-      <label class="drawer-lbl" for="fSearch">Cari</label>
-      <input class="filter-search" id="fSearch" placeholder="Cari nama / email…" oninput="onSearchDebounce()">
+      <label class="drawer-lbl" for="fSearch">Search</label>
+      <input class="filter-search" id="fSearch" placeholder="Search name / email…" oninput="onSearchDebounce()">
     </div>
     <div class="drawer-sect">
       <label class="drawer-lbl" for="fStatus">Status</label>
       <select class="filter-sel" id="fStatus" onchange="onFilter()">
-        <option value="">Semua</option>
-        <option value="submitted">Terkirim</option>
-        <option value="draft">Draf</option>
+        <option value="">All</option>
+        <option value="submitted">Submitted</option>
+        <option value="draft">Draft</option>
       </select>
     </div>
     <div class="drawer-sect">
       <label class="drawer-lbl" for="fShare">Share</label>
       <select class="filter-sel" id="fShare" onchange="onFilter()">
-        <option value="">Semua</option>
+        <option value="">All</option>
       </select>
     </div>
-    <!-- Filter per variabel (hanya superadmin/admin, muncul jika ada kolom dipilih) -->
+    <!-- Per-field filters (superadmin/admin only, shown once columns are selected) -->
     <div class="ff-bar" id="ffBar"></div>
   </div>
   <div class="drawer-f">
     <button class="btn" onclick="resetFilters()">Reset</button>
-    <button class="btn primary" id="btnDrawerDone">Selesai</button>
+    <button class="btn primary" id="btnDrawerDone">Done</button>
   </div>
 </aside>
 <script src="/searchable-select.js"></script>
@@ -196,9 +196,9 @@ const H={"Authorization":"Bearer "+TOKEN,"Content-Type":"application/json"};
 
 let SCHEMA=null, RESPONSES=[], TOTAL=0, PAGE=0, MY_ROLE="admin";
 
-// Kait untuk responses-core.js: hanya admin/superadmin yang boleh memfilter per
-// variabel di halaman ini. Berupa fungsi (bukan konstanta) karena MY_ROLE baru
-// terisi setelah /api/auth/me selesai.
+// Hook for responses-core.js: only admin/superadmin may filter per field on this
+// page. It is a function rather than a constant because MY_ROLE is only known
+// populated once /api/auth/me has finished.
 function canFieldFilter(){ return MY_ROLE==="superadmin"||MY_ROLE==="admin"; }
 
 const PAGE_SIZE=50;
@@ -208,17 +208,17 @@ let SEL_COLS=[], ALL_FIELDS=[], SHARE_MAP={};
 // state filter & sort
 let SORT_BY="waktu", SORT_DIR="desc";
 let FILTER_STATUS="", FILTER_SHARE="", FILTER_SEARCH="";
-let FIELD_FILTERS={};       // fieldName → nilai teks (ILIKE)
-let FIELD_EXACT_FILTERS={}; // fieldName → nilai pasti (=, untuk dropdown/radio/tanggal)
-let FIELD_ANY_FILTERS={};   // fieldName → daftar nilai (salah satu, untuk checkbox/multiselect)
-let FIELD_RANGE_FILTERS={}; // fieldName → {min,max} (rentang angka)
+let FIELD_FILTERS={};       // fieldName → text value (ILIKE)
+let FIELD_EXACT_FILTERS={}; // fieldName → exact value (=, for dropdown/radio/date)
+let FIELD_ANY_FILTERS={};   // fieldName → list of values (any of them, for checkbox/multiselect)
+let FIELD_RANGE_FILTERS={}; // fieldName → {min,max} (numeric range)
 const NUMER_TYPES=new Set(["number","integer","decimal","currency","range","rating"]);
 let _searchTimer=null, _fieldTimer=null;
 
 async function api(path,opts){
   opts=opts||{};
   const r=await fetch(path,{...opts,headers:{...H,...(opts.headers||{})}});
-  if(r.status===401){localStorage.removeItem("eform_token");location.replace("/login");throw new Error("sesi habis");}
+  if(r.status===401){localStorage.removeItem("eform_token");location.replace("/login");throw new Error("session expired");}
   const ct=r.headers.get("content-type")||"";
   const data=ct.includes("json")?await r.json():null;
   if(!r.ok)throw new Error((data&&data.error)||("HTTP "+r.status));
@@ -238,18 +238,18 @@ async function init(){
       SHARE_MAP[sh.id]=sh.label||(sh.token?"["+sh.token.slice(0,6)+"]":"—");
     });
     SCHEMA=form.schema;
-    document.title="Jawaban · "+(form.title||"Kuesioner");
-    document.getElementById("formTitle").textContent=form.title||"Kuesioner";
-    // Tombol Ekspor baru muncul setelah kuesionernya berhasil dimuat; menu
+    document.title="Responses · "+(form.title||"Form");
+    document.getElementById("formTitle").textContent=form.title||"Form";
+    // The Export button only appears once the form has loaded; its menu
     // pilihan formatnya diurus responses-ui.js.
     document.getElementById("exportWrap").hidden=false;
 
     ALL_FIELDS=extractFields(SCHEMA);
-    // Preferensi kolom: dari server (column_config) jika ada, fallback ke localStorage
+    // Column preference: from the server (column_config) when present, falling back to localStorage
     const serverCols=form.columnConfig&&Array.isArray(form.columnConfig)&&form.columnConfig.length
       ?form.columnConfig:null;
     SEL_COLS=serverCols||loadColPref();
-    // Auto-sync: jika server kosong tapi localStorage punya config, langsung simpan ke server
+    // Auto-sync: if the server has none but localStorage does, push it to the server straight away
     if(!serverCols&&SEL_COLS.length)saveColsToServer(SEL_COLS);
 
     if((MY_ROLE==="superadmin"||MY_ROLE==="admin")&&ALL_FIELDS.length){
@@ -260,7 +260,7 @@ async function init(){
     buildShareFilter();
     await loadPage(0);
   }catch(e){
-    document.getElementById("formTitle").textContent="Gagal memuat: "+e.message;
+    document.getElementById("formTitle").textContent="Failed to load: "+e.message;
   }
 }
 
@@ -274,7 +274,7 @@ function buildShareFilter(){
   });
 }
 
-/* ---- helpers untuk opsi field ---- */
+/* ---- helpers for field options ---- */
 function getOptions(c){
   const opts=[];
   if(c.optionsRef&&SCHEMA){
@@ -286,14 +286,14 @@ function getOptions(c){
   return opts;
 }
 
-// Tentukan jenis filter untuk satu field, disesuaikan dengan tipe input aslinya:
-//  {kind:"select"/"multiselect", opts:[...]}         → dropdown statis (1 atau banyak pilihan)
-//  {kind:"api"/"multiapi", url, ...}                 → dropdown dari API (tanpa dependensi)
-//  {kind:"cascade"/"multicascade", urlTpl, deps, ...}→ dropdown API yang bergantung pada field lain
-//  {kind:"date"/"datetime"/"time"}                   → input tanggal/waktu native
-//  {kind:"text"}                                     → input teks bebas (ILIKE)
+// Decide the filter kind for one field, matching its original input type:
+//  {kind:"select"/"multiselect", opts:[...]}         → static dropdown (single or multiple choice)
+//  {kind:"api"/"multiapi", url, ...}                 → dropdown from an API (no dependencies)
+//  {kind:"cascade"/"multicascade", urlTpl, deps, ...}→ API dropdown that depends on other fields
+//  {kind:"date"/"datetime"/"time"}                   → native date/time input
+//  {kind:"text"}                                     → free-text input (ILIKE)
 
-// Cache hasil fetch API agar tidak berulang
+// Cache API fetch results so they are not repeated
 
 /* ---- field filter bar (superadmin) ---- */
 
@@ -318,7 +318,7 @@ function onFieldSelect(el){
   const name=el.dataset.field;
   const val=el.value;
   if(val)FIELD_EXACT_FILTERS[name]=val; else delete FIELD_EXACT_FILTERS[name];
-  // Re-render jika ada cascade child yang bergantung pada field ini
+  // Re-render if a cascade child depends on this field
   const hasCascadeChild=SEL_COLS.some(colName=>{
     if(colName===name)return false;
     const fk=fieldFilterKind(findField(SCHEMA,colName));
@@ -338,8 +338,8 @@ function onFieldMultiSelect(el){
     return(fk.kind==="cascade"||fk.kind==="multicascade")&&fk.deps.includes(name);
   });
   if(hasCascadeChild)renderFieldFilters();
-  // Dropdown centang tetap terbuka, jadi pengguna biasanya mencentang beberapa nilai
-  // beruntun — tunda pemuatan ulang supaya tidak sekali permintaan per centang.
+  // The checkbox dropdown stays open, so users typically tick several values in a
+  // row — debounce the reload so it is not one request per tick.
   clearTimeout(_fieldTimer);
   _fieldTimer=setTimeout(()=>loadPage(0),350);
 }
@@ -380,7 +380,7 @@ function toggleSort(col){
 /* ---- load page (server-side) ---- */
 async function loadPage(page){
   PAGE=page;
-  document.getElementById("tblWrap").innerHTML='<div class="loading">Memuat…</div>';
+  document.getElementById("tblWrap").innerHTML='<div class="loading">Loading…</div>';
   try{
     const params=new URLSearchParams({limit:PAGE_SIZE,offset:PAGE*PAGE_SIZE,sortBy:SORT_BY,sortDir:SORT_DIR});
     if(FILTER_STATUS)params.set("status",FILTER_STATUS);
@@ -400,7 +400,7 @@ async function loadPage(page){
 
     const isFiltered=FILTER_STATUS||FILTER_SHARE||FILTER_SEARCH||Object.keys(FIELD_FILTERS).length||Object.keys(FIELD_EXACT_FILTERS).length||Object.keys(FIELD_ANY_FILTERS).length||Object.keys(FIELD_RANGE_FILTERS).length;
     const badge=document.getElementById("countBadge");
-    badge.textContent=TOTAL+" jawaban"+(isFiltered?" (difilter)":"");
+    badge.textContent=TOTAL+" responses"+(isFiltered?" (filtered)":"");
     badge.hidden=false;
     updateFilterUI();
     renderTable();
@@ -434,7 +434,7 @@ function saveColPref(cols){try{localStorage.setItem(COL_KEY,JSON.stringify(cols)
 /* ---- column picker ---- */
 function buildColPicker(){
   const list=document.getElementById("colList");
-  if(!ALL_FIELDS.length){list.innerHTML='<div class="col-hint">Tidak ada field tersedia.</div>';return;}
+  if(!ALL_FIELDS.length){list.innerHTML='<div class="col-hint">No fields available.</div>';return;}
   list.innerHTML=ALL_FIELDS.map(f=>`<label class="col-item">
     <input type="checkbox" value="${esc(f.name)}" ${SEL_COLS.includes(f.name)?"checked":""}>
     <span>${esc(f.label)}</span>
@@ -458,7 +458,7 @@ function saveColsToServer(cols){
 
 document.getElementById("btnColApply")?.addEventListener("click",()=>{
   const newCols=[...document.querySelectorAll("#colList input:checked")].map(cb=>cb.value).slice(0,5);
-  // bersihkan filter field yang kolomnya dihapus
+  // clear filters for fields whose column was removed
   SEL_COLS.filter(c=>!newCols.includes(c)).forEach(c=>{delete FIELD_FILTERS[c];delete FIELD_EXACT_FILTERS[c];delete FIELD_ANY_FILTERS[c];delete FIELD_RANGE_FILTERS[c];});
   SEL_COLS=newCols;
   saveColPref(SEL_COLS);
@@ -478,18 +478,18 @@ document.getElementById("btnColReset")?.addEventListener("click",()=>{
 });
 
 /* ---- render tabel ---- */
-// data-label dipakai responsive-tables.js sebagai label kolom saat tabel berubah
-// jadi kartu di layar HP — tanpa itu ikon urutan (↕) ikut terbawa ke labelnya.
+// responsive-tables.js uses data-label as the column label when the table turns into
+// cards on phones — without it the sort icon (↕) would end up in the label.
 
 function renderTable(){
   if(!RESPONSES.length){
     const msg=FILTER_STATUS||FILTER_SHARE||FILTER_SEARCH||Object.keys(FIELD_FILTERS).length||Object.keys(FIELD_EXACT_FILTERS).length
-      ?"Tidak ada jawaban yang cocok dengan filter.":"Belum ada jawaban.";
+      ?"No responses match the filter.":"No responses yet.";
     document.getElementById("tblWrap").innerHTML=`<div class="empty-state">${msg}</div>`;
     return;
   }
 
-  // Header kolom tambahan — sortable untuk superadmin dan admin
+  // Extra column headers — sortable for superadmin and admin
   const extraTh=SEL_COLS.map(name=>{
     const f=ALL_FIELDS.find(ff=>ff.name===name);
     const label=f?f.label:name;
@@ -502,8 +502,8 @@ function renderTable(){
     <th class="td-num">#</th>
     ${sortTh("status","Status","td-status")}
     ${sortTh("share","Share","td-share")}
-    ${sortTh("who","Responden","td-who")}
-    ${sortTh("waktu","Waktu","td-time")}
+    ${sortTh("who","Respondent","td-who")}
+    ${sortTh("waktu","Time","td-time")}
     ${extraTh}
     <th class="td-act">Aksi</th>
   </tr></thead><tbody>`;
@@ -514,20 +514,20 @@ function renderTable(){
     const meta=parseAnswers(resp.meta);
     const isDraft=resp.status==="draft";
     const badge=isDraft
-      ?`<span class="st-badge st-draft">Draf</span>`
-      :`<span class="st-badge st-submitted">Terkirim</span>`;
+      ?`<span class="st-badge st-draft">Draft</span>`
+      :`<span class="st-badge st-submitted">Submitted</span>`;
     const who=meta.name
       ?`${esc(meta.name)}<br><span style="font-size:11px;color:var(--muted)">${esc(meta.email||"")}</span>`
       :esc(meta.email||"—");
-    const waktu=formatDate(resp.submittedAt);
+    const time=formatDate(resp.submittedAt);
     const shareLabel=resp.shareId
       ?esc(SHARE_MAP[resp.shareId]||resp.shareId.slice(0,8)+"…")
       :`<span style="color:var(--muted)">—</span>`;
     const extraVals=SEL_COLS.map(name=>{
       const c=findField(SCHEMA,name);
       const val=c?formatFieldValue(c,answers[name],answers):valStr(answers[name]);
-      // is-empty dipakai tampilan kartu di HP untuk melewati kolom yang kosong,
-      // supaya kartunya tidak penuh label tanpa isi.
+      // The card view on phones uses is-empty to skip empty columns, so a card is
+      // not filled with labels that have no content.
       const empty=String(val??"").trim()===""?" is-empty":"";
       return`<td class="td-val${empty}" title="${esc(val)}">${esc(truncate(val,40))}</td>`;
     }).join("");
@@ -536,9 +536,9 @@ function renderTable(){
       <td class="td-status">${badge}</td>
       <td class="td-share" title="${resp.shareId?esc(SHARE_MAP[resp.shareId]||resp.shareId):""}">${shareLabel}</td>
       <td class="td-who">${who}</td>
-      <td class="td-time">${waktu}</td>
+      <td class="td-time">${time}</td>
       ${extraVals}
-      <td class="td-act"><button class="btn-sm" onclick="openView('${esc(resp.id)}')">Lihat</button></td>
+      <td class="td-act"><button class="btn-sm" onclick="openView('${esc(resp.id)}')">View</button></td>
     </tr>`;
   });
 
@@ -547,11 +547,11 @@ function renderTable(){
   const totalPages=Math.ceil(TOTAL/PAGE_SIZE)||1;
   const pager=totalPages>1
     ?`<div class="tbl-foot">
-        <button class="btn-sm" ${PAGE===0?"disabled":""} onclick="loadPage(${PAGE-1})">‹ Sebelumnya</button>
-        <span>${PAGE+1} / ${totalPages} halaman · ${TOTAL} jawaban</span>
+        <button class="btn-sm" ${PAGE===0?"disabled":""} onclick="loadPage(${PAGE-1})">‹ Previous</button>
+        <span>${PAGE+1} / ${totalPages} pages · ${TOTAL} responses</span>
         <button class="btn-sm" ${PAGE>=totalPages-1?"disabled":""} onclick="loadPage(${PAGE+1})">Berikutnya ›</button>
       </div>`
-    :`<div class="tbl-foot"><span>${TOTAL} jawaban</span></div>`;
+    :`<div class="tbl-foot"><span>${TOTAL} responses</span></div>`;
 
   document.getElementById("tblWrap").innerHTML=html+pager;
 }
@@ -561,11 +561,11 @@ function openView(id){
 }
 
 /* ---- helpers ---- */
-// Ekspor CSV & Excel memakai jalur yang sama; hanya ekstensinya berbeda.
+// The CSV & Excel exports share one path; only the extension differs.
 window.downloadExport = async function(ext){
   try{
     const r=await fetch("/api/forms/"+FORM_ID+"/responses."+ext,{headers:H});
-    if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.error||"Gagal");}
+    if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.error||"Failed");}
     const blob=await r.blob();
     const url=URL.createObjectURL(blob);
     const a=document.createElement("a");a.href=url;a.download="responses-"+FORM_ID+"."+ext;a.click();
@@ -575,5 +575,6 @@ window.downloadExport = async function(ext){
 
 init();
 </script>
+<script src="/i18n.js"></script>
 </body>
 </html>

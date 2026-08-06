@@ -1,7 +1,7 @@
 -- 0017_sessions_and_audit.up.sql
--- 1) Pencabutan sesi: token_version dinaikkan setiap kali akun dinonaktifkan atau
---    passwordnya diganti, sehingga JWT lama yang membawa versi lebih rendah ditolak.
--- 2) Audit aksi admin: siapa melakukan apa, kapan, dari IP mana.
+-- 1) Session revocation: token_version is bumped whenever an account is deactivated or
+--    its password changes, so older JWTs carrying a lower version are rejected.
+-- 2) Admin action audit: who did what, when, and from which IP.
 
 ALTER TABLE users
   ADD COLUMN IF NOT EXISTS token_version INT NOT NULL DEFAULT 0;
@@ -9,13 +9,13 @@ ALTER TABLE users
 CREATE TABLE IF NOT EXISTS activity_logs (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     actor_id     UUID REFERENCES users(id) ON DELETE SET NULL,
-    -- Nama pelaku disimpan terpisah supaya jejaknya tetap terbaca walau akunnya dihapus.
+    -- The actor's name is stored separately so the trail stays readable even if the account is deleted.
     actor_name   TEXT NOT NULL DEFAULT '',
     actor_role   TEXT NOT NULL DEFAULT '',
     action       TEXT NOT NULL,              -- mis. 'form.delete', 'export.csv'
     target_type  TEXT NOT NULL DEFAULT '',   -- 'form' | 'user' | 'share' | 'permission'
     target_id    TEXT NOT NULL DEFAULT '',
-    target_label TEXT NOT NULL DEFAULT '',   -- judul/username, agar log tetap bermakna
+    target_label TEXT NOT NULL DEFAULT '',   -- title/username, so the log stays meaningful
     form_id      UUID REFERENCES forms(id) ON DELETE SET NULL,
     ip           TEXT NOT NULL DEFAULT '',
     detail       TEXT NOT NULL DEFAULT '',

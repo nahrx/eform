@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="id">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -32,27 +32,27 @@
   <section class="hero">
     <span class="badge">{{ORG_NAME}}</span>
     <h1>eForm · Builder</h1>
-    <p>Platform penyusun dan distribusi kuesioner digital — rancang instrumen secara drag-and-drop, publikasikan, dan bagikan ke responden lewat tautan.</p>
+    <p>A platform for building and distributing digital questionnaires — design instruments with drag-and-drop, publish them, and share them with respondents via a link.</p>
     <div class="cta">
-      <a class="btn primary" href="/login">Masuk</a>
-      <a class="btn ghost" href="/builder">Buka Builder</a>
+      <a class="btn primary" href="/login">Sign in</a>
+      <a class="btn ghost" href="/builder">Open Builder</a>
     </div>
   </section>
 
   <div class="wrap">
     <div class="grid">
-      <div class="card"><div class="ic">🧩</div><h3>Susun</h3><p>Bangun kuesioner dengan halaman, blok, seksi, roster, dan beragam tipe field — termasuk sumber pilihan manual, inline, atau API.</p></div>
-      <div class="card"><div class="ic">🚀</div><h3>Publikasikan</h3><p>Simpan instrumen ke server dan ubah statusnya menjadi <em>published</em> agar siap diakses publik.</p></div>
-      <div class="card"><div class="ic">🔗</div><h3>Bagikan</h3><p>Buat tautan share dengan opsi password dan masa berlaku. Responden mengisi tanpa perlu akun.</p></div>
-      <div class="card"><div class="ic">📊</div><h3>Kumpulkan</h3><p>Jawaban tersimpan otomatis dan bisa diunduh sebagai CSV dari dashboard admin.</p></div>
+      <div class="card"><div class="ic">🧩</div><h3>Build</h3><p>Build a form with pages, blocks, sections, rosters, and many field types — including manual, inline, or API option sources.</p></div>
+      <div class="card"><div class="ic">🚀</div><h3>Publish</h3><p>Save the instrument to the server and set its status to <em>published</em> so it is ready for public access.</p></div>
+      <div class="card"><div class="ic">🔗</div><h3>Share</h3><p>Create share links with optional passwords and expiry dates. Respondents fill them in without needing an account.</p></div>
+      <div class="card"><div class="ic">📊</div><h3>Collect</h3><p>Responses are saved automatically and can be downloaded as CSV from the admin dashboard.</p></div>
     </div>
 
     <div class="open">
-      <h3>Punya tautan kuesioner?</h3>
-      <p>Tempel kode token atau URL share untuk langsung membukanya.</p>
+      <h3>Have a form link?</h3>
+      <p>Paste the token code or share URL to open it straight away.</p>
       <div class="row">
-        <input id="tok" placeholder="mis. abcdef123456 atau https://…/f/abcdef123456">
-        <button id="go">Buka Kuesioner</button>
+        <input id="tok" placeholder="e.g. abcdef123456 or https://…/f/abcdef123456">
+        <button id="go">Open Form</button>
       </div>
     </div>
   </div>
@@ -61,11 +61,12 @@
   document.getElementById("go").addEventListener("click",function(){
     var v=document.getElementById("tok").value.trim();
     if(!v)return;
-    var m=v.match(/\/f\/([^/?#]+)/); // ambil token dari URL bila ditempel penuh
+    var m=v.match(/\/f\/([^/?#]+)/); // take the token from the URL when a full link is pasted
     var token=m?m[1]:v;
     location.href="/f/"+encodeURIComponent(token);
   });
   document.getElementById("tok").addEventListener("keydown",function(e){if(e.key==="Enter")document.getElementById("go").click();});
 </script>
+<script src="/i18n.js"></script>
 </body>
 </html>

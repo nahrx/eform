@@ -1,5 +1,5 @@
--- 0002_wilayah.up.sql — tabel referensi wilayah (provinsi → kabupaten → kecamatan → desa)
--- Menggunakan kode_wilayah (kode BPS) sebagai primary key alami.
+-- 0002_wilayah.up.sql — region reference table (province → regency → district → village)
+-- Uses kode_wilayah (the official BPS region code) as the natural primary key.
 
 DO $$ BEGIN
     CREATE TYPE wilayah_level AS ENUM ('provinsi', 'kabupaten', 'kecamatan', 'desa');
@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS wilayah (
 CREATE INDEX IF NOT EXISTS idx_wilayah_parent ON wilayah(kode_parent);
 CREATE INDEX IF NOT EXISTS idx_wilayah_level  ON wilayah(level);
 
--- Trigger pengganti ON UPDATE CURRENT_TIMESTAMP (tidak ada di PostgreSQL secara native).
+-- Stand-in trigger for ON UPDATE CURRENT_TIMESTAMP, which PostgreSQL lacks natively.
 CREATE OR REPLACE FUNCTION fn_set_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN

@@ -1,13 +1,13 @@
-/* Panel "Riwayat Perubahan" untuk halaman detail jawaban.
+/* The "Change History" panel for the response detail pages.
 
-   Dipakai bersama response-view.html (admin) dan portal-response-view.html
-   (viewer/editor). Keduanya memakai parameter URL yang sama (?form=&resp=) dan
-   token yang sama di localStorage, jadi berkas ini bisa berdiri sendiri: cukup
-   disertakan lewat <script src>, tanpa perlu mengubah kode halamannya.
+   Shared by response-view.html (admin) and portal-response-view.html
+   (viewer/editor). Both use the same URL parameters (?form=&resp=) and the same
+   token in localStorage, so this file stands on its own: including it with a
+   <script src> is enough, with no changes to the page's own code.
 
-   Panel hanya muncul kalau jawaban tersebut memang pernah diubah editor. Jawaban
-   yang tidak pernah disunting tidak menampilkan apa-apa, supaya tidak menambah
-   kebisingan di halaman yang sudah padat. */
+   The panel only appears if an editor has actually changed that answer. Answers
+   that were never edited render nothing at all, so an already-dense page does not
+   get noisier. */
 (function () {
   if (window.__revHistInit) return;
   window.__revHistInit = true;
@@ -37,19 +37,19 @@
   const esc = s => String(s ?? "").replace(/[&<>"]/g,
     c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
-  // Tampilkan nilai apa adanya tapi dipangkas; nilai kosong ditandai eksplisit
-  // supaya "diisi" vs "dikosongkan" tetap terbaca.
+  // Show the value as-is but truncated; empty values are marked explicitly so
+  // "filled in" and "cleared" remain distinguishable.
   function showVal(v) {
-    if (v === undefined) return '<span class="rh-empty">(tidak ada)</span>';
-    if (v === null || v === "") return '<span class="rh-empty">(kosong)</span>';
+    if (v === undefined) return '<span class="rh-empty">(none)</span>';
+    if (v === null || v === "") return '<span class="rh-empty">(empty)</span>';
     let s = typeof v === "object" ? JSON.stringify(v) : String(v);
     if (s.length > 160) s = s.slice(0, 160) + "…";
     return esc(s);
   }
 
-  // Cari label pertanyaan dari skema halaman kalau tersedia, supaya yang tampil
-  // bukan nama variabel mentah. Skema milik halaman (let SCHEMA) — dibaca lewat
-  // try/catch karena mungkin belum terisi.
+  // Look the question label up in the page's schema when available, so what shows
+  // is not a raw field name. The schema belongs to the page (let SCHEMA) and is read
+  // through try/catch because it may not be populated yet.
   function fieldLabel(name) {
     let schema = null;
     try { schema = typeof SCHEMA !== "undefined" ? SCHEMA : null; } catch { schema = null; }
@@ -82,13 +82,13 @@
         <div class="rh-vals"><span class="rh-old">${showVal(before[f])}</span>` +
         `<span class="rh-arrow">→</span><span class="rh-new">${showVal(after[f])}</span></div>`).join("");
 
-      const waktu = new Date(rev.createdAt).toLocaleString("id-ID");
+      const when = new Date(rev.createdAt).toLocaleString("id-ID");
       return `<div class="rh-item">
         <div class="rh-meta">
           <span class="rh-who">${esc(rev.editorName || "—")}</span>
-          <span>${esc(waktu)}</span>
+          <span>${esc(when)}</span>
           ${rev.ip ? `<span>IP ${esc(rev.ip)}</span>` : ""}
-          <span>${fields.length} variabel</span>
+          <span>${fields.length} fields</span>
         </div>
         <div class="rh-diff">${rows}</div>
       </div>`;
@@ -100,16 +100,16 @@
       <div class="rh-head">
         <svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7"
              stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7.5"/><polyline points="10,5.5 10,10 13,12"/></svg>
-        Riwayat Perubahan
+        Change History
         <span class="rh-count">${revisions.length}</span>
       </div>
       <div class="rh-body">${items}</div>`;
     return el;
   }
 
-  // Halaman detail merender ulang #content setiap ganti halaman kuesioner atau
-  // masuk/keluar mode edit, yang menghapus panel ini. Daripada menebak kapan
-  // render selesai, panelnya dipasang ulang setiap kali #content berubah.
+  // The detail page re-renders #content on every form-page change and whenever edit
+  // mode is entered or left, which removes this panel. Rather than guessing when a
+  // render finishes, the panel is re-mounted every time #content changes.
   function mount(panel) {
     const host = document.getElementById("content") || document.body;
     const ensure = () => {
@@ -127,13 +127,13 @@
     try {
       const r = await fetch(`/api/forms/${encodeURIComponent(formId)}/responses/${encodeURIComponent(respId)}/revisions`,
         { headers: { Authorization: "Bearer " + token } });
-      if (!r.ok) return; // tidak berhak / belum ada — cukup diam
+      if (!r.ok) return; // not permitted / nothing yet — stay quiet
       const d = await r.json();
       if (d.revisions && d.revisions.length) mount(render(d.revisions));
-    } catch { /* panel ini pelengkap; kegagalannya tidak boleh mengganggu halaman */ }
+    } catch { /* this panel is supplementary; its failure must not disturb the page */ }
   }
 
-  // Ditunda sebentar supaya halaman selesai merender isinya lebih dulu.
+  // Delayed briefly so the page finishes rendering its own content first.
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => setTimeout(load, 300));
   } else {

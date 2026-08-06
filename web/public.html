@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="id">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Kuesioner</title>
+<title>Form</title>
 <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
 <style>
 :root{
@@ -220,7 +220,7 @@ textarea.pv-in{width:100%;resize:vertical;min-height:72px}
 .resp-badge-ok{background:#dcfce7;color:#15803d}
 .btn-xs{padding:4px 10px;font-size:12px;border:1px solid var(--line);background:#fff;border-radius:6px;cursor:pointer;font-weight:600;white-space:nowrap}
 
-/* ---- Lihat Jawaban (overlay lihat-saja jawaban terkirim) ---- */
+/* ---- View Response (read-only overlay for submitted answers) ---- */
 .pvview-overlay{position:fixed;inset:0;z-index:150;background:var(--surface);display:flex;flex-direction:column;overflow:hidden}
 .rv-block{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px 18px;margin-bottom:14px}
 .rv-block-title{font-weight:700;font-size:14px;margin-bottom:12px;color:var(--ink)}
@@ -289,7 +289,7 @@ textarea.pv-in{width:100%;resize:vertical;min-height:72px}
 .pv-err-fix:hover{background:var(--bad);color:#fff}
 
 @media(max-width:700px){
-  /* iOS Safari auto-zoom saat fokus input jika font < 16px */
+  /* iOS Safari auto-zooms on input focus when the font is smaller than 16px */
   input,select,textarea,.pv-in,.pv-modal input,.pv-modal-in,.pw-card input{font-size:16px!important}
   .pv-side{position:fixed;inset:0 auto 0 0;z-index:60;width:260px;padding:14px 12px;overflow:auto;transform:translateX(-100%);transition:transform .22s ease;box-shadow:none;border-right:1px solid var(--line)}
   .pv-side.open{transform:translateX(0);box-shadow:4px 0 24px rgba(19,23,30,.18)}
@@ -308,7 +308,7 @@ textarea.pv-in{width:100%;resize:vertical;min-height:72px}
 </style>
 </head>
 <body>
-<div id="root"><div class="init-wrap"><span class="init-msg">Memuat kuesioner…</span></div></div>
+<div id="root"><div class="init-wrap"><span class="init-msg">Loading form…</span></div></div>
 <script src="/searchable-select.js"></script>
 <script src="/vendor/leaflet/leaflet.js"></script>
 <script src="/geo-map.js"></script>
@@ -323,20 +323,20 @@ let rosterView=null;
 let RESP_TOKEN=localStorage.getItem("eform_resp_token")||"";
 let RESP_USER=null;
 let EXISTING_RESPONSE=null;
-let MULTI_RESPONSE=false;  // apakah satu akun boleh kirim lebih dari satu respons
-let ACCESS_MODE="public";  // 'public' atau 'restricted'
-let EDITING_RESPONSE_ID=null; // ID baris form_responses yang sedang diedit (draft mode)
-let DRAFT_RESTORED_AT=null; // timestamp draf lokal yang sedang dipakai (null jika tidak ada)
+let MULTI_RESPONSE=false;  // whether one account may submit more than one response
+let ACCESS_MODE="public";  // 'public' or 'restricted'
+let EDITING_RESPONSE_ID=null; // the form_responses row id currently being edited (draft mode)
+let DRAFT_RESTORED_AT=null; // timestamp of the local draft in use (null when there is none)
 let AUTOSAVE_TIMER=null;
 let PENDING_UPLOADS={};
-let OFFLINE_MODE=false; // settings.offline.enabled di instrumen DAN share multi-respons
+let OFFLINE_MODE=false; // settings.offline.enabled on the instrument AND a multi-response share
 let DEFERRED_INSTALL_PROMPT=null;
 window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();DEFERRED_INSTALL_PROMPT=e;renderInstallButton();});
 
 try{RESP_USER=JSON.parse(localStorage.getItem("eform_resp_user")||"null");}catch(_){}
 
-/* ---- draft/autosave lokal: simpan progres pengisian di localStorage agar
-   tidak hilang kalau tab tertutup / koneksi putus sebelum sempat "Kirim". ---- */
+/* ---- local draft/autosave: keep progress in localStorage so it is not lost if
+   the tab closes or the connection drops before "Submit". ---- */
 function draftKey(){return RESP_USER?`eform_draft_${SHARE_TOKEN}_${RESP_USER.id}`:null;}
 function saveDraft(){
   const key=draftKey();if(!key)return;
@@ -351,8 +351,8 @@ function clearDraft(){
   try{localStorage.removeItem(key);}catch(_){}
 }
 
-/* ---- PWA & antrean offline (khusus kuesioner multi-respons dengan mode offline aktif) ----
-   Kontrak IndexedDB dipakai bersama web/sw.js: DB "eform-offline", store "queue" (keyPath id, autoIncrement). */
+/* ---- PWA & offline queue (multi-response forms with offline mode enabled only) ----
+   The IndexedDB contract is shared with web/sw.js: DB "eform-offline", store "queue" (keyPath id, autoIncrement). */
 function setupPWA(){
   if(document.getElementById("pvManifestLink"))return;
   const link=document.createElement("link");link.id="pvManifestLink";link.rel="manifest";
@@ -374,7 +374,7 @@ function renderInstallButton(){
 function updateOfflineBadge(){
   const el=document.getElementById("pvOfflineBadge");if(!el)return;
   pendingCount().then(n=>{
-    el.textContent=n>0?`⏳ ${n} menunggu dikirim`:"";
+    el.textContent=n>0?`⏳ ${n} waiting to be sent`:"";
     el.style.cssText=n>0?"font-size:11px;color:var(--warn);white-space:nowrap":"";
   });
 }
@@ -450,7 +450,7 @@ function showNavError(msg){
 }
 function ensureNoPendingUploads(){
   if(!pendingUploadKeys().length)return true;
-  showNavError("Masih ada file yang dipilih tetapi belum diupload. Upload dulu sebelum menyimpan draf atau mengirim jawaban.");
+  showNavError("Some files are selected but not uploaded yet. Upload them before saving a draft or submitting.");
   return false;
 }
 function mediaSourceOf(val){
@@ -507,10 +507,10 @@ const Expr=(function(){
       if(k.t==="lb"){next();const items=[];if(peek()&&peek().t!=="rb"){items.push(or());while(peek()&&peek().t==="comma"){next();items.push(or());}}expect("rb");return {type:"arr",items};}
       if(k.t==="id"){next();
         if(peek()&&peek().t==="lp"){const fn=k.v.toLowerCase();if(!FUNCS.has(fn))throw new Error("fungsi tak dikenal: "+k.v);next();const args=[];if(peek()&&peek().t!=="rp"){args.push(or());while(peek()&&peek().t==="comma"){next();args.push(or());}}expect("rp");return {type:"call",fn,args};}
-        throw new Error("pakai ${...} untuk merujuk field, bukan '"+k.v+"'");}
+        throw new Error("use ${...} to reference a field, not '"+k.v+"'");}
       throw new Error("token tak terduga");
     }
-    const ast=or();if(p<toks.length)throw new Error("ada token sisa di akhir");return ast;
+    const ast=or();if(p<toks.length)throw new Error("unexpected trailing token");return ast;
   }
   const toNum=v=>v===true?1:v===false?0:(v==null||v==="")?NaN:Number(v);
   const isEmp=x=>x==null||x===""||(Array.isArray(x)&&x.length===0);
@@ -582,7 +582,7 @@ function refResolve(name,rowPrefix){
     const dot=name.indexOf(".");const rn=name.slice(0,dot),fn=name.slice(dot+1);
     const r=findRoster(rn);
     if(r){const cnt=rosterCount(r);const arr=[];for(let i=0;i<cnt;i++)arr.push(coerceVal(answers[`${rn}#${i}#${fn}`]));return arr;}
-    // Bukan notasi roster.field — nama field biasa yang kebetulan mengandung titik
+    // Not roster.field notation — an ordinary field name that happens to contain a dot
     if(rowPrefix){const v=resolveScopedAnswer(name,rowPrefix);if(v!==undefined)return v;}
     return name in answers?coerceVal(answers[name]):undefined;
   }
@@ -602,7 +602,7 @@ function pubHeaders(extra){
   return h;
 }
 
-/* ---- sanitizer HTML untuk field note (hanya tag aman) ---- */
+/* ---- HTML sanitiser for note fields (safe tags only) ---- */
 function sanitizeHtml(html){
   const ALLOWED={A:['href','target','rel'],B:[],STRONG:[],I:[],EM:[],U:[],S:[],
     P:[],BR:[],UL:[],OL:[],LI:[],BLOCKQUOTE:[],H1:[],H2:[],H3:[],H4:[],H5:[],H6:[],CODE:[],PRE:[],HR:[]};
@@ -650,7 +650,7 @@ async function fetchForm(){
   const r=await fetch("/api/public/forms/"+encodeURIComponent(SHARE_TOKEN),{headers});
   const data=await r.json();
   if(r.status===401){askPassword(data.error);return;}
-  if(!r.ok)throw new Error(data.error||"Gagal memuat");
+  if(!r.ok)throw new Error(data.error||"Failed to load");
   SCHEMA=data.schema; ALLOW=data.allowResponses;
   MULTI_RESPONSE=!!data.multiResponse;
   ACCESS_MODE=data.accessMode||"public";
@@ -658,7 +658,7 @@ async function fetchForm(){
   if(OFFLINE_MODE)setupPWA();
 
   if(!data.googleEnabled){
-    setRoot(`<div class="init-wrap"><div class="pw-card"><div class="msg err" style="display:block">Login Google belum dikonfigurasi oleh administrator.</div></div></div>`);
+    setRoot(`<div class="init-wrap"><div class="pw-card"><div class="msg err" style="display:block">Google login has not been configured by the administrator.</div></div></div>`);
     return;
   }
 
@@ -671,8 +671,8 @@ async function fetchForm(){
   try{meR=await fetch("/api/public/me",{headers:{"Authorization":"Bearer "+RESP_TOKEN}});}
   catch(e){meNetworkErr=isNetworkError(e);if(!meNetworkErr)throw e;}
   if(meNetworkErr){
-    // Offline sungguhan (mis. PWA dibuka tanpa internet): jangan paksa logout, pakai sesi
-    // yang sudah tersimpan di perangkat sejak login terakhir kali online.
+    // Genuinely offline (a PWA opened without internet, say): do not force a logout, reuse the session
+    // already stored on the device since the last online sign-in.
     if(!RESP_USER){renderLoginGate(data);return;}
   }else if(!meR.ok){
     clearRespSession();
@@ -683,7 +683,7 @@ async function fetchForm(){
     localStorage.setItem("eform_resp_user",JSON.stringify(RESP_USER));
   }
 
-  // Cek akses jika mode terbatas
+  // Check access when the share is restricted
   if(ACCESS_MODE==="restricted"){
     try{
       const ar=await fetch("/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/check-access",
@@ -693,21 +693,21 @@ async function fetchForm(){
         renderAccessDenied(data);
         return;
       }
-    }catch(e){showErr("Gagal memeriksa hak akses.");return;}
+    }catch(e){showErr("Failed to check access rights.");return;}
   }
 
-  // Mode multi-response: SELALU tampilkan daftar terlebih dahulu
+  // Multi-response mode: ALWAYS show the list first
   if(MULTI_RESPONSE){
     const prevResps=await fetchMyResponses();
     renderMyResponsesList(data,prevResps);
     return;
   }
 
-  // Single-response: coba muat jawaban lama
+  // Single-response: try to load the previous answer
   const lastResp=await fetchMyResponse();
   if(lastResp&&lastResp.status==="draft"){
-    // Respons yang baru dibatalkan pengirimannya (unsubmit) - lanjutkan mengedit
-    // sebagai draf, bukan sebagai jawaban final.
+    // A response that was just unsubmitted — carry on editing it
+    // as a draft, not as a final answer.
     EXISTING_RESPONSE=null;
     EDITING_RESPONSE_ID=lastResp.id;
     answers=parseAnswers(lastResp.answers);
@@ -718,7 +718,7 @@ async function fetchForm(){
     }
   }
 
-  // Pilih sumber data terbaru: jawaban final, draf server, atau draf lokal
+  // Pick the freshest source: the final answer, the server draft, or the local draft
   let restorePage=null;
   const serverTime=EXISTING_RESPONSE?new Date(EXISTING_RESPONSE.submittedAt):null;
 
@@ -730,7 +730,7 @@ async function fetchForm(){
   const localDraft=loadDraft();
   const localDraftTime=localDraft&&localDraft.savedAt?new Date(localDraft.savedAt):null;
 
-  // Tentukan draf mana yang dipakai (lebih baru dari jawaban final)
+  // Decide which draft to use (newer than the final answer)
   const useServerDraft=serverDraftTime&&(!serverTime||serverDraftTime>serverTime)&&(!localDraftTime||serverDraftTime>=localDraftTime);
   const useLocalDraft=!useServerDraft&&localDraftTime&&localDraft.answers&&Object.keys(localDraft.answers).length&&(!serverTime||localDraftTime>serverTime);
 
@@ -738,7 +738,7 @@ async function fetchForm(){
     answers=parseAnswers(serverDraft.answers);
     restorePage=serverDraft.curPage||0;
     DRAFT_RESTORED_AT=serverDraft.savedAt;
-    clearDraft(); // sinkronkan lokal dengan server
+    clearDraft(); // bring the local copy in line with the server
   }else if(useLocalDraft){
     answers=localDraft.answers;
     restorePage=localDraft.curPage||0;
@@ -779,20 +779,20 @@ async function fetchMyResponses(){
 }
 
 function renderAccessDenied(meta){
-  const title=txt(meta.title||txt(SCHEMA?.title)||"Kuesioner");
+  const title=txt(meta.title||txt(SCHEMA?.title)||"Form");
   document.title=title;
   setRoot(`<div class="gate-wrap"><div class="gate-card">
     <div class="gate-icon">🔒</div>
     <h2>${esc(title)}</h2>
-    <p class="gate-sub">Email Anda (<b>${esc(RESP_USER?.email||"")}</b>) tidak terdaftar dalam daftar akses kuesioner ini.</p>
-    <p class="gate-sub muted">Hubungi administrator untuk mendapatkan akses.</p>
+    <p class="gate-sub">Email Anda (<b>${esc(RESP_USER?.email||"")}</b>) is not on the access list for this form.</p>
+    <p class="gate-sub muted">Contact an administrator to request access.</p>
     <button class="btn" onclick="logout()">Keluar</button>
   </div></div>`);
 }
 
 let _responseMap={};
 function renderMyResponsesList(meta,responses){
-  const title=txt(meta.title||txt(SCHEMA?.title)||"Kuesioner");
+  const title=txt(meta.title||txt(SCHEMA?.title)||"Form");
   document.title=title;
   _responseMap={};responses.forEach(r=>{_responseMap[r.id]=r;});
   const fmt=iso=>{try{return new Date(iso).toLocaleString("id-ID",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});}catch{return iso;}};
@@ -806,11 +806,11 @@ function renderMyResponsesList(meta,responses){
   const rows=responses.map((r,i)=>{
     const isDraft=r.status==="draft";
     const badge=isDraft
-      ?`<span class="resp-badge resp-badge-draft">Draf</span>`
-      :`<span class="resp-badge resp-badge-ok">Terkirim</span>`;
-    // Jawaban yang sudah terkirim tetap bisa dilihat kapan saja, terlepas dari
-    // ALLOW (share ditutup) — hanya "Batalkan Submit" yang perlu share masih aktif.
-    // Klik langsung pada container-nya (bukan tombol terpisah) untuk membuka "Lihat Jawaban".
+      ?`<span class="resp-badge resp-badge-draft">Draft</span>`
+      :`<span class="resp-badge resp-badge-ok">Submitted</span>`;
+    // A submitted answer stays viewable at any time, regardless of ALLOW (a closed
+    // share) — only "Unsubmit" requires the share to still be active.
+    // Clicking the container itself (rather than a separate button) opens "View Response".
     const action=isDraft
       ?`<button class="btn btn-xs" onclick="editDraftResponseById('${esc(r.id)}')">Lanjutkan</button>`
       :`<button class="btn btn-xs" onclick="event.stopPropagation();unsubmitResponseAPI('${r.id}')">Batalkan Submit</button>`;
@@ -818,20 +818,20 @@ function renderMyResponsesList(meta,responses){
     return `<div class="resp-item${isDraft?"":" resp-item-clickable"}"${rowAttrs}>
       <div class="resp-item-left"><span class="resp-num">Respons ${responses.length-i}</span>${badge}</div>
       <div class="resp-item-right">
-        <span class="resp-date">${isDraft?"Draf · "+fmt(r.submittedAt):fmt(r.submittedAt)}</span>
+        <span class="resp-date">${isDraft?"Draft · "+fmt(r.submittedAt):fmt(r.submittedAt)}</span>
         ${ALLOW?action:""}
       </div>
     </div>`;
   }).join("");
-  const emptyNote=responses.length===0?`<div class="muted" style="padding:12px;text-align:center;font-size:13px">Belum ada respons.</div>`:"";
+  const emptyNote=responses.length===0?`<div class="muted" style="padding:12px;text-align:center;font-size:13px">No responses yet.</div>`:"";
   const newBtn=ALLOW&&!hasDraft
-    ?`<button class="btn primary" style="margin-top:16px;width:100%" onclick="startNewResponse()">+ Isi Respons Baru</button>`
-    :(ALLOW&&hasDraft?`<p class="gate-sub muted" style="font-size:12px;margin-top:12px">Selesaikan atau batalkan draf yang ada sebelum menambah respons baru.</p>`:"");
+    ?`<button class="btn primary" style="margin-top:16px;width:100%" onclick="startNewResponse()">+ New Response</button>`
+    :(ALLOW&&hasDraft?`<p class="gate-sub muted" style="font-size:12px;margin-top:12px">Finish or discard the existing draft before adding a new response.</p>`:"");
   setRoot(`<div class="gate-wrap"><div class="gate-card gate-card-wide">
     ${userBar}
     <div class="gate-icon">📋</div>
     <h2>${esc(title)}</h2>
-    <p class="gate-sub">${responses.length===0?"Anda belum memiliki respons untuk kuesioner ini.":"Anda memiliki "+responses.length+" respons untuk kuesioner ini."}</p>
+    <p class="gate-sub">${responses.length===0?"You have no responses for this form yet.":"You have "+responses.length+" responses for this form."}</p>
     <div class="resp-list">${emptyNote}${rows}</div>
     ${newBtn}
   </div></div>`);
@@ -844,7 +844,7 @@ function startNewResponse(){
   EXISTING_RESPONSE=null;
   answers={};
   clearDraft();
-  render({title:txt(SCHEMA?.title)||"Kuesioner",schema:SCHEMA});
+  render({title:txt(SCHEMA?.title)||"Form",schema:SCHEMA});
   goToPage(0);
 }
 
@@ -856,17 +856,17 @@ function editDraftResponse(resp){
   EDITING_RESPONSE_ID=resp.id;
   EXISTING_RESPONSE=null;
   try{answers=typeof resp.answers==="string"?JSON.parse(resp.answers):(resp.answers||{});}catch{answers={};}
-  clearDraft();saveDraft(); // sinkronkan ke localStorage juga
-  render({title:txt(SCHEMA?.title)||"Kuesioner",schema:SCHEMA});
+  clearDraft();saveDraft(); // sync to localStorage as well
+  render({title:txt(SCHEMA?.title)||"Form",schema:SCHEMA});
   goToPage(0);
 }
 
-/* ==================== Lihat Jawaban (mode lihat-saja untuk responden) ====================
-   Dipakai dari daftar respons (multi-response) supaya responden bisa melihat isi jawaban
-   yang sudah terkirim tanpa perlu Batalkan Submit dulu. Sengaja dibuat terpisah dari mesin
-   render form pengisian (yang terikat erat ke variabel global `answers` yang sedang aktif
-   diisi) — supaya tidak mengganggu draft yang sedang dikerjakan. Meniru pola rv-* yang
-   sudah dipakai di response-view.html/portal-response-view.html (read-only + skip-to). */
+/* ==================== View Response (read-only mode for respondents) ====================
+   Reached from the response list (multi-response) so a respondent can look at a submitted
+   answer without having to Unsubmit first. Deliberately kept separate from the form's own
+   render engine — which is tightly bound to the global `answers` currently being filled in
+   — so it cannot disturb a draft in progress. It follows the rv-* pattern already used in
+   response-view.html / portal-response-view.html (read-only + skip-to). */
 let VIEW_RESP=null,VIEW_ANSWERS={},VIEW_PAGES=[],VIEW_VISITED=[],VIEW_CUR=0;
 const VIEW_CHOICE_TYPES=new Set(["select","multiselect","radio","checkbox"]);
 
@@ -1083,7 +1083,7 @@ function renderViewField(c,ans,rp){
     return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer-box">${esc(display)}</div></div>`;
   }
   if(c.type==="boolean"){
-    const items=[{value:"true",label:"Ya"},{value:"false",label:"Tidak"}].map(o=>{
+    const items=[{value:"true",label:"Yes"},{value:"false",label:"No"}].map(o=>{
       const sel=String(val)===o.value;
       return `<div class="rv-choice-item ${sel?"selected":"unsel"}"><span class="rv-choice-icon"></span>${o.label}</div>`;
     }).join("");
@@ -1105,7 +1105,7 @@ function renderViewField(c,ans,rp){
     const src=getMediaSource(val);
     if(!src)return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer empty">—</div></div>`;
     const mime=(src.match(/^data:([^;]+)/)||[])[1]||"file";
-    return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer"><a href="${esc(src)}" download="file" style="color:var(--accent)">Unduh file (${esc(mime)})</a></div></div>`;
+    return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer"><a href="${esc(src)}" download="file" style="color:var(--accent)">Download file (${esc(mime)})</a></div></div>`;
   }
   const display=val==null||val===""?null:String(val);
   const isEmpty=display==null;
@@ -1117,10 +1117,10 @@ function renderViewRoster(r,ans,rp){
   rp=rp||"";
   const count=viewGetRosterCount(r,ans,rp);
   const title=esc(viewRowInterp(txt(r.title)||r.name,ans,rp));
-  let html=`<div class="rv-roster"><div class="rv-roster-title">${title} <span style="font-weight:400;font-size:12px">(${count} baris)</span></div>`;
-  if(count<=0){html+=`<div class="rv-empty">Tidak ada data</div>`;}
+  let html=`<div class="rv-roster"><div class="rv-roster-title">${title} <span style="font-weight:400;font-size:12px">(${count} rows)</span></div>`;
+  if(count<=0){html+=`<div class="rv-empty">No data</div>`;}
   else{
-    const rowLbl=(i,childRp)=>r.rowTitle?`${esc(viewRowInterp(txt(r.rowTitle),ans,childRp))} #${i+1}`:`Baris #${i+1}`;
+    const rowLbl=(i,childRp)=>r.rowTitle?`${esc(viewRowInterp(txt(r.rowTitle),ans,childRp))} #${i+1}`:`Row #${i+1}`;
     for(let i=0;i<count;i++){
       const childRp=rosterRowPrefix(r,i,rp);
       const rowHidden=viewComputeRosterRowSkipState(r,i,ans,rp);
@@ -1131,7 +1131,7 @@ function renderViewRoster(r,ans,rp){
 }
 function renderViewFlatAnswers(ans){
   const entries=Object.entries(ans).filter(([k])=>!k.includes("#"));
-  if(!entries.length)return `<div class="rv-block"><div class="rv-empty">Tidak ada data</div></div>`;
+  if(!entries.length)return `<div class="rv-block"><div class="rv-empty">No data</div></div>`;
   return `<div class="rv-block">`+entries.map(([k,v])=>
     `<div class="rv-field"><div class="rv-label" style="font-family:var(--mono);font-size:11.5px">${esc(k)}</div><div class="rv-answer">${esc(Array.isArray(v)?v.join(", "):String(v??""))}</div></div>`
   ).join("")+`</div>`;
@@ -1145,7 +1145,7 @@ async function viewSubmittedResponse(id){
   VIEW_PAGES=(SCHEMA&&SCHEMA.pages)||[];
   openViewOverlay();
   await prefetchViewApiOptions(VIEW_ANSWERS);
-  if(!document.getElementById("pvViewOverlay"))return; // ditutup sebelum prefetch selesai
+  if(!document.getElementById("pvViewOverlay"))return; // closed before the prefetch finished
   VIEW_VISITED=viewComputeVisitedPages(VIEW_PAGES,VIEW_ANSWERS);
   VIEW_CUR=VIEW_VISITED.length?VIEW_VISITED[0]:0;
   renderViewPage();
@@ -1153,21 +1153,21 @@ async function viewSubmittedResponse(id){
 let VIEW_HISTORY_PUSHED=false;
 function openViewOverlay(){
   if(document.getElementById("pvViewOverlay"))return;
-  // Batalkan Submit tetap butuh share masih aktif (ALLOW) — sama seperti di daftar respons.
+  // Unsubmit still requires the share to be active (ALLOW) — same as in the response list.
   const unsubmitBtn=ALLOW&&VIEW_RESP?`<button class="btn danger" onclick="unsubmitResponseAPI('${esc(VIEW_RESP.id)}')">Batalkan Submit</button>`:"";
   const ovl=document.createElement("div");
   ovl.className="pvview-overlay";
   ovl.id="pvViewOverlay";
   ovl.innerHTML=`<div class="pv-bar">
-      <span class="pv-title">${esc(txt(SCHEMA?.title)||"Kuesioner")}</span>
+      <span class="pv-title">${esc(txt(SCHEMA?.title)||"Form")}</span>
       ${unsubmitBtn}
-      <button class="btn" onclick="closeResponseViewer()">✕ Tutup</button>
+      <button class="btn" onclick="closeResponseViewer()">✕ Close</button>
     </div>
-    <div class="pv-body" id="pvViewBody"><div style="padding:40px;text-align:center;color:var(--muted)">Memuat…</div></div>
+    <div class="pv-body" id="pvViewBody"><div style="padding:40px;text-align:center;color:var(--muted)">Loading…</div></div>
     <div class="pv-nav-area" id="pvViewFootArea" hidden><div class="pv-nav" id="pvViewFoot"></div></div>`;
   document.body.appendChild(ovl);
-  // Dorong satu entri history supaya tombol back HP (Android) menutup overlay ini
-  // dulu (via popstate di bawah), bukan langsung keluar dari halaman kuesioner.
+  // Push one history entry so the phone's back button (Android) closes this overlay
+  // first (via the popstate below), rather than leaving the form page outright.
   history.pushState({pvView:true},"",location.href);
   VIEW_HISTORY_PUSHED=true;
 }
@@ -1178,12 +1178,12 @@ function closeResponseViewer(){
   VIEW_RESP=null;VIEW_ANSWERS={};VIEW_PAGES=[];VIEW_VISITED=[];VIEW_CUR=0;
   if(VIEW_HISTORY_PUSHED){
     VIEW_HISTORY_PUSHED=false;
-    history.back(); // konsumsi entri yang didorong saat overlay dibuka, supaya tidak "nyangkut" di history
+    history.back(); // consume the entry pushed when the overlay opened, so it does not get stuck in history
   }
 }
-// Tombol back HP (Android)/browser: kalau overlay masih terbuka, tutup saja alih-alih
-// pindah keluar dari halaman kuesioner. Tidak perlu history.back() lagi di sini karena
-// popstate ini SUDAH konsekuensi dari navigasi back yang terjadi.
+// Phone (Android)/browser back button: if the overlay is still open, just close it
+// instead of navigating away from the form. No further history.back() is needed here,
+// because this popstate is ALREADY the consequence of the back navigation.
 window.addEventListener("popstate",()=>{
   const ovl=document.getElementById("pvViewOverlay");
   if(ovl){
@@ -1198,14 +1198,14 @@ function viewGoPage(idx){
 }
 function renderViewPage(){
   const body=document.getElementById("pvViewBody");
-  if(!body)return; // overlay sudah ditutup
+  if(!body)return; // the overlay is already closed
   const ans=VIEW_ANSWERS,pages=VIEW_PAGES,visited=VIEW_VISITED;
   const visIdx=Math.max(0,visited.indexOf(VIEW_CUR));
   let html="";
   if(pages.length){
     const p=pages[VIEW_CUR]||pages[0];
     const hiddenNames=viewComputePageSkipState(p,ans).hidden;
-    html=`<div class="pv-page"><h2 class="pv-h2">${esc(viewRowInterp(txt(p.title)||p.name||"Halaman "+(VIEW_CUR+1),ans,""))}</h2><div class="pv-card">${renderViewNodes(p.components||[],ans,"",hiddenNames)}</div></div>`;
+    html=`<div class="pv-page"><h2 class="pv-h2">${esc(viewRowInterp(txt(p.title)||p.name||"Page "+(VIEW_CUR+1),ans,""))}</h2><div class="pv-card">${renderViewNodes(p.components||[],ans,"",hiddenNames)}</div></div>`;
   }else{
     html=`<div class="pv-page">${renderViewFlatAnswers(ans)}</div>`;
   }
@@ -1213,9 +1213,9 @@ function renderViewPage(){
   const footArea=document.getElementById("pvViewFootArea"),foot=document.getElementById("pvViewFoot");
   if(visited.length>1){
     footArea.hidden=false;
-    foot.innerHTML=`<button class="btn" ${visIdx===0?"disabled":""} onclick="viewGoPage(${visited[Math.max(0,visIdx-1)]})">← Sebelumnya</button>`+
-      `<span class="pv-prog">Halaman ${visIdx+1} / ${visited.length}</span>`+
-      `<button class="btn" ${visIdx>=visited.length-1?"disabled":""} onclick="viewGoPage(${visited[Math.min(visited.length-1,visIdx+1)]})">Selanjutnya →</button>`;
+    foot.innerHTML=`<button class="btn" ${visIdx===0?"disabled":""} onclick="viewGoPage(${visited[Math.max(0,visIdx-1)]})">← Previous</button>`+
+      `<span class="pv-prog">Page ${visIdx+1} / ${visited.length}</span>`+
+      `<button class="btn" ${visIdx>=visited.length-1?"disabled":""} onclick="viewGoPage(${visited[Math.min(visited.length-1,visIdx+1)]})">Next →</button>`;
   }else{
     footArea.hidden=true;
   }
@@ -1242,23 +1242,23 @@ function pvDialog(msg,onConfirm,opts){
 
 async function unsubmitResponseAPI(responseId){
   pvDialog(
-    "Batalkan pengiriman respons ini? Respons akan berubah menjadi draf dan bisa diedit kembali.",
+    "Unsubmit this response? It will return to draft status and can be edited again.",
     async()=>{
       try{
         const r=await fetch(`/api/public/forms/${encodeURIComponent(SHARE_TOKEN)}/responses/${encodeURIComponent(responseId)}/unsubmit`,
           {method:"POST",headers:pubHeaders({})});
         const d=await r.json();
-        if(!r.ok)throw new Error(d.error||"Gagal membatalkan pengiriman");
-        closeResponseViewer(); // tutup overlay "Lihat Jawaban" kalau sedang terbuka — statusnya sudah berubah jadi draf
+        if(!r.ok)throw new Error(d.error||"Failed to unsubmit");
+        closeResponseViewer(); // close the "View Response" overlay if open — the status has just become draft
         if(MULTI_RESPONSE){
           const resps=await fetchMyResponses();
-          renderMyResponsesList({title:txt(SCHEMA?.title)||"Kuesioner"},resps);
+          renderMyResponsesList({title:txt(SCHEMA?.title)||"Form"},resps);
         }else{
           EXISTING_RESPONSE=null;
           EDITING_RESPONSE_ID=d.id;
           renderCurrentPage();
         }
-      }catch(e){pvDialog(e.message,null,{title:"Gagal membatalkan",confirmLabel:"Tutup",noCancel:true,danger:true});}
+      }catch(e){pvDialog(e.message,null,{title:"Failed to unsubmit",confirmLabel:"Close",noCancel:true,danger:true});}
     },
     {title:"Batalkan Submit",confirmLabel:"Ya, Batalkan",danger:true}
   );
@@ -1269,15 +1269,15 @@ async function fetchMyDraft(){
     const r=await fetch("/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/draft",
       {headers:pubHeaders({})});
     if(!r.ok)return null;
-    return await r.json(); // null jika belum ada draf
+    return await r.json(); // null when there is no draft yet
   }catch{return null;}
 }
 
 async function saveDraftToServer(){
   const btn=document.getElementById("pvSaveDraft");
-  if(btn){btn.disabled=true;btn.textContent="Menyimpan…";}
+  if(btn){btn.disabled=true;btn.textContent="Saving…";}
   if(!ensureNoPendingUploads()){
-    if(btn){btn.disabled=false;btn.textContent="Simpan Draf";}
+    if(btn){btn.disabled=false;btn.textContent="Save Draft";}
     return;
   }
   saveAnswers();
@@ -1285,7 +1285,7 @@ async function saveDraftToServer(){
   try{
     let savedAt,offlineQueued=false;
     if(MULTI_RESPONSE){
-      // Untuk multi-response, simpan draf ke form_responses (bukan response_drafts)
+      // For multi-response, save the draft into form_responses (not response_drafts)
       const body={answers:ans,draft:true};
       if(EDITING_RESPONSE_ID)body.responseId=EDITING_RESPONSE_ID;
       const url="/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/responses";
@@ -1297,12 +1297,12 @@ async function saveDraftToServer(){
         if(OFFLINE_MODE&&isNetworkError(e)){
           await queueOfflineRequest(url,headers,JSON.stringify(body));
           offlineQueued=true;savedAt=new Date().toISOString();
-        }else throw new Error("Tidak ada koneksi internet.");
+        }else throw new Error("No internet connection.");
       }
       if(!offlineQueued){
-        if(!r.ok)throw new Error("Gagal menyimpan draf");
+        if(!r.ok)throw new Error("Failed to save draft");
         const d=await r.json();
-        EDITING_RESPONSE_ID=d.id; // simpan ID agar save berikutnya update baris yang sama
+        EDITING_RESPONSE_ID=d.id; // keep the id so the next save updates the same row
         savedAt=d.submittedAt;
       }
     }else{
@@ -1311,14 +1311,14 @@ async function saveDraftToServer(){
         headers:pubHeaders({"Content-Type":"application/json"}),
         body:JSON.stringify({answers:ans,curPage})
       });
-      if(!r.ok)throw new Error("Gagal menyimpan draf");
+      if(!r.ok)throw new Error("Failed to save draft");
       const d=await r.json();
       savedAt=d.savedAt;
     }
-    saveDraft(); // perbarui draf lokal juga
-    if(btn){btn.className="pv-savedraft saved";btn.textContent=offlineQueued?"⏳ Tersimpan offline":"✓ Tersimpan "+formatDraftTime(savedAt);setTimeout(()=>{if(btn){btn.className="pv-savedraft";btn.textContent="Simpan Draf";btn.disabled=false;}},3000);}
+    saveDraft(); // refresh the local draft too
+    if(btn){btn.className="pv-savedraft saved";btn.textContent=offlineQueued?"⏳ Saved offline":"✓ Saved "+formatDraftTime(savedAt);setTimeout(()=>{if(btn){btn.className="pv-savedraft";btn.textContent="Save Draft";btn.disabled=false;}},3000);}
   }catch(e){
-    if(btn){btn.disabled=false;btn.textContent="Simpan Draf";}
+    if(btn){btn.disabled=false;btn.textContent="Save Draft";}
     showNavError(e.message);
   }
 }
@@ -1333,24 +1333,24 @@ function clearRespSession(){
 
 function setRoot(html){document.getElementById("root").innerHTML=html;}
 function askPassword(msg){
-  setRoot(`<div class="init-wrap"><div class="pw-card"><h3>Kuesioner terkunci</h3><p class="pw-sub">${esc(msg||"Masukkan password untuk membuka kuesioner")}</p><input id="pw" type="password" placeholder="Password…"><button class="btn primary" id="pwbtn" style="width:100%">Buka</button></div></div>`);
-  document.getElementById("pwbtn").onclick=()=>{PW=document.getElementById("pw").value;setRoot('<div class="init-wrap"><span class="init-msg">Memuat…</span></div>');fetchForm().catch(e=>showErr(e.message));};
+  setRoot(`<div class="init-wrap"><div class="pw-card"><h3>Form locked</h3><p class="pw-sub">${esc(msg||"Enter the password to unlock the form")}</p><input id="pw" type="password" placeholder="Password…"><button class="btn primary" id="pwbtn" style="width:100%">Open</button></div></div>`);
+  document.getElementById("pwbtn").onclick=()=>{PW=document.getElementById("pw").value;setRoot('<div class="init-wrap"><span class="init-msg">Loading…</span></div>');fetchForm().catch(e=>showErr(e.message));};
 }
 function showErr(m){setRoot(`<div class="init-wrap"><div class="pw-card"><div class="msg err" style="display:block">${esc(m)}</div></div></div>`);}
 
 /* ---- login gate ---- */
 function renderLoginGate(meta){
-  const title=txt(meta.title||txt(SCHEMA?.title)||"Kuesioner");
+  const title=txt(meta.title||txt(SCHEMA?.title)||"Form");
   document.title=title;
   const loginUrl="/auth/google?next="+encodeURIComponent("/f/"+SHARE_TOKEN);
   setRoot(`<div class="gate-wrap"><div class="gate-card">
     <div class="gate-icon">📋</div>
     <div class="gate-title">${esc(title)}</div>
-    <p class="gate-sub">Masuk dengan akun Google Anda untuk mengisi kuesioner ini. Jawaban yang sudah terkirim dapat diedit kapan saja.</p>
+    <p class="gate-sub">Sign in with your Google account to fill in this form. Submitted responses can be edited at any time.</p>
     <span class="gate-form">eForm · {{ORG_NAME}}</span>
     <a href="${esc(loginUrl)}" class="google-btn">
       <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/><path fill="none" d="M0 0h48v48H0z"/></svg>
-      Masuk dengan Google
+      Sign in with Google
     </a>
   </div></div>`);
 }
@@ -1360,7 +1360,7 @@ function getPath(o,p){return String(p).split(".").reduce((x,k)=>x==null?x:x[k],o
 async function optionsFor(c,rp){
   rp=rp||"";
   if(c.optionsApi&&c.optionsApi.url){
-    // Cari nilai dep: roster-prefixed dahulu, fallback ke field halaman
+    // Find the dependency value: roster-prefixed first, falling back to the page field
     const url=c.optionsApi.url.replace(/\{([^}]+)\}/g,(_,k)=>encodeURIComponent((rp?(answers[rp+k]??answers[k]):answers[k])??''));
     if(apiCache[url])return apiCache[url];
     try{const r=await fetch("/api/options-proxy?url="+encodeURIComponent(url));const d=await r.json();
@@ -1388,7 +1388,7 @@ const DT_INPUT_TYPE={date:"date",time:"time",datetime:"datetime-local"};
 let pending=[];
 
 function pvEmpty(v){return v==null||v===""||(Array.isArray(v)&&v.length===0);}
-// Parse nilai geopoint "lat, lng" (format yang disimpan tombol "Ambil Lokasi") menjadi {lat,lng} atau null.
+// Parse a geopoint value "lat, lng" (the format stored by the "Get Location" button) into {lat,lng} or null.
 function parseGeoPoint(val){
   if(val==null||val==="")return null;
   const parts=String(val).split(",").map(s=>s.trim());
@@ -1398,7 +1398,7 @@ function parseGeoPoint(val){
   if(lat<-90||lat>90||lng<-180||lng>180)return null;
   return{lat,lng};
 }
-// Dipakai renderViewField (mode Lihat Jawaban) untuk field foto/file/tanda tangan.
+// Used by renderViewField (View Response mode) for photo/file/signature fields.
 function getMediaSource(val){
   if(!val)return "";
   if(Array.isArray(val))return getMediaSource(val[0]);
@@ -1415,7 +1415,7 @@ function fieldHtml(c,rp,scopes){
   rp=rp||"";
   const scopeList=[rp,...normScopes(scopes)];
   if(!evalVisible(c.visibleWhen,rp))return"";
-  if(rp?ROW_SKIP_HIDDEN.get(rp.slice(0,-1))?.has(c.name):SKIP_HIDDEN.has(c.name))return""; // disembunyikan oleh skip-to
+  if(rp?ROW_SKIP_HIDDEN.get(rp.slice(0,-1))?.has(c.name):SKIP_HIDDEN.has(c.name))return""; // hidden by skip-to
   const key=rp+c.name, ke=esc(key);
   if(c.type==="note")    return`<div class="pv-note pv-field">${sanitizeHtml(txt(c.html)||"")}</div>`;
   if(c.type==="markdown")return`<div class="pv-note pv-field pv-md">${mdToHtml(txt(c.markdown))}</div>`;
@@ -1443,15 +1443,15 @@ function fieldHtml(c,rp,scopes){
   if(c.type==="textarea")
     ctrl=`<textarea data-k="${ke}" class="pv-in" rows="3"${dis}${rdOnly}></textarea>`;
   else if(c.type==="email")
-    ctrl=`<input type="email" data-k="${ke}" class="pv-in" placeholder="${esc(c.placeholder||"nama@domain.com")}"${dis}${rdOnly}>`;
+    ctrl=`<input type="email" data-k="${ke}" class="pv-in" placeholder="${esc(c.placeholder||"name@domain.com")}"${dis}${rdOnly}>`;
   else if(NUMER.has(c.type))
     ctrl=`<input type="number" data-k="${ke}" class="pv-in" style="width:auto;min-width:160px"${c.min!=null&&c.min!==""?` min="${esc(String(c.min))}"` :""}${c.max!=null&&c.max!==""?` max="${esc(String(c.max))}"`:""}${dis}${rdOnly}>` +(c.unit?`<span class="pv-unit">${esc(c.unit)}</span>`:"");
   else if(DATETIME.has(c.type))
     ctrl=`<input type="${DT_INPUT_TYPE[c.type]}" data-k="${ke}" class="pv-in" style="width:auto"${c.min!=null&&c.min!==""?` min="${esc(String(c.min))}"`:""}${c.max!=null&&c.max!==""?` max="${esc(String(c.max))}"`:""}${dis}${rdOnly}>`;
   else if(c.type==="boolean")
-    ctrl=`<div class="pv-radios"><label class="pv-opt"><input type="radio" name="r_${ke}" data-kr="${ke}" value="true"${disAll}> Ya</label><label class="pv-opt"><input type="radio" name="r_${ke}" data-kr="${ke}" value="false"${disAll}> Tidak</label></div>`;
+    ctrl=`<div class="pv-radios"><label class="pv-opt"><input type="radio" name="r_${ke}" data-kr="${ke}" value="true"${disAll}> Yes</label><label class="pv-opt"><input type="radio" name="r_${ke}" data-kr="${ke}" value="false"${disAll}> No</label></div>`;
   else if(CHOICE.has(c.type)){
-    ctrl=`<div class="pv-radios" id="opt-${ke}"><div class="pv-loading">Memuat pilihan…</div></div>`;
+    ctrl=`<div class="pv-radios" id="opt-${ke}"><div class="pv-loading">Loading options…</div></div>`;
     pending.push({c,rp,enabled:enabled&&!c.readOnly});
   }
   else if(c.type==="geopoint"){
@@ -1460,14 +1460,14 @@ function fieldHtml(c,rp,scopes){
     ctrl=`<div class="pv-inbtn"><input type="text" data-k="${ke}" class="pv-in" placeholder="lat, lng"${dis}${rdOnly}><button type="button" class="pv-smbtn pv-geobtn"${disAll}>📍 Ambil Lokasi</button></div><div class="pv-geomsg"></div>${geoMap}`;
   }
   else if(c.type==="barcode")
-    ctrl=`<div class="pv-inbtn"><input type="text" data-k="${ke}" class="pv-in" placeholder="scan / ketik kode"${dis}${rdOnly}><button type="button" class="pv-smbtn pv-scanbtn"${disAll}>📷 Pindai</button></div>`;
+    ctrl=`<div class="pv-inbtn"><input type="text" data-k="${ke}" class="pv-in" placeholder="scan / type the code"${dis}${rdOnly}><button type="button" class="pv-smbtn pv-scanbtn"${disAll}>📷 Pindai</button></div>`;
   else if(c.type==="signature")
-    ctrl=`<div class="pv-sigwrap"><input type="hidden" data-k="${ke}" value="${esc(val)}"><canvas class="pv-sigpad" width="400" height="140"${(enabled&&!c.readOnly)?"":' data-disabled="1"'}></canvas><div class="pv-sigactions"><button type="button" class="pv-smbtn pv-sigsave"${disAll} disabled>Simpan tanda tangan</button><button type="button" class="pv-smbtn pv-sigclear"${disAll}>Hapus tanda tangan</button><span class="pv-sigmsg"></span></div></div>`;
+    ctrl=`<div class="pv-sigwrap"><input type="hidden" data-k="${ke}" value="${esc(val)}"><canvas class="pv-sigpad" width="400" height="140"${(enabled&&!c.readOnly)?"":' data-disabled="1"'}></canvas><div class="pv-sigactions"><button type="button" class="pv-smbtn pv-sigsave"${disAll} disabled>Save signature</button><button type="button" class="pv-smbtn pv-sigclear"${disAll}>Clear signature</button><span class="pv-sigmsg"></span></div></div>`;
   else if(c.type==="photo"||c.type==="file"){
     const isPhoto=c.type==="photo";
     const disClass=(!enabled||c.readOnly)?' pv-photolabel-dis':'';
     const dis2=(!enabled||c.readOnly)?' disabled':'';
-    ctrl=`<div class="pv-photowrap" data-field-type="${isPhoto?'photo':'file'}"><input type="hidden" data-k="${ke}" value="${esc(val)}"><div class="pv-photorow"><label class="pv-photolabel${disClass}"><input type="file" class="pv-photofile"${isPhoto?' accept="image/*" capture="environment"':''}${dis2}>${isPhoto?'📷 Ambil / Pilih Foto':'📎 Pilih File'}</label><button type="button" class="pv-smbtn pv-photoupload"${dis2} disabled>Upload</button></div><div class="pv-photostate"></div><div class="pv-photopreview" hidden></div></div>`;
+    ctrl=`<div class="pv-photowrap" data-field-type="${isPhoto?'photo':'file'}"><input type="hidden" data-k="${ke}" value="${esc(val)}"><div class="pv-photorow"><label class="pv-photolabel${disClass}"><input type="file" class="pv-photofile"${isPhoto?' accept="image/*" capture="environment"':''}${dis2}>${isPhoto?'📷 Take / Choose Photo':'📎 Choose File'}</label><button type="button" class="pv-smbtn pv-photoupload"${dis2} disabled>Upload</button></div><div class="pv-photostate"></div><div class="pv-photopreview" hidden></div></div>`;
   }
   else
     ctrl=`<input type="text" data-k="${ke}" class="pv-in" placeholder="${esc(c.placeholder||"")}"${dis}${rdOnly}>`;
@@ -1477,7 +1477,7 @@ function fieldHtml(c,rp,scopes){
       if(!v.test)return;
       const r=evalExprSrc(v.test,rp);
       if(r===undefined)return;
-      if(!r)vmsg+=`<div class="pv-vmsg ${v.severity==="warning"?"warning":"error"}">${esc(txt(v.message)||"Nilai tidak valid")}</div>`;
+      if(!r)vmsg+=`<div class="pv-vmsg ${v.severity==="warning"?"warning":"error"}">${esc(txt(v.message)||"Invalid value")}</div>`;
     });
   }
   return`<div class="pv-field" data-fieldkey="${ke}">${lab}${hint}<div>${ctrl}</div>${vmsg}</div>`;
@@ -1533,7 +1533,7 @@ function rowSummary(r,i,rowPrefix){
   return fields.map(fn=>{const v=answers[`${rp}${fn}`];return(v==null||v==="")?null:String(v);}).filter(Boolean).join(" · ");
 }
 function hasRowData(r,i,rowPrefix){const rp=rosterRowPrefix(r,i,rowPrefix);return flatRosterFields(r).some(c=>{const v=answers[`${rp}${c.name}`];return v!=null&&v!==""&&!(Array.isArray(v)&&!v.length);});}
-function addRowLabel(r){return r.rowTitle?`+ Tambah ${esc(txt(r.rowTitle))}`:"+ Tambah baris";}
+function addRowLabel(r){return r.rowTitle?`+ Add ${esc(txt(r.rowTitle))}`:"+ Add row";}
 function rosterMax(r){
   if(r.max==null||r.max==="")return null;
   const mx=Math.floor(Number(r.max));
@@ -1543,8 +1543,8 @@ function rosterAtMax(r,rowPrefix){
   const mx=rosterMax(r);
   return mx!=null&&rosterCount(r,rowPrefix)>=mx;
 }
-// Interpolasi nilai field lain dalam baris roster ke teks label/hint/itemLabel.
-// Mendukung dua sintaks: {{nama}} dan ${nama} (dipakai campur di berbagai tempat).
+// Interpolate other fields from the same roster row into label/hint/itemLabel text.
+// Supports two syntaxes: {{name}} and ${name} (both are used in various places).
 const INTERP_RE=/\{\{\s*([^}]+?)\s*\}\}|\$\{\s*([^}]+?)\s*\}/g;
 function normScopes(scopes){
   if(!scopes)return [];
@@ -1570,7 +1570,7 @@ function rowInterp(text,scopes){
 }
 function rowLabel(r,i,scopes){
   if(r.itemLabel){const rp=`${r.name}#${i}#`;const list=[rp,...normScopes(scopes)];return esc(txt(r.itemLabel).replace(/\{\{\s*index\s*\}\}|\$\{\s*index\s*\}/g,String(i+1)).replace(INTERP_RE,(_,a,b)=>{const n=(a||b).trim();for(const p of list){const k=p+n;if(k in answers)return String(answers[k]);}return "";}));}
-  return r.rowTitle?`${esc(txt(r.rowTitle))} #${i+1}`:`Baris #${i+1}`;
+  return r.rowTitle?`${esc(txt(r.rowTitle))} #${i+1}`:`Row #${i+1}`;
 }
 function rowDefaultValue(r,i){
   const raw=String(txt(r.rowDefaults)||"");
@@ -1599,28 +1599,28 @@ function rosterHtml(r,rp,scopes){
   const title=esc(rowInterp(txt(r.title)||r.name,hostScopes));
   if(r.rosterType==="separate"){
     let h=`<div class="pv-roster" id="pvroster_${rn}"><div class="pv-rh">${title}<span class="pv-tag">subhalaman</span></div>`;
-    if(from&&count<=0)h+=`<div class="pv-rowempty">Isi dulu kolom "${esc(from)}" untuk menentukan jumlah baris.</div>`;
-    else if(count<=0)h+=`<div class="pv-rowempty">Belum ada baris.</div>`;
-    else{h+=`<div class="pv-rowlist">`;for(let i=0;i<count;i++){const sum=rowSummary(r,i,rp),filled=hasRowData(r,i,rp);h+=`<div class="pv-rowitem"><div class="pv-rowinfo"><b>${rowLabel(r,i,hostScopes)}</b><span>${sum?esc(sum):"<i>belum diisi</i>"}</span></div>${manual?`<button class="pv-rowdel" data-delrow="${rn}" data-i="${i}">hapus</button>`:""}<button class="pv-rowopen" data-openrow="${rn}" data-i="${i}">${filled?"Edit":"Isi"} →</button></div>`;}h+=`</div>`;}
+    if(from&&count<=0)h+=`<div class="pv-rowempty">Fill in the "${esc(from)}" field first to determine the number of rows.</div>`;
+    else if(count<=0)h+=`<div class="pv-rowempty">No rows yet.</div>`;
+    else{h+=`<div class="pv-rowlist">`;for(let i=0;i<count;i++){const sum=rowSummary(r,i,rp),filled=hasRowData(r,i,rp);h+=`<div class="pv-rowitem"><div class="pv-rowinfo"><b>${rowLabel(r,i,hostScopes)}</b><span>${sum?esc(sum):"<i>not filled in</i>"}</span></div>${manual?`<button class="pv-rowdel" data-delrow="${rn}" data-i="${i}">remove</button>`:""}<button class="pv-rowopen" data-openrow="${rn}" data-i="${i}">${filled?"Edit":"Fill"} →</button></div>`;}h+=`</div>`;}
     if(canAdd)h+=`<button class="pv-add" data-addrow="${rn}">${addRowLabel(r)}</button>`;
     return h+`</div>`;
   }
   let h=`<div class="pv-roster" id="pvroster_${rn}"><div class="pv-rh">${title}</div>`;
-  if(from&&count<=0)h+=`<div class="pv-rowempty">Isi dulu kolom "${esc(from)}" untuk menentukan jumlah baris.</div>`;
-  for(let i=0;i<count;i++){const childRp=rosterRowPrefix(r,i,rp);const rowKey=childRp.slice(0,-1);const rowSkip=computeRosterRowSkipState(r,i);ROW_SKIP_HIDDEN.set(rowKey,rowSkip);rowSkip.forEach(n=>{delete answers[`${childRp}${n}`];});h+=`<div class="pv-row"><div class="pv-rownum"><span>${rowLabel(r,i,hostScopes)}</span>${manual?`<button class="pv-del" data-delrow="${rn}" data-i="${i}">hapus</button>`:""}</div>`;(r.components||[]).forEach(f=>h+=nodeHtml(f,childRp,hostScopes));h+=`</div>`;}
+  if(from&&count<=0)h+=`<div class="pv-rowempty">Fill in the "${esc(from)}" field first to determine the number of rows.</div>`;
+  for(let i=0;i<count;i++){const childRp=rosterRowPrefix(r,i,rp);const rowKey=childRp.slice(0,-1);const rowSkip=computeRosterRowSkipState(r,i);ROW_SKIP_HIDDEN.set(rowKey,rowSkip);rowSkip.forEach(n=>{delete answers[`${childRp}${n}`];});h+=`<div class="pv-row"><div class="pv-rownum"><span>${rowLabel(r,i,hostScopes)}</span>${manual?`<button class="pv-del" data-delrow="${rn}" data-i="${i}">remove</button>`:""}</div>`;(r.components||[]).forEach(f=>h+=nodeHtml(f,childRp,hostScopes));h+=`</div>`;}
   if(canAdd)h+=`<button class="pv-add" data-addrow="${rn}">${addRowLabel(r)}</button>`;
   return h+`</div>`;
 }
 function primaryRowField(r){if(r.rowDisplay&&r.rowDisplay.length)return r.rowDisplay[0];const f=flatRosterFields(r)[0];return f?f.name:null;}
 function openAddRowModal(roster){
   saveAnswers();
-  const title=txt(roster.rowTitle)||"baris";
+  const title=txt(roster.rowTitle)||"row";
   const promptFields=flatRosterFields(roster).filter(f=>f.promptOnAdd);
   const bg=document.createElement("div");bg.className="pv-modal-bg";
   const fieldsHtml=promptFields.length
     ?promptFields.map(f=>`<div style="margin-bottom:10px"><label style="display:block;font-size:12.5px;font-weight:500;margin-bottom:5px">${esc(txt(f.label)||f.name)}</label><input class="pv-modal-in" data-pf="${esc(f.name)}" placeholder="${esc(txt(f.placeholder)||txt(f.label)||f.name)}…" style="width:100%;border:1px solid var(--line);border-radius:var(--radius-s);padding:9px 10px;font-size:13px;box-sizing:border-box"></div>`).join("")
     :`<input type="text" id="addRowInput" placeholder="${esc(title)}…">`;
-  bg.innerHTML=`<div class="pv-modal"><h3>Tambah ${esc(title)}</h3>${fieldsHtml}<div class="pv-modal-actions"><button class="btn ghost" id="addRowCancel">Batal</button><button class="btn primary" id="addRowConfirm">+ Tambah ${esc(title)}</button></div></div>`;
+  bg.innerHTML=`<div class="pv-modal"><h3>Add ${esc(title)}</h3>${fieldsHtml}<div class="pv-modal-actions"><button class="btn ghost" id="addRowCancel">Cancel</button><button class="btn primary" id="addRowConfirm">+ Add ${esc(title)}</button></div></div>`;
   document.body.appendChild(bg);
   const firstInput=bg.querySelector("input");if(firstInput)firstInput.focus();
   const close=()=>bg.remove();
@@ -1630,7 +1630,7 @@ function openAddRowModal(roster){
     const mx=rosterMax(roster);
     const idx=rosterCount(roster);
     if(mx!=null&&idx>=mx){
-      alert(`Maksimal ${mx} baris.`);
+      alert(`Maximum ${mx} rows.`);
       close();
       renderCurrentPage();
       return;
@@ -1659,7 +1659,7 @@ function deleteRow(rname,idx){
   nv[rname+"#count"]=Math.max(0,count-1);answers=nv;
 }
 
-/* ---- visibilitas & navigasi halaman ---- */
+/* ---- page visibility & navigation ---- */
 function isPageVisible(i){return i>=0&&i<PAGES.length&&evalVisible(PAGES[i].visibleWhen,"");}
 function visiblePageIdx(){return PAGES.map((_,i)=>i).filter(isPageVisible);}
 function nextVisibleIndex(from){for(let i=from+1;i<PAGES.length;i++)if(isPageVisible(i))return i;return -1;}
@@ -1690,8 +1690,8 @@ function fieldSkipTarget(f){
   }
   return null;
 }
-// Target skip pertama yang terdaftar pada field ini (dipakai sebagai default
-// ketika field belum dijawab sama sekali — lihat fieldEffectiveSkipTarget).
+// The first skip target registered on this field (used as the default
+// when the field has not been answered at all — see fieldEffectiveSkipTarget).
 function fieldPendingTarget(f){
   const s=(f.skips||[]).find(x=>x.when&&x.to);
   if(s)return s.to;
@@ -1701,16 +1701,16 @@ function fieldPendingTarget(f){
   }
   return null;
 }
-// Field yang punya kemampuan skip tapi BELUM dijawab dianggap "pending":
-// secara default field di antara dia dan target tetap disembunyikan sampai
-// dijawab dengan opsi yang TIDAK memicu skip (baru jalur normal terbuka).
+// A field that can skip but has NOT been answered yet counts as "pending":
+// by default the fields between it and the target stay hidden until
+// answered with an option that does NOT trigger a skip (only then does the normal path open).
 function fieldEffectiveSkipTarget(f){
   const t=fieldSkipTarget(f);
   if(t)return t;
   if(pvEmpty(answers[f.name]))return fieldPendingTarget(f);
   return null;
 }
-// Varian roster: evaluasi skip dengan jawaban dari baris tertentu (rp = "roster#idx#").
+// Roster variant: evaluate the skip using one specific row's answers (rp = "roster#idx#").
 function fieldSkipTargetRp(f,rp){
   for(const s of (f.skips||[])){
     if(!s.when||!s.to)continue;
@@ -1731,9 +1731,9 @@ function fieldEffectiveSkipTargetRp(f,rp){
   if(pvEmpty(answers[rp+f.name]))return fieldPendingTarget(f);
   return null;
 }
-// Hitung field dalam satu baris roster yang harus disembunyikan karena skip-to.
-// Target "__end" berarti akhiri sisa baris ini (field setelahnya di baris yang
-// sama disembunyikan; baris roster lain tidak terpengaruh).
+// Work out which fields in one roster row must be hidden because of a skip-to.
+// The "__end" target means finish the rest of this row (later fields in the same
+// row are hidden; other roster rows are unaffected).
 function computeRosterRowSkipState(roster,rowIdx){
   const rp=`${roster.name}#${rowIdx}#`;
   const allRowFields=flatRosterFields(roster);
@@ -1751,9 +1751,9 @@ function computeRosterRowSkipState(roster,rowIdx){
   }
   return hidden;
 }
-// Hitung field mana di halaman ini yang harus disembunyikan karena ada skip
-// yang sedang aktif (target ada di halaman yang sama), dan target halaman
-// lain bila skip yang aktif belum "selesai" sampai akhir halaman ini.
+// Work out which fields on this page must be hidden because a skip is currently
+// active (its target is on the same page), plus the target page when the active
+// skip has not "finished" by the end of this page.
 function computePageSkipState(page){
   const hidden=new Set();
   const fields=[];
@@ -1787,7 +1787,7 @@ function clearPageAnswers(pageIdx){
 }
 function clearSkippedAnswers(fromIdx,toIdx){if(toIdx<=fromIdx+1)return;for(let i=fromIdx+1;i<toIdx;i++)clearPageAnswers(i);}
 
-/* ---- validasi sebelum lanjut/kirim ---- */
+/* ---- validation before continuing/submitting ---- */
 function walkRosterComps(comps,rp,rowSkip,out){
   (comps||[]).forEach(c=>{
     if(!evalVisible(c.visibleWhen,rp))return;
@@ -1855,7 +1855,7 @@ function focusField(key){
   if(byId){byId.classList.add("pv-roster-err");byId.scrollIntoView({behavior:"smooth",block:"center"});setTimeout(()=>byId.classList.remove("pv-roster-err"),2500);}
 }
 
-/* ---- kumpulkan semua error di seluruh halaman ---- */
+/* ---- collect every error across all pages ---- */
 function collectAllErrors(){
   saveAnswers();
   const errors=[];
@@ -1886,7 +1886,7 @@ function collectAllErrors(){
   return errors;
 }
 
-/* ---- tampilkan ringkasan error sebelum kirim ---- */
+/* ---- show the error summary before submitting ---- */
 function showErrorSummary(errors){
   const pvBody=document.getElementById("pvBody");
   const navArea=document.getElementById("pvNavArea");
@@ -1895,12 +1895,12 @@ function showErrorSummary(errors){
   let rows="";
   errors.forEach(err=>{
     const p=PAGES[err.pageIdx];
-    const pTitle=txt(p.title)||p.name||`Halaman ${err.pageIdx+1}`;
+    const pTitle=txt(p.title)||p.name||`Page ${err.pageIdx+1}`;
     const visPos=vis.indexOf(err.pageIdx);
     const pageLbl=visPos>=0?`Hal. ${visPos+1} — ${esc(pTitle)}`:esc(pTitle);
     const roster=err.rp?err.rp.match(/^([^#]+)#(\d+)#/):null;
-    const ctxLbl=roster?`${esc(roster[1])} (Baris ${+roster[2]+1}) · ${esc(err.label)}`:esc(err.label);
-    const msgLbl=err.msg?esc(err.msg):"Isian wajib belum diisi";
+    const ctxLbl=roster?`${esc(roster[1])} (Row ${+roster[2]+1}) · ${esc(err.label)}`:esc(err.label);
+    const msgLbl=err.msg?esc(err.msg):"Required field not filled in";
     rows+=`<div class="pv-err-item">
       <div class="pv-err-info">
         <span class="pv-err-page">${pageLbl}</span>
@@ -1913,12 +1913,12 @@ function showErrorSummary(errors){
   pvBody.innerHTML=`<div class="pv-page">
     <div class="pv-err-head">
       <div class="pv-err-icon">⚠</div>
-      <h2 class="pv-h2" style="margin-bottom:6px">Ada ${errors.length} isian yang perlu dilengkapi</h2>
-      <p class="pv-err-sub">Silakan lengkapi semua isian yang ditandai sebelum mengirim jawaban.</p>
+      <h2 class="pv-h2" style="margin-bottom:6px">${errors.length} entries still need completing</h2>
+      <p class="pv-err-sub">Please complete every highlighted field before submitting.</p>
     </div>
     <div class="pv-err-list">${rows}</div>
   </div><div class="foot">eForm · {{ORG_NAME}}</div>`;
-  if(navArea)navArea.innerHTML=`<div class="pv-nav"><button class="btn" id="pvErrBack">← Kembali ke halaman terakhir</button><span></span><span></span></div>`;
+  if(navArea)navArea.innerHTML=`<div class="pv-nav"><button class="btn" id="pvErrBack">← Back to the last page</button><span></span><span></span></div>`;
   document.getElementById("pvErrBack")?.addEventListener("click",()=>goToPage(curPage));
   document.querySelectorAll(".pv-err-fix").forEach(btn=>{
     btn.addEventListener("click",()=>{
@@ -1938,7 +1938,7 @@ function showErrorSummary(errors){
 /* ---- render shell ---- */
 function render(meta){
   PAGES=SCHEMA.pages||[];
-  const title=txt(meta.title||txt(SCHEMA.title)||"Kuesioner");
+  const title=txt(meta.title||txt(SCHEMA.title)||"Form");
   document.title=title;
   const userBar=RESP_USER?`
     <div class="pv-ubar">
@@ -1948,11 +1948,11 @@ function render(meta){
       <button class="pv-ulogout" onclick="logout()">Keluar</button>
     </div>`:"";
   const draftNote=DRAFT_RESTORED_AT?`<div class="pv-draft-note" id="draftNote">
-      <span>📝 Draf jawaban yang belum terkirim berhasil dipulihkan (tersimpan ${formatDraftTime(DRAFT_RESTORED_AT)}).</span>
-      <button id="draftNoteClose" title="Tutup">×</button>
+      <span>📝 An unsubmitted draft was restored (saved ${formatDraftTime(DRAFT_RESTORED_AT)}).</span>
+      <button id="draftNoteClose" title="Close">×</button>
     </div>`:"";
   setRoot(`<div class="pv">
-    <div class="pv-bar"><button class="pv-side-tog" id="pvSideTog" title="Daftar halaman">☰</button><span class="pv-title">${esc(title)}</span><span id="pvOfflineBadge"></span><span id="pvInstallWrap"></span><span class="pv-brand">eForm · {{ORG_NICK}}</span></div>
+    <div class="pv-bar"><button class="pv-side-tog" id="pvSideTog" title="Page list">☰</button><span class="pv-title">${esc(title)}</span><span id="pvOfflineBadge"></span><span id="pvInstallWrap"></span><span class="pv-brand">eForm · {{ORG_NICK}}</span></div>
     <div id="pvSideBd" class="pv-side-bd"></div>
     ${draftNote}
     <div class="pv-main">
@@ -1968,8 +1968,8 @@ function render(meta){
   renderInstallButton();updateOfflineBadge();
   curPage=0;rosterView=null;
   goToPage(0);
-  // Jaring pengaman: simpan draf berkala supaya ketikan yang belum sempat
-  // "blur" (event change) tetap tertangkap kalau tab tertutup mendadak.
+  // Safety net: save the draft periodically so typing that has not yet fired a
+  // "blur" (change event) is still captured if the tab closes suddenly.
   if(!AUTOSAVE_TIMER)AUTOSAVE_TIMER=setInterval(saveAnswers,20000);
 }
 
@@ -2009,7 +2009,7 @@ function separateRostersInPage(p){
   });})(p.components||[]);
   return out;
 }
-/* Pertahankan posisi elemen yang baru dijawab di viewport meski konten berubah */
+/* Keep the just-answered element in place in the viewport even as the content changes */
 function snapScroll(fkey,top0){
   if(!fkey||top0==null)return;
   const pvBody=document.getElementById("pvBody");if(!pvBody)return;
@@ -2025,11 +2025,11 @@ function renderSidebar(){
   const side=document.getElementById("pvSide");if(!side)return;
   const activePageIdx=rosterView?rosterView.pageIdx:curPage;
   const activeRosterName=rosterView?rosterView.roster.name:null;
-  let html=`<div class="pv-side-h">Daftar Halaman</div>`;
+  let html=`<div class="pv-side-h">Page list</div>`;
   PAGES.forEach((p,i)=>{
     if(!isPageVisible(i))return;
     const isActivePage=i===activePageIdx&&!activeRosterName;
-    html+=`<div class="pv-pg${isActivePage?" active":""}" data-pg="${i}">${esc(txt(p.title)||p.name||`Halaman ${i+1}`)}</div>`;
+    html+=`<div class="pv-pg${isActivePage?" active":""}" data-pg="${i}">${esc(txt(p.title)||p.name||`Page ${i+1}`)}</div>`;
     separateRostersInPage(p).forEach(r=>{
       const isActiveRoster=r.name===activeRosterName;
       html+=`<div class="pv-subpg${isActiveRoster?" active":""}" data-pg="${i}" data-roster="${esc(r.name)}"><span class="pv-ri">⊞</span><span>${esc(txt(r.title)||r.name)}</span></div>`;
@@ -2044,9 +2044,9 @@ function renderSidebar(){
   }));
 }
 function renderCurrentPage(){
-  // Catatan: TIDAK reset scroll di sini — fungsi ini juga dipanggil untuk
-  // live update (mis. coretan tanda tangan, ambil lokasi) yang seharusnya
-  // tidak melompat balik ke atas halaman. Reset scroll hanya di goToPage().
+  // Note: scroll is NOT reset here — this function is also called for live
+  // updates (a signature stroke, fetching a location) which should not jump
+  // back to the top of the page. The scroll reset lives in goToPage() only.
   const pvBody=document.getElementById("pvBody");
   if(!pvBody||!PAGES.length)return;
   renderSidebar();
@@ -2057,26 +2057,26 @@ function renderCurrentPage(){
   ROW_SKIP_HIDDEN=new Map();
   pending=[];
   const userBar=document.getElementById("pvUserBar")?.outerHTML||"";
-  let html=`${userBar}<div class="pv-page"><h2 class="pv-h2">${esc(txt(p.title)||p.name||`Halaman ${curPage+1}`)}</h2>`;
+  let html=`${userBar}<div class="pv-page"><h2 class="pv-h2">${esc(txt(p.title)||p.name||`Page ${curPage+1}`)}</h2>`;
   (p.components||[]).forEach(c=>html+=nodeHtml(c,""));
   html+=`</div>`;
   if(isLast)html+=`<div class="msg" id="msg"></div>`;
-  if(isLast&&!ALLOW)html+=`<div class="view-hint">Tautan ini hanya untuk melihat kuesioner — tidak menerima jawaban.</div>`;
+  if(isLast&&!ALLOW)html+=`<div class="view-hint">This link is view-only — it does not accept responses.</div>`;
   const isEdit=!!EXISTING_RESPONSE||(!MULTI_RESPONSE&&!!EDITING_RESPONSE_ID);
-  const prevBtn=prevVisibleIndex(curPage)!==-1?`<button class="btn" id="pvPrev">← Sebelumnya</button>`:
-    (MULTI_RESPONSE?`<button class="btn" id="pvBackToList">← Daftar</button>`:`<span></span>`);
-  const saveDraftBtn=ALLOW?`<button class="pv-savedraft" id="pvSaveDraft">Simpan Draf</button>`:"";
+  const prevBtn=prevVisibleIndex(curPage)!==-1?`<button class="btn" id="pvPrev">← Previous</button>`:
+    (MULTI_RESPONSE?`<button class="btn" id="pvBackToList">← List</button>`:`<span></span>`);
+  const saveDraftBtn=ALLOW?`<button class="pv-savedraft" id="pvSaveDraft">Save Draft</button>`:"";
   const canUnsubmit=!MULTI_RESPONSE&&ALLOW&&EXISTING_RESPONSE&&EXISTING_RESPONSE.status==="submitted";
   const unsubmitBtn=isLast&&canUnsubmit?`<button class="btn btn-xs" id="pvUnsubmit" type="button">Batalkan Submit</button>`:"";
   const nextBtn=isLast
-    ?(ALLOW?`<button class="btn primary" id="pvSubmit">${isEdit?"Perbarui Jawaban":"Kirim Jawaban"}</button>`:`<span></span>`)
-    :`<button class="btn primary" id="pvNext">Lanjut →</button>`;
+    ?(ALLOW?`<button class="btn primary" id="pvSubmit">${isEdit?"Update Response":"Submit Response"}</button>`:`<span></span>`)
+    :`<button class="btn primary" id="pvNext">Next →</button>`;
   html+=`<div class="foot">eForm · {{ORG_NAME}}</div>`;
   pvBody.innerHTML=html;
   const navArea=document.getElementById("pvNavArea");
   if(navArea){
     const pct=totalVis>1?Math.round((posInVis/totalVis)*100):100;
-    navArea.innerHTML=`<div class="pv-nav-err" id="pvNavErr"></div><div class="pv-nav">${prevBtn}<div class="pv-prog-wrap"><div class="pv-progbar-track"><div class="pv-progbar" style="width:${pct}%"></div></div><span class="pv-prog">Halaman ${posInVis} / ${totalVis}</span></div><div style="display:flex;gap:8px;align-items:center">${unsubmitBtn}${saveDraftBtn}${nextBtn}</div></div>`;
+    navArea.innerHTML=`<div class="pv-nav-err" id="pvNavErr"></div><div class="pv-nav">${prevBtn}<div class="pv-prog-wrap"><div class="pv-progbar-track"><div class="pv-progbar" style="width:${pct}%"></div></div><span class="pv-prog">Page ${posInVis} / ${totalVis}</span></div><div style="display:flex;gap:8px;align-items:center">${unsubmitBtn}${saveDraftBtn}${nextBtn}</div></div>`;
   }
   restoreAnswers();bindPageEvents();resolveOptions();
 }
@@ -2091,7 +2091,7 @@ function renderRosterRow(){
   const pvBody=document.getElementById("pvBody");if(!pvBody||!rosterView)return;
   const keepScroll=pvBody.scrollTop;
   const {roster,rowIdx,pageIdx}=rosterView,rp=`${roster.name}#${rowIdx}#`;
-  const pageTitle=esc(txt(PAGES[pageIdx].title)||PAGES[pageIdx].name||"Kembali");
+  const pageTitle=esc(txt(PAGES[pageIdx].title)||PAGES[pageIdx].name||"Back");
   const rowSkip=computeRosterRowSkipState(roster,rowIdx);
   ROW_SKIP_HIDDEN.set(`${roster.name}#${rowIdx}`,rowSkip);
   rowSkip.forEach(n=>{delete answers[rp+n];});
@@ -2105,8 +2105,8 @@ function renderRosterRow(){
   let html=`${userBar}<div class="pv-page"><div class="pv-rrow-hdr"><div class="pv-rrow-bread"><button id="pvBack" class="pv-rrow-back">← ${pageTitle}</button><span class="pv-rrow-sep">›</span><span class="pv-rrow-rname">${rosterTitle}</span><span class="pv-rrow-num">Baris ${rowIdx+1} dari ${total}</span></div><div class="pv-rrow-title">${rowLabel(roster,rowIdx)}</div></div>${fieldsHtml}</div>`;
   pvBody.innerHTML=html;pvBody.scrollTop=keepScroll;
   const navArea=document.getElementById("pvNavArea");
-  const saveDraftBtn=ALLOW?`<button class="pv-savedraft" id="pvSaveDraft">Simpan Draf</button>`:"";
-  if(navArea)navArea.innerHTML=`<div class="pv-nav-err" id="pvNavErr"></div><div class="pv-nav"><span></span><span></span><div style="display:flex;gap:8px;align-items:center">${saveDraftBtn}<button class="btn primary" id="pvBackDone">Simpan &amp; kembali</button></div></div>`;
+  const saveDraftBtn=ALLOW?`<button class="pv-savedraft" id="pvSaveDraft">Save Draft</button>`:"";
+  if(navArea)navArea.innerHTML=`<div class="pv-nav-err" id="pvNavErr"></div><div class="pv-nav"><span></span><span></span><div style="display:flex;gap:8px;align-items:center">${saveDraftBtn}<button class="btn primary" id="pvBackDone">Save &amp; back</button></div></div>`;
   restoreAnswers();resolveOptions();wireFieldWidgets();
   document.querySelectorAll("[data-k]").forEach(el=>el.addEventListener("change",e=>{const f=e.target.closest(".pv-field"),fkey=f?.dataset?.fieldkey,top0=fkey?f.getBoundingClientRect().top:null;saveAnswers();renderRosterRow();if(fkey&&top0!=null)requestAnimationFrame(()=>snapScroll(fkey,top0));}));
   document.querySelectorAll("[data-kr]").forEach(el=>el.addEventListener("change",e=>{const f=e.target.closest(".pv-field"),fkey=f?.dataset?.fieldkey,top0=fkey?f.getBoundingClientRect().top:null;saveAnswers();renderRosterRow();if(fkey&&top0!=null)requestAnimationFrame(()=>snapScroll(fkey,top0));}));
@@ -2126,7 +2126,7 @@ function renderRosterRow(){
       if(isReq&&pvEmpty(answers[key])){
         const errEl=document.getElementById("pvNavErr");
         console.log("Roster row validation failed:",roster.name,rowIdx,c.name);
-        if(errEl)errEl.textContent="Lengkapi isian wajib pada baris ini sebelum menyimpan.";
+        if(errEl)errEl.textContent="Complete the required fields in this row before saving.";
         focusField(key);
         return;
       }
@@ -2137,7 +2137,7 @@ function renderRosterRow(){
           if(r===undefined)continue;
           if(!r){
             const errEl=document.getElementById("pvNavErr");
-            if(errEl)errEl.textContent=txt(v.message)||"Isian tidak valid.";
+            if(errEl)errEl.textContent=txt(v.message)||"Invalid entry.";
             focusField(key);
             return;
           }
@@ -2160,12 +2160,12 @@ function bindPageEvents(){
   document.getElementById("pvPrev")?.addEventListener("click",()=>{const p=prevVisibleIndex(curPage);if(p!==-1)goToPage(p);});
   document.getElementById("pvBackToList")?.addEventListener("click",async()=>{
     const resps=await fetchMyResponses();
-    renderMyResponsesList({title:txt(SCHEMA?.title)||"Kuesioner"},resps);
+    renderMyResponsesList({title:txt(SCHEMA?.title)||"Form"},resps);
   });
   document.getElementById("pvNext")?.addEventListener("click",()=>{
     const gate=validateCurrentPage();
     if(!gate.ok){
-      const err=document.getElementById("pvNavErr");if(err){err.textContent="Lengkapi pertanyaan wajib / perbaiki isian yang tidak valid sebelum melanjutkan.";setTimeout(()=>{err.textContent="";},3000);}
+      const err=document.getElementById("pvNavErr");if(err){err.textContent="Complete the required questions / fix the invalid entries before continuing.";setTimeout(()=>{err.textContent="";},3000);}
       focusField(gate.key);
       return;
     }
@@ -2194,8 +2194,8 @@ function bindPageEvents(){
   }));
   const cfFields=new Set();
   (PAGES[curPage]?.components||[]).forEach(function walk(c){if(c.kind==="roster"&&c.countFrom)cfFields.add(c.countFrom);(c.components||[]).forEach(walk);});
-  // Re-render hidup saat field berubah. Setelah render, kembalikan fokus ke elemen
-  // yang aktif sebelumnya agar navigasi tab tidak terputus.
+  // Live re-render when a field changes. After rendering, restore focus to the
+  // previously active element so tab navigation is not broken.
   const rerenderPage=(e)=>{
     const src=e?.target;
     const fk=src?.dataset?.k;
@@ -2245,7 +2245,7 @@ function wireSignaturePad(canvas){
     if(clearBtn)clearBtn.disabled=locked||uploading;
   };
 
-  if(hidden.value)setMsg("Tanda tangan tersimpan.","ok");
+  if(hidden.value)setMsg("Signature saved.","ok");
   updateButtons();
 
   let drawing=false,last=null;
@@ -2261,7 +2261,7 @@ function wireSignaturePad(canvas){
     if(!drawing)return;drawing=false;
     dirty=true;
     hidden.value="";
-    setMsg("Perubahan belum disimpan. Klik Simpan tanda tangan.","pending");
+    setMsg("Changes not saved yet. Click Save signature.","pending");
     updateButtons();
   };
   canvas.addEventListener("pointerdown",start);
@@ -2274,12 +2274,12 @@ function wireSignaturePad(canvas){
     if(locked||uploading||!dirty)return;
     const blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/png"));
     if(!blob){
-      setMsg("Gagal membaca tanda tangan.","error");
+      setMsg("Failed to read the signature.","error");
       return;
     }
     uploading=true;
     updateButtons();
-    setMsg("Menyimpan tanda tangan ke server...","pending");
+    setMsg("Saving the signature to the server…","pending");
     try{
       const fd=new FormData();
       fd.append("file",blob,`signature-${Date.now()}.png`);
@@ -2290,13 +2290,13 @@ function wireSignaturePad(canvas){
         body:fd
       });
       const d=await r.json().catch(()=>({}));
-      if(!r.ok)throw new Error(d.error||"Gagal menyimpan tanda tangan");
+      if(!r.ok)throw new Error(d.error||"Failed to save the signature");
       hidden.value=String(d.url||"");
       dirty=false;
       hidden.dispatchEvent(new Event("change",{bubbles:true}));
-      setMsg("Tanda tangan tersimpan.","ok");
+      setMsg("Signature saved.","ok");
     }catch(e){
-      setMsg(e.message||"Gagal menyimpan tanda tangan","error");
+      setMsg(e.message||"Failed to save the signature","error");
     }finally{
       uploading=false;
       updateButtons();
@@ -2327,7 +2327,7 @@ function wireGeoButton(btn){
     const msg=wrap?.querySelector(".pv-geomsg");
     const input=btn.previousElementSibling;
     if(msg){msg.textContent="";msg.classList.remove("error");}
-    if(!navigator.geolocation){if(msg){msg.textContent="Geolocation tidak didukung browser ini.";msg.classList.add("error");}return;}
+    if(!navigator.geolocation){if(msg){msg.textContent="Geolocation is not supported by this browser.";msg.classList.add("error");}return;}
     const orig=btn.textContent;btn.disabled=true;btn.textContent="Mencari…";
     navigator.geolocation.getCurrentPosition(
       pos=>{
@@ -2337,7 +2337,7 @@ function wireGeoButton(btn){
       },
       err=>{
         btn.disabled=false;btn.textContent=orig;
-        if(msg){msg.textContent=err.code===1?"Izin lokasi ditolak.":"Gagal mengambil lokasi: "+err.message;msg.classList.add("error");}
+        if(msg){msg.textContent=err.code===1?"Izin lokasi ditolak.":"Failed to get location: "+err.message;msg.classList.add("error");}
       },
       {enableHighAccuracy:true,timeout:15000}
     );
@@ -2346,7 +2346,7 @@ function wireGeoButton(btn){
 
 function wireScanButton(btn){
   if(btn._wired)return;btn._wired=true;
-  if(!("BarcodeDetector" in window)){btn.disabled=true;btn.title="Pemindaian otomatis tidak didukung browser ini — isi manual.";return;}
+  if(!("BarcodeDetector" in window)){btn.disabled=true;btn.title="Automatic scanning is not supported by this browser — enter it manually.";return;}
   btn.addEventListener("click",()=>openBarcodeScanner(btn.previousElementSibling));
 }
 async function openBarcodeScanner(input){
@@ -2355,7 +2355,7 @@ async function openBarcodeScanner(input){
     <h3>Pindai Barcode</h3>
     <p class="pv-modal-sub">Arahkan kamera ke barcode/QR.</p>
     <video id="scanVideo" autoplay playsinline muted></video>
-    <div class="pv-modal-actions"><button class="btn ghost" id="scanCancel">Batal</button></div>
+    <div class="pv-modal-actions"><button class="btn ghost" id="scanCancel">Cancel</button></div>
   </div>`;
   document.body.appendChild(bg);
   const video=bg.querySelector("#scanVideo"),sub=bg.querySelector(".pv-modal-sub");
@@ -2382,7 +2382,7 @@ async function openBarcodeScanner(input){
     };
     requestAnimationFrame(loop);
   }catch(e){
-    if(sub)sub.textContent="Tidak bisa mengakses kamera: "+e.message;
+    if(sub)sub.textContent="Cannot access the camera: "+e.message;
   }
 }
 
@@ -2425,7 +2425,7 @@ function wirePhotoField(wrap){
         body:fd
       });
       const d=await r.json();
-      if(!r.ok)throw new Error(d.error||"Gagal mengupload file");
+      if(!r.ok)throw new Error(d.error||"Failed to upload the file");
       hidden.value=d.url||"";
       fileInput.value="";
       fileInput.disabled=false;
@@ -2469,7 +2469,7 @@ function renderPhotoPreview(wrap,errorMsg){
     preview.hidden=false;
     uploadBtn.disabled=disabled;
     state.className="pv-photostate pending";
-    state.textContent=errorMsg||"File sudah dipilih. Tekan Upload untuk menyimpan ke server.";
+    state.textContent=errorMsg||"File selected. Press Upload to store it on the server.";
     return;
   }
   uploadBtn.disabled=true;
@@ -2477,9 +2477,9 @@ function renderPhotoPreview(wrap,errorMsg){
     const dis=disabled?" disabled":"";
     const src=mediaSourceOf(savedValue)||savedValue;
     if(isImageMediaSource(fieldType,src)){
-      preview.innerHTML=`<img class="pv-photoimg" src="${src}"><button type="button" class="pv-smbtn pv-photoclear"${dis}>Hapus foto</button>`;
+      preview.innerHTML=`<img class="pv-photoimg" src="${src}"><button type="button" class="pv-smbtn pv-photoclear"${dis}>Remove photo</button>`;
     }else{
-      preview.innerHTML=`<a href="${esc(src)}" target="_blank" rel="noreferrer" style="font-size:12.5px;color:var(--accent)">Buka file</a><button type="button" class="pv-smbtn pv-photoclear"${dis}>Hapus</button>`;
+      preview.innerHTML=`<a href="${esc(src)}" target="_blank" rel="noreferrer" style="font-size:12.5px;color:var(--accent)">Open file</a><button type="button" class="pv-smbtn pv-photoclear"${dis}>Remove</button>`;
     }
     preview.hidden=false;
     state.className="pv-photostate ok";
@@ -2500,19 +2500,19 @@ function resolveOptions(){
     const box=document.getElementById("opt-"+ke);if(!box)return;
     const dis=enabled===false?" disabled":"";
 
-    // Dependency: placeholder {dep} di URL optionsApi + dataKey trigger eksplisit (depKeys),
-    // atau field induk (optionsFilterBy) untuk cascading dari referenceData inline (optionsRef).
+    // Dependency: the {dep} placeholder in the optionsApi URL + an explicit dataKey trigger (depKeys),
+    // or a parent field (optionsFilterBy) for cascading from inline referenceData (optionsRef).
     const urlTpl=(c.optionsApi&&c.optionsApi.url)||"";
     const urlDeps=[...urlTpl.matchAll(/\{([^}]+)\}/g)].map(m=>m[1]);
     const explicitDeps=((c.optionsApi&&c.optionsApi.depKeys)||"").split(",").map(s=>s.trim()).filter(Boolean);
     const refDeps=(c.optionsRef&&c.optionsFilterBy)?[c.optionsFilterBy.trim()]:[];
     const deps=[...new Set([...urlDeps,...explicitDeps,...refDeps])];
 
-    // Re-render yang tepat: baris roster atau halaman biasa
+    // Re-render the right thing: a roster row or an ordinary page
     const rerender=()=>{saveAnswers();rosterView?renderRosterRow():renderCurrentPage();};
 
-    // Pasang listener pada field dependency: cari elemen dengan prefix roster dahulu,
-    // fallback ke field halaman. Ketika berubah, hapus jawaban ini lalu re-render.
+    // Attach a listener to the dependency field: look for the roster-prefixed element first,
+    // falling back to the page field. When it changes, clear this answer and re-render.
     function wireDeps(){
       deps.forEach(dep=>{
         const el=document.querySelector(`[data-k="${CSS.escape(rp+dep)}"]`)
@@ -2524,12 +2524,12 @@ function resolveOptions(){
       });
     }
 
-    // Nilai dep: cari roster-prefixed dahulu, fallback ke field halaman
+    // Dependency value: look for the roster-prefixed one first, falling back to the page field
     const depVal=dep=>(rp?(answers[rp+dep]??answers[dep]):answers[dep]);
     const missing=deps.find(dep=>{const v=depVal(dep);return v==null||v==="";});
     if(missing){
       answers[key]="";
-      box.innerHTML=`<select class="pv-in" disabled><option value="">— isi kolom sebelumnya dahulu —</option></select>`;
+      box.innerHTML=`<select class="pv-in" disabled><option value="">— fill in the previous field first —</option></select>`;
       wireDeps();
       return;
     }
@@ -2540,11 +2540,11 @@ function resolveOptions(){
     const saved=answers[key];
     if(c.type==="select"){
       const cur=saved!=null?String(saved):"";
-      box.innerHTML=`<select data-k="${ke}" class="pv-in"${dis}><option value="">— pilih —</option>${opts.map(o=>`<option value="${esc(o.value)}"${cur===String(o.value)?" selected":""}>${esc(o.label)}</option>`).join("")}</select>`;
+      box.innerHTML=`<select data-k="${ke}" class="pv-in"${dis}><option value="">— select —</option>${opts.map(o=>`<option value="${esc(o.value)}"${cur===String(o.value)?" selected":""}>${esc(o.label)}</option>`).join("")}</select>`;
       if(enabled!==false)box.querySelector("select")?.addEventListener("change",e=>{const f=e.target.closest(".pv-field"),fkey=f?.dataset?.fieldkey,top0=fkey?f.getBoundingClientRect().top:null;saveAnswers();rerender();if(fkey&&top0!=null)requestAnimationFrame(()=>snapScroll(fkey,top0));});
     }else{
       const savedArr=Array.isArray(saved)?saved.map(String):(saved!=null?[String(saved)]:[]);
-      box.innerHTML=opts.map(o=>{const chk=multi?savedArr.includes(String(o.value)):String(saved)===String(o.value);const attr=multi?`data-kc="${ke}"`:`name="r_${ke}" data-kr="${ke}"`;return`<label class="pv-opt"><input type="${multi?"checkbox":"radio"}" ${attr} value="${esc(o.value)}"${chk?" checked":""}${dis}> ${esc(o.label)}</label>`;}).join("")||`<span class="pv-loading">tidak ada pilihan</span>`;
+      box.innerHTML=opts.map(o=>{const chk=multi?savedArr.includes(String(o.value)):String(saved)===String(o.value);const attr=multi?`data-kc="${ke}"`:`name="r_${ke}" data-kr="${ke}"`;return`<label class="pv-opt"><input type="${multi?"checkbox":"radio"}" ${attr} value="${esc(o.value)}"${chk?" checked":""}${dis}> ${esc(o.label)}</label>`;}).join("")||`<span class="pv-loading">no options</span>`;
       if(enabled!==false)box.querySelectorAll("[data-kr],[data-kc]").forEach(el=>el.addEventListener("change",e=>{const f=e.target.closest(".pv-field"),fkey=f?.dataset?.fieldkey,top0=fkey?f.getBoundingClientRect().top:null;saveAnswers();rerender();if(fkey&&top0!=null)requestAnimationFrame(()=>snapScroll(fkey,top0));}));
     }
   });
@@ -2563,8 +2563,8 @@ async function submit(){
   msg.className="msg";
   if(!ensureNoPendingUploads())return;
   const ans=collectAll();
-  if(!Object.keys(ans).length){msg.className="msg err";msg.textContent="Belum ada jawaban yang diisi.";return;}
-  btn.disabled=true;btn.textContent="Mengirim…";
+  if(!Object.keys(ans).length){msg.className="msg err";msg.textContent="No answers have been filled in yet.";return;}
+  btn.disabled=true;btn.textContent="Submitting…";
   const headers=pubHeaders({"Content-Type":"application/json"});
   const body={answers:ans};
   if(EDITING_RESPONSE_ID)body.responseId=EDITING_RESPONSE_ID;
@@ -2577,35 +2577,35 @@ async function submit(){
       await queueOfflineRequest(url,headers,JSON.stringify(body));
       clearDraft();EDITING_RESPONSE_ID=null;document.getElementById("draftNote")?.remove();
       msg.className="msg ok";
-      msg.textContent="Tersimpan di perangkat — akan dikirim otomatis begitu online kembali.";
-      // Berhasil (tersimpan) — tombol tetap nonaktif supaya tidak terkirim dobel;
-      // hanya diaktifkan kembali kalau pengiriman gagal (lihat catch di bawah).
-      btn.textContent=MULTI_RESPONSE?"Kirim Jawaban":((EXISTING_RESPONSE||EDITING_RESPONSE_ID)?"Perbarui Jawaban":"Kirim Jawaban");
+      msg.textContent="Saved on this device — it will be sent automatically once you are back online.";
+      // Success (saved) — the button stays disabled so it cannot be submitted twice;
+      // it is only re-enabled if the submission fails (see the catch below).
+      btn.textContent=MULTI_RESPONSE?"Submit Response":((EXISTING_RESPONSE||EDITING_RESPONSE_ID)?"Update Response":"Submit Response");
       return;
     }
-    msg.className="msg err";msg.textContent="Tidak ada koneksi internet.";
-    btn.disabled=false;btn.textContent=MULTI_RESPONSE?"Kirim Jawaban":((EXISTING_RESPONSE||EDITING_RESPONSE_ID)?"Perbarui Jawaban":"Kirim Jawaban");
+    msg.className="msg err";msg.textContent="No internet connection.";
+    btn.disabled=false;btn.textContent=MULTI_RESPONSE?"Submit Response":((EXISTING_RESPONSE||EDITING_RESPONSE_ID)?"Update Response":"Submit Response");
     return;
   }
   try{
     const d=await r.json();
-    if(r.status===401){msg.className="msg err";msg.textContent="Sesi habis. Silakan login ulang.";btn.disabled=false;btn.textContent=(EXISTING_RESPONSE||EDITING_RESPONSE_ID)?"Perbarui Jawaban":"Kirim Jawaban";return;}
-    if(!r.ok)throw new Error(d.error||"Gagal mengirim");
+    if(r.status===401){msg.className="msg err";msg.textContent="Session expired. Please log in again.";btn.disabled=false;btn.textContent=(EXISTING_RESPONSE||EDITING_RESPONSE_ID)?"Update Response":"Submit Response";return;}
+    if(!r.ok)throw new Error(d.error||"Failed to submit");
     const wasEditingCancelled=!!EDITING_RESPONSE_ID;
     clearDraft();
     EDITING_RESPONSE_ID=null;
     document.getElementById("draftNote")?.remove();
     if(MULTI_RESPONSE){
-      // Multi-response: setelah kirim, tampilkan sukses lalu kembali ke daftar
+      // Multi-response: after submitting, show success and return to the list
       msg.className="msg ok";
-      msg.textContent="Terima kasih! Respons Anda sudah terkirim.";
-      // Berhasil terkirim — tombol tetap nonaktif sampai halaman berpindah ke
-      // daftar respons, supaya tidak bisa diklik dobel selagi menunggu redirect.
-      btn.textContent="Kirim Jawaban";
+      msg.textContent="Thank you! Your response has been submitted.";
+      // Submitted successfully — the button stays disabled until the page moves to the
+      // response list, so it cannot be double-clicked while the redirect is pending.
+      btn.textContent="Submit Response";
       document.getElementById("pvBody")?.scrollTo({top:0,behavior:"smooth"});
       setTimeout(async()=>{
         const prevResps=await fetchMyResponses();
-        renderMyResponsesList({title:txt(SCHEMA?.title)||"Kuesioner"},prevResps);
+        renderMyResponsesList({title:txt(SCHEMA?.title)||"Form"},prevResps);
       },1800);
     }else{
       const isFirstSend=!EXISTING_RESPONSE&&!wasEditingCancelled;
@@ -2614,11 +2614,11 @@ async function submit(){
       const msg2=document.getElementById("msg");
       if(msg2){
         msg2.className="msg ok";
-        msg2.textContent=isFirstSend?"Jawaban berhasil dikirim.":"Jawaban berhasil diperbarui.";
+        msg2.textContent=isFirstSend?"Response submitted successfully.":"Response updated successfully.";
       }
       document.getElementById("pvBody")?.scrollTo({top:0,behavior:"smooth"});
     }
-  }catch(e){msg.className="msg err";msg.textContent=e.message;btn.disabled=false;btn.textContent=MULTI_RESPONSE?"Kirim Jawaban":((EXISTING_RESPONSE||EDITING_RESPONSE_ID)?"Perbarui Jawaban":"Kirim Jawaban");}
+  }catch(e){msg.className="msg err";msg.textContent=e.message;btn.disabled=false;btn.textContent=MULTI_RESPONSE?"Submit Response":((EXISTING_RESPONSE||EDITING_RESPONSE_ID)?"Update Response":"Submit Response");}
 }
 
 flushOfflineQueue().catch(()=>{});

@@ -16,7 +16,7 @@ import (
 )
 
 /* ================================================================
-   SUPERADMIN — kelola permission viewer per kuesioner
+   SUPERADMIN — manage viewer permissions per form
    ================================================================ */
 
 func (s *Server) createViewerPermission(w http.ResponseWriter, r *http.Request) {
@@ -31,11 +31,11 @@ func (s *Server) createViewerPermission(w http.ResponseWriter, r *http.Request) 
 		FieldFilters     map[string]string `json:"fieldFilters"`
 	}
 	if err := decodeJSON(r, &in); err != nil {
-		writeErr(w, http.StatusBadRequest, "format permintaan salah")
+		writeErr(w, http.StatusBadRequest, "invalid request format")
 		return
 	}
 	if in.ViewerID == "" {
-		writeErr(w, http.StatusBadRequest, "viewerId wajib diisi")
+		writeErr(w, http.StatusBadRequest, "viewerId is required")
 		return
 	}
 	if in.RespondentAccess != "all" && in.RespondentAccess != "selected" {
@@ -44,10 +44,10 @@ func (s *Server) createViewerPermission(w http.ResponseWriter, r *http.Request) 
 	createdBy := userFrom(r.Context()).Subject
 	p, err := s.st.CreateViewerPermission(r.Context(), in.ViewerID, formID, in.RespondentAccess, in.VisibleFields, in.FieldFilters, &createdBy)
 	if err != nil {
-		writeErr(w, http.StatusConflict, "viewer mungkin sudah memiliki akses ke kuesioner ini")
+		writeErr(w, http.StatusConflict, "the viewer may already have access to this form")
 		return
 	}
-	s.audit(r, "permission.viewer.create", "permission", p.ID, in.ViewerID, formID, "akses="+in.RespondentAccess)
+	s.audit(r, "permission.viewer.create", "permission", p.ID, in.ViewerID, formID, "access="+in.RespondentAccess)
 	writeJSON(w, http.StatusCreated, p)
 }
 
@@ -58,15 +58,15 @@ func (s *Server) listFormViewerPermissions(w http.ResponseWriter, r *http.Reques
 	}
 	perms, err := s.st.ListFormViewerPermissions(r.Context(), formID)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		writeErr(w, http.StatusInternalServerError, "failed to fetch data")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"permissions": perms})
 }
 
-// exportViewerPermissionsCSV mengunduh daftar akses viewer satu kuesioner sebagai CSV
-// (untuk arsip/edit di Excel — bukan untuk diimpor balik langsung karena field_filters
-// bisa berisi lebih dari satu variabel).
+// exportViewerPermissionsCSV downloads one form's viewer access list as CSV
+// (for archiving/editing in Excel — not for direct re-import, because field_filters
+// may hold more than one field).
 func (s *Server) exportViewerPermissionsCSV(w http.ResponseWriter, r *http.Request) {
 	formID := r.PathValue("id")
 	if _, ok := s.ensureFormAccess(w, r, formID); !ok {
@@ -74,7 +74,7 @@ func (s *Server) exportViewerPermissionsCSV(w http.ResponseWriter, r *http.Reque
 	}
 	perms, err := s.st.ListFormViewerPermissions(r.Context(), formID)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		writeErr(w, http.StatusInternalServerError, "failed to fetch data")
 		return
 	}
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
@@ -94,11 +94,11 @@ func (s *Server) exportViewerPermissionsCSV(w http.ResponseWriter, r *http.Reque
 func (s *Server) getViewerPermission(w http.ResponseWriter, r *http.Request) {
 	p, err := s.st.GetViewerPermissionByID(r.Context(), r.PathValue("permId"))
 	if errors.Is(err, store.ErrNotFound) {
-		writeErr(w, http.StatusNotFound, "permission tidak ditemukan")
+		writeErr(w, http.StatusNotFound, "permission not found")
 		return
 	}
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		writeErr(w, http.StatusInternalServerError, "failed to fetch data")
 		return
 	}
 	if _, ok := s.ensureFormAccess(w, r, p.FormID); !ok {
@@ -110,11 +110,11 @@ func (s *Server) getViewerPermission(w http.ResponseWriter, r *http.Request) {
 func (s *Server) updateViewerPermission(w http.ResponseWriter, r *http.Request) {
 	perm, err := s.st.GetViewerPermissionByID(r.Context(), r.PathValue("permId"))
 	if errors.Is(err, store.ErrNotFound) {
-		writeErr(w, http.StatusNotFound, "permission tidak ditemukan")
+		writeErr(w, http.StatusNotFound, "permission not found")
 		return
 	}
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		writeErr(w, http.StatusInternalServerError, "failed to fetch data")
 		return
 	}
 	if _, ok := s.ensureFormAccess(w, r, perm.FormID); !ok {
@@ -127,7 +127,7 @@ func (s *Server) updateViewerPermission(w http.ResponseWriter, r *http.Request) 
 		FieldFilters     map[string]string `json:"fieldFilters"`
 	}
 	if err := decodeJSON(r, &in); err != nil {
-		writeErr(w, http.StatusBadRequest, "format permintaan salah")
+		writeErr(w, http.StatusBadRequest, "invalid request format")
 		return
 	}
 	if in.RespondentAccess != "all" && in.RespondentAccess != "selected" {
@@ -136,10 +136,10 @@ func (s *Server) updateViewerPermission(w http.ResponseWriter, r *http.Request) 
 	p, err := s.st.UpdateViewerPermission(r.Context(), r.PathValue("permId"), in.RespondentAccess, in.VisibleFields, in.FieldFilters)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			writeErr(w, http.StatusNotFound, "permission tidak ditemukan")
+			writeErr(w, http.StatusNotFound, "permission not found")
 			return
 		}
-		writeErr(w, http.StatusInternalServerError, "gagal memperbarui")
+		writeErr(w, http.StatusInternalServerError, "failed to update")
 		return
 	}
 	writeJSON(w, http.StatusOK, p)
@@ -148,11 +148,11 @@ func (s *Server) updateViewerPermission(w http.ResponseWriter, r *http.Request) 
 func (s *Server) deleteViewerPermission(w http.ResponseWriter, r *http.Request) {
 	perm, err := s.st.GetViewerPermissionByID(r.Context(), r.PathValue("permId"))
 	if errors.Is(err, store.ErrNotFound) {
-		writeErr(w, http.StatusNotFound, "permission tidak ditemukan")
+		writeErr(w, http.StatusNotFound, "permission not found")
 		return
 	}
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		writeErr(w, http.StatusInternalServerError, "failed to fetch data")
 		return
 	}
 	if _, ok := s.ensureFormAccess(w, r, perm.FormID); !ok {
@@ -161,73 +161,73 @@ func (s *Server) deleteViewerPermission(w http.ResponseWriter, r *http.Request) 
 
 	if err := s.st.DeleteViewerPermission(r.Context(), r.PathValue("permId")); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			writeErr(w, http.StatusNotFound, "permission tidak ditemukan")
+			writeErr(w, http.StatusNotFound, "permission not found")
 			return
 		}
-		writeErr(w, http.StatusInternalServerError, "gagal menghapus")
+		writeErr(w, http.StatusInternalServerError, "failed to delete")
 		return
 	}
 	s.audit(r, "permission.viewer.delete", "permission", perm.ID, perm.ViewerUsername, perm.FormID, "")
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
-// convertViewerToEditor mengubah satu permission viewer menjadi editor untuk akun & kuesioner yang
-// sama — membawa respondentAccess, fieldFilters, dan daftar responden terpilih ke permission baru,
-// lalu menghapus permission viewer yang lama. Role akun (users.role) tidak diubah — role bukan lagi
-// gerbang eksklusif, hanya label default; kapabilitas sebenarnya ditentukan oleh tabel permission ini.
+// convertViewerToEditor turns one viewer permission into an editor permission for the same account &
+// account & form — carrying respondentAccess, fieldFilters, and the selected respondents into the new permission,
+// form, then removes the old viewer permission. The account role (users.role) is left alone — the role is no longer
+// an exclusive gate, only a default label; the real capability comes from this permission table.
 func (s *Server) convertViewerToEditor(w http.ResponseWriter, r *http.Request) {
 	old, err := s.st.GetViewerPermissionByID(r.Context(), r.PathValue("permId"))
 	if errors.Is(err, store.ErrNotFound) {
-		writeErr(w, http.StatusNotFound, "permission tidak ditemukan")
+		writeErr(w, http.StatusNotFound, "permission not found")
 		return
 	}
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		writeErr(w, http.StatusInternalServerError, "failed to fetch data")
 		return
 	}
 	if _, ok := s.ensureFormAccess(w, r, old.FormID); !ok {
 		return
 	}
 	if _, err := s.st.GetEditorPermissionByEditorAndForm(r.Context(), old.ViewerID, old.FormID); err == nil {
-		writeErr(w, http.StatusConflict, "akun ini sudah memiliki akses editor ke kuesioner ini")
+		writeErr(w, http.StatusConflict, "this account already has editor access to this form")
 		return
 	} else if !errors.Is(err, store.ErrNotFound) {
-		writeErr(w, http.StatusInternalServerError, "gagal memeriksa akses")
+		writeErr(w, http.StatusInternalServerError, "failed to check access")
 		return
 	}
 
 	allowed, err := s.st.ListViewerAllowedRespondents(r.Context(), old.ID)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		writeErr(w, http.StatusInternalServerError, "failed to fetch data")
 		return
 	}
 
 	createdBy := userFrom(r.Context()).Subject
 	newPerm, err := s.st.CreateEditorPermission(r.Context(), old.ViewerID, old.FormID, old.RespondentAccess, old.FieldFilters, &createdBy)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal membuat akses editor")
+		writeErr(w, http.StatusInternalServerError, "failed to create editor access")
 		return
 	}
 	for _, a := range allowed {
 		if _, err := s.st.AddEditorAllowedRespondent(r.Context(), newPerm.ID, a.RespondentID); err != nil {
-			writeErr(w, http.StatusInternalServerError, "gagal menyalin daftar responden")
+			writeErr(w, http.StatusInternalServerError, "failed to copy the respondent list")
 			return
 		}
 	}
 	if err := s.st.DeleteViewerPermission(r.Context(), old.ID); err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal menghapus akses viewer lama")
+		writeErr(w, http.StatusInternalServerError, "failed to remove the previous viewer access")
 		return
 	}
 	writeJSON(w, http.StatusOK, newPerm)
 }
 
 /* ================================================================
-   SUPERADMIN — bulk assign/hapus permission viewer (banyak sekaligus)
+   SUPERADMIN — bulk assign/remove viewer permissions (many at once)
    ================================================================ */
 
-// bulkAssignViewerPermissions memberi/memperbarui akses viewer ke satu kuesioner
-// untuk banyak akun sekaligus (dibuat otomatis jika emailnya belum terdaftar).
-// Setiap baris independen — satu baris gagal tidak menggagalkan baris lain.
+// bulkAssignViewerPermissions grants or updates viewer access to one form
+// for many accounts at once (accounts are created automatically if the email is not registered yet).
+// Each row is independent — one failing row does not fail the others.
 func (s *Server) bulkAssignViewerPermissions(w http.ResponseWriter, r *http.Request) {
 	formID := r.PathValue("id")
 	if _, ok := s.ensureFormAccess(w, r, formID); !ok {
@@ -243,7 +243,7 @@ func (s *Server) bulkAssignViewerPermissions(w http.ResponseWriter, r *http.Requ
 		} `json:"items"`
 	}
 	if err := decodeJSON(r, &in); err != nil {
-		writeErr(w, http.StatusBadRequest, "format permintaan salah")
+		writeErr(w, http.StatusBadRequest, "invalid request format")
 		return
 	}
 	createdBy := userFrom(r.Context()).Subject
@@ -254,7 +254,7 @@ func (s *Server) bulkAssignViewerPermissions(w http.ResponseWriter, r *http.Requ
 		res["email"] = email
 		if email == "" {
 			res["status"] = "error"
-			res["error"] = "email wajib diisi"
+			res["error"] = "email is required"
 			results[i] = res
 			continue
 		}
@@ -263,27 +263,27 @@ func (s *Server) bulkAssignViewerPermissions(w http.ResponseWriter, r *http.Requ
 			b := make([]byte, 24)
 			if _, rerr := rand.Read(b); rerr != nil {
 				res["status"] = "error"
-				res["error"] = "gagal membuat password acak"
+				res["error"] = "failed to generate a random password"
 				results[i] = res
 				continue
 			}
 			hash, herr := auth.HashPassword(base64.RawURLEncoding.EncodeToString(b))
 			if herr != nil {
 				res["status"] = "error"
-				res["error"] = "gagal memproses password"
+				res["error"] = "failed to process password"
 				results[i] = res
 				continue
 			}
 			u, err = s.st.CreateUser(r.Context(), email, email, hash, "viewer", strings.TrimSpace(item.Note))
 			if err != nil {
 				res["status"] = "error"
-				res["error"] = "gagal membuat akun viewer"
+				res["error"] = "failed to create viewer account"
 				results[i] = res
 				continue
 			}
 		} else if err != nil {
 			res["status"] = "error"
-			res["error"] = "gagal memeriksa akun"
+			res["error"] = "failed to check the account"
 			results[i] = res
 			continue
 		} else if u.Role == "superadmin" || u.Role == "admin" {
@@ -302,7 +302,7 @@ func (s *Server) bulkAssignViewerPermissions(w http.ResponseWriter, r *http.Requ
 			p, cerr := s.st.CreateViewerPermission(r.Context(), u.ID, formID, respondentAccess, item.VisibleFields, item.FieldFilters, &createdBy)
 			if cerr != nil {
 				res["status"] = "error"
-				res["error"] = "gagal membuat akses"
+				res["error"] = "failed to create access"
 				results[i] = res
 				continue
 			}
@@ -310,14 +310,14 @@ func (s *Server) bulkAssignViewerPermissions(w http.ResponseWriter, r *http.Requ
 			res["permissionId"] = p.ID
 		} else if err != nil {
 			res["status"] = "error"
-			res["error"] = "gagal memeriksa akses"
+			res["error"] = "failed to check access"
 			results[i] = res
 			continue
 		} else {
 			p, uerr := s.st.UpdateViewerPermission(r.Context(), existing.ID, respondentAccess, item.VisibleFields, item.FieldFilters)
 			if uerr != nil {
 				res["status"] = "error"
-				res["error"] = "gagal memperbarui akses"
+				res["error"] = "failed to update access"
 				results[i] = res
 				continue
 			}
@@ -329,7 +329,7 @@ func (s *Server) bulkAssignViewerPermissions(w http.ResponseWriter, r *http.Requ
 	writeJSON(w, http.StatusOK, map[string]any{"results": results})
 }
 
-// bulkDeleteViewerPermissions menghapus banyak permission viewer sekaligus untuk satu kuesioner.
+// bulkDeleteViewerPermissions removes many viewer permissions at once for one form.
 func (s *Server) bulkDeleteViewerPermissions(w http.ResponseWriter, r *http.Request) {
 	formID := r.PathValue("id")
 	if _, ok := s.ensureFormAccess(w, r, formID); !ok {
@@ -339,18 +339,18 @@ func (s *Server) bulkDeleteViewerPermissions(w http.ResponseWriter, r *http.Requ
 		PermissionIDs []string `json:"permissionIds"`
 	}
 	if err := decodeJSON(r, &in); err != nil {
-		writeErr(w, http.StatusBadRequest, "format permintaan salah")
+		writeErr(w, http.StatusBadRequest, "invalid request format")
 		return
 	}
 	results := make([]map[string]any, 0, len(in.PermissionIDs))
 	for _, id := range in.PermissionIDs {
 		perm, err := s.st.GetViewerPermissionByID(r.Context(), id)
 		if err != nil || perm.FormID != formID {
-			results = append(results, map[string]any{"id": id, "status": "error", "error": "permission tidak ditemukan"})
+			results = append(results, map[string]any{"id": id, "status": "error", "error": "permission not found"})
 			continue
 		}
 		if err := s.st.DeleteViewerPermission(r.Context(), id); err != nil {
-			results = append(results, map[string]any{"id": id, "status": "error", "error": "gagal menghapus"})
+			results = append(results, map[string]any{"id": id, "status": "error", "error": "failed to delete"})
 			continue
 		}
 		results = append(results, map[string]any{"id": id, "status": "deleted"})
@@ -365,11 +365,11 @@ func (s *Server) bulkDeleteViewerPermissions(w http.ResponseWriter, r *http.Requ
 func (s *Server) listViewerAllowedRespondents(w http.ResponseWriter, r *http.Request) {
 	perm, err := s.st.GetViewerPermissionByID(r.Context(), r.PathValue("permId"))
 	if errors.Is(err, store.ErrNotFound) {
-		writeErr(w, http.StatusNotFound, "permission tidak ditemukan")
+		writeErr(w, http.StatusNotFound, "permission not found")
 		return
 	}
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		writeErr(w, http.StatusInternalServerError, "failed to fetch data")
 		return
 	}
 	if _, ok := s.ensureFormAccess(w, r, perm.FormID); !ok {
@@ -378,7 +378,7 @@ func (s *Server) listViewerAllowedRespondents(w http.ResponseWriter, r *http.Req
 
 	items, err := s.st.ListViewerAllowedRespondents(r.Context(), r.PathValue("permId"))
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		writeErr(w, http.StatusInternalServerError, "failed to fetch data")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"respondents": items})
@@ -387,11 +387,11 @@ func (s *Server) listViewerAllowedRespondents(w http.ResponseWriter, r *http.Req
 func (s *Server) addViewerAllowedRespondent(w http.ResponseWriter, r *http.Request) {
 	perm, err := s.st.GetViewerPermissionByID(r.Context(), r.PathValue("permId"))
 	if errors.Is(err, store.ErrNotFound) {
-		writeErr(w, http.StatusNotFound, "permission tidak ditemukan")
+		writeErr(w, http.StatusNotFound, "permission not found")
 		return
 	}
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		writeErr(w, http.StatusInternalServerError, "failed to fetch data")
 		return
 	}
 	if _, ok := s.ensureFormAccess(w, r, perm.FormID); !ok {
@@ -402,16 +402,16 @@ func (s *Server) addViewerAllowedRespondent(w http.ResponseWriter, r *http.Reque
 		RespondentID string `json:"respondentId"`
 	}
 	if err := decodeJSON(r, &in); err != nil {
-		writeErr(w, http.StatusBadRequest, "format permintaan salah")
+		writeErr(w, http.StatusBadRequest, "invalid request format")
 		return
 	}
 	if in.RespondentID == "" {
-		writeErr(w, http.StatusBadRequest, "respondentId wajib diisi")
+		writeErr(w, http.StatusBadRequest, "respondentId is required")
 		return
 	}
 	item, err := s.st.AddViewerAllowedRespondent(r.Context(), r.PathValue("permId"), in.RespondentID)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal menambahkan")
+		writeErr(w, http.StatusInternalServerError, "failed to add")
 		return
 	}
 	writeJSON(w, http.StatusCreated, item)
@@ -420,20 +420,20 @@ func (s *Server) addViewerAllowedRespondent(w http.ResponseWriter, r *http.Reque
 func (s *Server) removeViewerAllowedRespondent(w http.ResponseWriter, r *http.Request) {
 	item, err := s.st.GetViewerAllowedRespondentByID(r.Context(), r.PathValue("id"))
 	if errors.Is(err, store.ErrNotFound) {
-		writeErr(w, http.StatusNotFound, "data tidak ditemukan")
+		writeErr(w, http.StatusNotFound, "data not found")
 		return
 	}
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		writeErr(w, http.StatusInternalServerError, "failed to fetch data")
 		return
 	}
 	perm, err := s.st.GetViewerPermissionByID(r.Context(), item.PermissionID)
 	if errors.Is(err, store.ErrNotFound) {
-		writeErr(w, http.StatusNotFound, "permission tidak ditemukan")
+		writeErr(w, http.StatusNotFound, "permission not found")
 		return
 	}
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		writeErr(w, http.StatusInternalServerError, "failed to fetch data")
 		return
 	}
 	if _, ok := s.ensureFormAccess(w, r, perm.FormID); !ok {
@@ -442,16 +442,16 @@ func (s *Server) removeViewerAllowedRespondent(w http.ResponseWriter, r *http.Re
 
 	if err := s.st.RemoveViewerAllowedRespondent(r.Context(), r.PathValue("id")); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			writeErr(w, http.StatusNotFound, "data tidak ditemukan")
+			writeErr(w, http.StatusNotFound, "data not found")
 			return
 		}
-		writeErr(w, http.StatusInternalServerError, "gagal menghapus")
+		writeErr(w, http.StatusInternalServerError, "failed to delete")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
-// listFormRespondents digunakan superadmin untuk memilih responden saat konfigurasi 'selected'.
+// listFormRespondents is used by a superadmin to pick respondents when configuring 'selected' mode.
 func (s *Server) listFormRespondents(w http.ResponseWriter, r *http.Request) {
 	formID := r.PathValue("id")
 	if _, ok := s.ensureFormAccess(w, r, formID); !ok {
@@ -459,77 +459,77 @@ func (s *Server) listFormRespondents(w http.ResponseWriter, r *http.Request) {
 	}
 	respondents, err := s.st.ListFormRespondents(r.Context(), formID)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		writeErr(w, http.StatusInternalServerError, "failed to fetch data")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"respondents": respondents})
 }
 
 /* ================================================================
-   VIEWER — endpoint yang dipanggil viewer setelah login
+   VIEWER — the endpoints a viewer calls after signing in
    ================================================================ */
 
-// viewerMyForms mengembalikan semua kuesioner yang boleh dilihat viewer yang sedang login.
+// viewerMyForms returns every form the signed-in viewer may see.
 func (s *Server) viewerMyForms(w http.ResponseWriter, r *http.Request) {
 	viewerID := userFrom(r.Context()).Subject
 	perms, err := s.st.ListViewerForms(r.Context(), viewerID)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		writeErr(w, http.StatusInternalServerError, "failed to fetch data")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"forms": perms})
 }
 
-// viewerMyFormPermission mengembalikan detail permission viewer untuk satu kuesioner.
+// viewerMyFormPermission returns the viewer's permission details for one form.
 func (s *Server) viewerMyFormPermission(w http.ResponseWriter, r *http.Request) {
 	viewerID := userFrom(r.Context()).Subject
 	formID := r.PathValue("id")
 	perm, err := s.st.GetViewerPermission(r.Context(), viewerID, formID)
 	if errors.Is(err, store.ErrNotFound) {
-		writeErr(w, http.StatusForbidden, "tidak memiliki akses ke kuesioner ini")
+		writeErr(w, http.StatusForbidden, "you do not have access to this form")
 		return
 	}
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		writeErr(w, http.StatusInternalServerError, "failed to fetch data")
 		return
 	}
 	writeJSON(w, http.StatusOK, perm)
 }
 
-// viewerGetForm mengembalikan data form untuk viewer yang punya permission.
+// viewerGetForm returns the form data for a viewer who holds a permission.
 func (s *Server) viewerGetForm(w http.ResponseWriter, r *http.Request) {
 	viewerID := userFrom(r.Context()).Subject
 	formID := r.PathValue("id")
 	if _, err := s.st.GetViewerPermission(r.Context(), viewerID, formID); errors.Is(err, store.ErrNotFound) {
-		writeErr(w, http.StatusForbidden, "tidak memiliki akses ke kuesioner ini")
+		writeErr(w, http.StatusForbidden, "you do not have access to this form")
 		return
 	} else if err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		writeErr(w, http.StatusInternalServerError, "failed to fetch data")
 		return
 	}
 	f, err := s.st.GetForm(r.Context(), formID)
 	if errors.Is(err, store.ErrNotFound) {
-		writeErr(w, http.StatusNotFound, "kuesioner tidak ditemukan")
+		writeErr(w, http.StatusNotFound, "form not found")
 		return
 	}
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		writeErr(w, http.StatusInternalServerError, "failed to fetch data")
 		return
 	}
 	writeJSON(w, http.StatusOK, f)
 }
 
-// viewerListResponses melayani daftar jawaban yang boleh dilihat viewer (dengan pembatasan).
+// viewerListResponses serves the response list a viewer may see, with the restrictions applied.
 func (s *Server) viewerListResponses(w http.ResponseWriter, r *http.Request) {
 	viewerID := userFrom(r.Context()).Subject
 	formID := r.PathValue("id")
 
-	// Pastikan viewer punya akses
+	// Make sure the viewer actually has access
 	if _, err := s.st.GetViewerPermission(r.Context(), viewerID, formID); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			writeErr(w, http.StatusForbidden, "tidak memiliki akses ke kuesioner ini")
+			writeErr(w, http.StatusForbidden, "you do not have access to this form")
 		} else {
-			writeErr(w, http.StatusInternalServerError, "gagal memeriksa akses")
+			writeErr(w, http.StatusInternalServerError, "failed to check access")
 		}
 		return
 	}
@@ -541,15 +541,15 @@ func (s *Server) viewerListResponses(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := s.st.ListViewerResponses(r.Context(), viewerID, formID, f, limit, offset)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		writeErr(w, http.StatusInternalServerError, "failed to fetch data")
 		return
 	}
 	count, _ := s.st.CountViewerResponses(r.Context(), viewerID, formID, f)
 	writeJSON(w, http.StatusOK, map[string]any{"responses": s.signResponses(resp), "total": count})
 }
 
-// viewerExportResponses menghasilkan CSV jawaban yang boleh dilihat viewer, mengikuti pembatasan
-// permission-nya (respondentAccess, fieldFilters per baris, visibleFields per kolom).
+// viewerExportResponses produces a CSV of the responses a viewer may see, honouring the restrictions
+// its permission (respondentAccess, fieldFilters for rows, visibleFields for columns).
 func (s *Server) viewerExportResponses(w http.ResponseWriter, r *http.Request) {
 	viewerID := userFrom(r.Context()).Subject
 	formID := r.PathValue("id")
@@ -557,15 +557,15 @@ func (s *Server) viewerExportResponses(w http.ResponseWriter, r *http.Request) {
 	perm, err := s.st.GetViewerPermission(r.Context(), viewerID, formID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			writeErr(w, http.StatusForbidden, "tidak memiliki akses ke kuesioner ini")
+			writeErr(w, http.StatusForbidden, "you do not have access to this form")
 		} else {
-			writeErr(w, http.StatusInternalServerError, "gagal memeriksa akses")
+			writeErr(w, http.StatusInternalServerError, "failed to check access")
 		}
 		return
 	}
 	cols, err := s.st.GetFormAnswerColumns(r.Context(), formID)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		writeErr(w, http.StatusInternalServerError, "failed to fetch data")
 		return
 	}
 	if len(perm.VisibleFields) > 0 {
@@ -592,10 +592,10 @@ func (s *Server) viewerExportResponses(w http.ResponseWriter, r *http.Request) {
 		n++
 		return nil
 	})
-	s.audit(r, "export.csv", "form", formID, "", formID, fmt.Sprintf("%d baris (viewer)", n))
+	s.audit(r, "export.csv", "form", formID, "", formID, fmt.Sprintf("%d rows (viewer)", n))
 }
 
-// viewerGetResponse mengembalikan detail satu respons yang boleh dilihat viewer.
+// viewerGetResponse returns the details of one response a viewer may see.
 func (s *Server) viewerGetResponse(w http.ResponseWriter, r *http.Request) {
 	viewerID := userFrom(r.Context()).Subject
 	formID := r.PathValue("id")
@@ -603,17 +603,17 @@ func (s *Server) viewerGetResponse(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := s.st.GetViewerResponseByID(r.Context(), viewerID, formID, responseID)
 	if errors.Is(err, store.ErrNotFound) {
-		writeErr(w, http.StatusNotFound, "respons tidak ditemukan atau akses tidak diizinkan")
+		writeErr(w, http.StatusNotFound, "response not found or access is not allowed")
 		return
 	}
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		writeErr(w, http.StatusInternalServerError, "failed to fetch data")
 		return
 	}
 	writeJSON(w, http.StatusOK, s.signResponse(resp))
 }
 
-// viewerExportResponsesXLSX mengunduh jawaban sebagai Excel, mengikuti pembatasan
+// viewerExportResponsesXLSX downloads the responses as Excel, honouring the restrictions
 // permission viewer persis seperti ekspor CSV-nya.
 func (s *Server) viewerExportResponsesXLSX(w http.ResponseWriter, r *http.Request) {
 	viewerID := userFrom(r.Context()).Subject
@@ -622,27 +622,27 @@ func (s *Server) viewerExportResponsesXLSX(w http.ResponseWriter, r *http.Reques
 	perm, err := s.st.GetViewerPermission(r.Context(), viewerID, formID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			writeErr(w, http.StatusForbidden, "tidak memiliki akses ke kuesioner ini")
+			writeErr(w, http.StatusForbidden, "you do not have access to this form")
 		} else {
-			writeErr(w, http.StatusInternalServerError, "gagal memeriksa akses")
+			writeErr(w, http.StatusInternalServerError, "failed to check access")
 		}
 		return
 	}
 	cols, err := s.st.GetFormAnswerColumns(r.Context(), formID)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal mengambil data")
+		writeErr(w, http.StatusInternalServerError, "failed to fetch data")
 		return
 	}
 	cols = keepVisibleColumns(cols, perm.VisibleFields)
 
-	n := s.streamXLSX(w, formID, "Jawaban", cols, true, func(fn func(models.Response) error) error {
+	n := s.streamXLSX(w, formID, "Responses", cols, true, func(fn func(models.Response) error) error {
 		return s.st.ForEachViewerResponse(r.Context(), viewerID, formID, fn)
 	})
-	s.audit(r, "export.xlsx", "form", formID, "", formID, fmt.Sprintf("%d baris (viewer)", n))
+	s.audit(r, "export.xlsx", "form", formID, "", formID, fmt.Sprintf("%d rows (viewer)", n))
 }
 
-// keepVisibleColumns menyaring daftar kolom agar hanya memuat variabel yang boleh
-// dilihat. Daftar kosong berarti semua kolom boleh.
+// keepVisibleColumns filters the column list down to the fields that may
+// be seen. An empty list means every column is allowed.
 func keepVisibleColumns(cols, visible []string) []string {
 	if len(visible) == 0 {
 		return cols

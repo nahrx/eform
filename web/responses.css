@@ -1,22 +1,22 @@
-/* Tampilan bersama untuk ketiga halaman daftar jawaban:
+/* Presentation shared by the three response-list pages:
    responses.html (admin), viewer-responses.html, editor-responses.html.
 
-   Ketiganya memakai markup tabel yang sama (.resp-tbl dengan kolom .td-num,
-   .td-status, .td-who, .td-time, .td-val, .td-act) dan bilah filter yang sama,
-   jadi aturannya cukup ditulis sekali di sini. Gaya dasar desktop tetap berada di
-   masing-masing halaman; file ini menambahkan laci filter dan tampilan kartu. */
+   All three use the same table markup (.resp-tbl with the .td-num, .td-status,
+   .td-who, .td-time, .td-val, .td-act columns) and the same filter bar, so the
+   rules only need writing once, here. The base desktop styling stays with each
+   page; this file adds the filter drawer and the card layout. */
 
-/* Tinggi viewport dinamis: di HP, bilah alamat browser yang muncul-hilang membuat
-   100vh lebih tinggi dari area yang benar-benar terlihat. */
+/* Dynamic viewport height: on phones, the browser address bar coming and going
+   makes 100vh taller than the area actually visible. */
 @supports (height: 100dvh) {
   .shell { height: 100dvh; }
 }
 
 /* ==========================================================================
-   TOMBOL FILTER + RINGKASAN FILTER AKTIF
+   FILTER BUTTON + ACTIVE FILTER SUMMARY
    ========================================================================== */
 
-/* Angka kecil pada tombol Filter: berapa filter yang sedang aktif. */
+/* The small count on the Filter button: how many filters are currently active. */
 .filter-count {
   display: inline-flex; align-items: center; justify-content: center;
   min-width: 18px; height: 18px; padding: 0 5px; margin-left: 2px;
@@ -26,8 +26,8 @@
 .filter-count[hidden] { display: none; }
 .btn.has-filter { border-color: var(--accent); color: var(--accent-ink); background: var(--accent-soft); }
 
-/* Bilah chip di bawah topbar — supaya filter yang sedang aktif tetap terlihat
-   tanpa harus membuka lacinya. */
+/* The chip bar beneath the top bar — so the active filters stay visible without
+   having to open the drawer. */
 .active-bar {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   padding: 8px 20px; background: var(--panel-2);
@@ -37,7 +37,7 @@
 .active-chips { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-width: 0; }
 
 /* ==========================================================================
-   TOMBOL EKSPOR + DROPDOWN PILIHAN FORMAT
+   EXPORT BUTTON + FORMAT DROPDOWN
    ========================================================================== */
 
 .export-wrap { position: relative; flex: none; }
@@ -65,7 +65,7 @@
 }
 
 /* ==========================================================================
-   LACI FILTER (right sidebar)
+   FILTER DRAWER (right sidebar)
    ========================================================================== */
 
 .drawer-backdrop {
@@ -81,8 +81,8 @@
   display: flex; flex-direction: column;
   background: var(--panel); border-left: 1px solid var(--line);
   box-shadow: -10px 0 34px rgba(19, 23, 30, .16);
-  /* visibility:hidden mengeluarkan isi laci dari urutan Tab selama tertutup —
-     tanpa itu, menekan Tab di halaman bisa mendarat di kolom yang tak terlihat. */
+  /* visibility:hidden takes the drawer's contents out of the Tab order while it is
+     closed — without it, tabbing through the page can land on an invisible field. */
   transform: translateX(100%); visibility: hidden;
   transition: transform .22s ease, visibility .22s ease;
 }
@@ -117,8 +117,8 @@
 .drawer-sect .filter-sel,
 .drawer-sect .filter-search { width: 100%; max-width: none; }
 
-/* Filter per variabel (#ffBar) dipindahkan apa adanya ke dalam laci — markupnya
-   tetap dirender halaman masing-masing, di sini hanya ditata ulang jadi vertikal. */
+/* The per-field filters (#ffBar) move into the drawer as-is — each page still
+   renders that markup; here it is only re-laid-out vertically. */
 .filter-drawer .ff-bar {
   display: block; padding: 0; margin: 0; background: none; border: none;
 }
@@ -134,44 +134,44 @@
   font-size: 11px; font-weight: 700; text-transform: uppercase;
   letter-spacing: .05em; color: var(--muted);
 }
-/* flex-basis 0 menang atas width inline (mis. width:72px pada filter rentang
-   angka), jadi kolom isian selalu mengisi lebar laci secara merata. */
+/* flex-basis 0 beats an inline width (width:72px on numeric range filters, for
+   instance), so the inputs always fill the drawer's width evenly. */
 .filter-drawer .ff-input { flex: 1 1 0; min-width: 0; }
-/* searchable-select.js membungkus <select> dengan .ss-wrap, jadi yang jadi flex item
-   adalah pembungkusnya — bukan .ff-input di dalamnya. */
+/* searchable-select.js wraps the <select> in .ss-wrap, so the flex item is that
+   wrapper — not the .ff-input inside it. */
 .filter-drawer .ss-wrap { flex: 1 1 0; min-width: 0; }
 .filter-drawer .ss-wrap .ss-ctrl { width: 100%; }
 
 /* ==========================================================================
-   LAYAR HP
+   PHONE SCREENS
    ========================================================================== */
 
 @media (max-width: 640px) {
-  /* ---------- bilah atas ---------- */
+  /* ---------- top bar ---------- */
   .topbar { padding: 8px 12px; gap: 6px; }
   .form-title { font-size: 14px; min-width: 60px; }
   .topbar .btn { padding: 7px 10px; font-size: 12.5px; }
   .active-bar { padding: 8px 12px; }
 
-  /* Laci hampir selebar layar, dan isiannya 16px supaya iOS tidak
-     memperbesar halaman saat kolom difokuskan. */
+  /* The drawer is nearly full width, and its inputs use 16px so iOS does not
+     zoom the page when a field is focused. */
   .filter-drawer { width: 100%; max-width: none; }
   .filter-drawer select, .filter-drawer input { font-size: 16px; }
 
-  /* ---------- tabel jadi kartu ----------
-     Selektor sengaja memakai .resp-tbl.cards (dua kelas) supaya menang atas aturan
-     desktop di tiap halaman seperti `.resp-tbl .td-val{max-width:200px}` — yang juga
-     berbobot dua kelas dan kalau tidak dikalahkan akan memotong isi kartu. */
+  /* ---------- tables become cards ----------
+     The selectors deliberately use .resp-tbl.cards (two classes) so they outweigh
+     each page's desktop rules such as `.resp-tbl .td-val{max-width:200px}` — which
+     also carry two classes and would otherwise truncate the card contents. */
   .tbl-outer { padding: 12px; }
   .tbl-wrap { background: none; border: none; border-radius: 0; overflow: visible; }
   table.resp-tbl { min-width: 0; }
   .resp-tbl.cards thead { display: none; }
   .resp-tbl.cards, .resp-tbl.cards tbody { display: block; width: 100%; }
 
-  /* Tiap baris jadi kartu dua kolom:
-       baris 1 → nama responden (kiri) + badge status (kanan)
-       baris 2 → waktu (kiri) + nomor urut (kanan)
-       sisanya → baris label/nilai selebar kartu, lalu tombol aksi. */
+  /* Every row becomes a two-column card:
+       row 1 → respondent name (left) + status badge (right)
+       row 2 → time (left) + sequence number (right)
+       the rest → full-width label/value rows, then the action button. */
   .resp-tbl.cards tr {
     display: grid; grid-template-columns: 1fr auto; align-items: start;
     background: var(--panel); border: 1px solid var(--line);
@@ -196,10 +196,10 @@
     letter-spacing: .04em; color: var(--muted);
   }
   .resp-tbl.cards td:not([data-l])::before { display: none; }
-  /* Kolom tambahan yang kosong tidak perlu memakan baris di kartu. */
+  /* Empty extra columns need not take up a row on the card. */
   .resp-tbl.cards td.is-empty { display: none; }
 
-  /* --- kepala kartu --- */
+  /* --- card header --- */
   .resp-tbl.cards .td-who {
     grid-column: 1; grid-row: 1;
     display: block; text-align: left; border-top: none;
@@ -221,7 +221,7 @@
     display: block; border-top: none; width: auto; padding: 0 0 8px;
     font-size: 12px; color: var(--muted);
   }
-  /* Nomor urut diberi awalan "#" supaya tidak terbaca sebagai angka lepas. */
+  /* The sequence number gets a "#" prefix so it does not read as a stray number. */
   .resp-tbl.cards .td-num::before {
     display: inline; content: "#"; padding: 0;
     font-size: 12px; font-weight: 400; text-transform: none;
@@ -231,13 +231,13 @@
   .resp-tbl.cards .td-status::before,
   .resp-tbl.cards .td-time::before { display: none; }
 
-  /* Nilai kolom tambahan boleh membungkus penuh di kartu. */
+  /* Extra column values may wrap freely on the card. */
   .resp-tbl.cards .td-val,
   .resp-tbl.cards .td-share {
     max-width: none; white-space: normal; overflow: visible; text-overflow: clip;
   }
 
-  /* --- tombol aksi di dasar kartu --- */
+  /* --- action button at the foot of the card --- */
   .resp-tbl.cards .td-act {
     display: block; width: auto; text-align: left;
     padding: 10px 0 0; margin-top: 4px;

@@ -1,22 +1,22 @@
-/* Label kolom untuk tabel yang berubah jadi kartu di layar HP.
+/* Column labels for tables that turn into cards on phone screens.
 
-   Di layar sempit, <table class="cards"> ditampilkan sebagai daftar kartu
-   (lihat blok @media di admin.css). Karena <thead> disembunyikan, tiap <td>
-   perlu labelnya sendiri — skrip ini menyalin teks <th> ke atribut data-l
-   supaya CSS bisa menampilkannya lewat ::before.
+   On narrow screens, <table class="cards"> is shown as a list of cards
+   (see the @media block in admin.css). Because <thead> is hidden, every <td>
+   needs its own label — this script copies the <th> text into a data-l attribute
+   so the CSS can render it via ::before.
 
-   Sengaja dibaca dari <th> yang sudah dirender, bukan dari daftar teks yang
-   ditulis ulang di sini, supaya label ikut berubah saat i18n.js mengganti
-   bahasa halaman. */
+   It deliberately reads the already-rendered <th> rather than a hard-coded list,
+   so the labels follow along when i18n.js switches the page
+   language. */
 (function () {
   function syncTable(table) {
-    // Kolom yang disembunyikan lewat style inline (mis. kolom "Jawaban" untuk
-    // role editor) tidak ikut dihitung, supaya urutan label tetap pas.
+    // Columns hidden via an inline style (the "Responses" column for the editor role,
+    // for instance) are skipped, so the label order stays aligned.
     const labels = [];
     table.querySelectorAll("thead th").forEach(th => {
       if (th.style.display === "none") return;
-      // data-label dipakai kalau <th> memuat elemen hiasan yang tidak boleh ikut
-      // jadi label — mis. ikon urutan "↕" pada header yang bisa di-sort.
+      // data-label is used when the <th> contains decorative elements that must not
+      // become part of the label — the "↕" sort icon on a sortable header, say.
       labels.push((th.getAttribute("data-label") || th.textContent).trim());
     });
     table.querySelectorAll("tbody tr").forEach(tr => {
@@ -44,8 +44,8 @@
 
   function start() {
     syncAll();
-    // Isi tabel dirender ulang oleh admin.js/manage.js setelah fetch, dan teks
-    // <th> berubah saat ganti bahasa — pantau keduanya.
+    // The table body is re-rendered by admin.js/manage.js after a fetch, and the
+    // The <th> changes when the language switches — watch for both.
     new MutationObserver(schedule).observe(document.body, {
       childList: true,
       subtree: true,

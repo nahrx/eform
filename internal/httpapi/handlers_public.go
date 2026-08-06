@@ -16,37 +16,37 @@ import (
 	"github.com/nahrx/eform/internal/store"
 )
 
-// resolveShare memvalidasi token: aktif, belum kedaluwarsa, dan (jika perlu) password cocok.
+// resolveShare validates the token: active, not expired, and (when required) the password matches.
 func (s *Server) resolveShare(w http.ResponseWriter, r *http.Request) (*models.Share, bool) {
 	token := r.PathValue("token")
 	sh, err := s.st.GetShareByToken(r.Context(), token)
 	if errors.Is(err, store.ErrNotFound) {
-		writeErr(w, http.StatusNotFound, "tautan tidak ditemukan")
+		writeErr(w, http.StatusNotFound, "link not found")
 		return nil, false
 	}
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "kesalahan server")
+		writeErr(w, http.StatusInternalServerError, "server error")
 		return nil, false
 	}
 	if !sh.IsActive {
-		writeErr(w, http.StatusGone, "tautan sudah dinonaktifkan")
+		writeErr(w, http.StatusGone, "the link has been disabled")
 		return nil, false
 	}
 	if sh.ExpiresAt != nil && time.Now().After(*sh.ExpiresAt) {
-		writeErr(w, http.StatusGone, "tautan sudah kedaluwarsa")
+		writeErr(w, http.StatusGone, "the link has expired")
 		return nil, false
 	}
 	if sh.PasswordHash != nil {
 		pw := r.Header.Get("X-Share-Password")
 		if !auth.CheckPassword(*sh.PasswordHash, pw) {
-			writeErr(w, http.StatusUnauthorized, "password tautan salah")
+			writeErr(w, http.StatusUnauthorized, "incorrect link password")
 			return nil, false
 		}
 	}
 	return sh, true
 }
 
-// GET /api/public/forms/{token} — akses skema kuesioner secara publik (tidak perlu login).
+// GET /api/public/forms/{token} — public access to the form schema (no login needed).
 func (s *Server) publicGetForm(w http.ResponseWriter, r *http.Request) {
 	sh, ok := s.resolveShare(w, r)
 	if !ok {
@@ -54,11 +54,11 @@ func (s *Server) publicGetForm(w http.ResponseWriter, r *http.Request) {
 	}
 	f, err := s.st.GetForm(r.Context(), sh.FormID)
 	if err != nil {
-		writeErr(w, http.StatusNotFound, "kuesioner tidak ditemukan")
+		writeErr(w, http.StatusNotFound, "form not found")
 		return
 	}
 	if f.Status != "published" {
-		writeErr(w, http.StatusForbidden, "kuesioner belum dipublikasikan")
+		writeErr(w, http.StatusForbidden, "the form has not been published")
 		return
 	}
 	s.st.IncrementShareView(r.Context(), sh.ID)
@@ -77,7 +77,7 @@ func (s *Server) publicGetForm(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GET /api/public/me — info respondent yang sedang login.
+// GET /api/public/me — details of the signed-in respondent.
 func (s *Server) respondentMe(w http.ResponseWriter, r *http.Request) {
 	rc := respondentFrom(r.Context())
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -88,7 +88,7 @@ func (s *Server) respondentMe(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GET /api/public/forms/{token}/my-response — jawaban terakhir respondent untuk form ini.
+// GET /api/public/forms/{token}/my-response — the respondent's latest answer for this form.
 func (s *Server) myResponse(w http.ResponseWriter, r *http.Request) {
 	rc := respondentFrom(r.Context())
 	sh, ok := s.resolveShare(w, r)
@@ -101,13 +101,13 @@ func (s *Server) myResponse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "kesalahan server")
+		writeErr(w, http.StatusInternalServerError, "server error")
 		return
 	}
 	writeJSON(w, http.StatusOK, s.signResponse(resp))
 }
 
-// GET /api/public/forms/{token}/my-responses — semua jawaban respondent (untuk multi-response).
+// GET /api/public/forms/{token}/my-responses — all of the respondent's answers (for multi-response).
 func (s *Server) myResponses(w http.ResponseWriter, r *http.Request) {
 	rc := respondentFrom(r.Context())
 	sh, ok := s.resolveShare(w, r)
@@ -116,7 +116,7 @@ func (s *Server) myResponses(w http.ResponseWriter, r *http.Request) {
 	}
 	resps, err := s.st.ListResponsesByFormAndRespondent(r.Context(), sh.FormID, rc.RespondentID)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "kesalahan server")
+		writeErr(w, http.StatusInternalServerError, "server error")
 		return
 	}
 	if resps == nil {
@@ -125,7 +125,7 @@ func (s *Server) myResponses(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"responses": s.signResponses(resps)})
 }
 
-// GET /api/public/forms/{token}/check-access — cek apakah email respondent diizinkan (restricted mode).
+// GET /api/public/forms/{token}/check-access — check whether the respondent's email is allowed (restricted mode).
 func (s *Server) checkAccess(w http.ResponseWriter, r *http.Request) {
 	rc := respondentFrom(r.Context())
 	sh, ok := s.resolveShare(w, r)
@@ -138,13 +138,13 @@ func (s *Server) checkAccess(w http.ResponseWriter, r *http.Request) {
 	}
 	allowed, err := s.st.IsEmailAllowed(r.Context(), sh.ID, rc.Email)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "kesalahan server")
+		writeErr(w, http.StatusInternalServerError, "server error")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"allowed": allowed})
 }
 
-// POST /api/public/forms/{token}/responses — kirim atau simpan draf jawaban.
+// POST /api/public/forms/{token}/responses — submit or save a draft response.
 // Body: {answers, draft?: bool, responseId?: string}
 // Memerlukan JWT respondent (login Google).
 func (s *Server) publicSubmit(w http.ResponseWriter, r *http.Request) {
@@ -153,20 +153,20 @@ func (s *Server) publicSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !sh.AllowResponses {
-		writeErr(w, http.StatusForbidden, "tautan ini tidak menerima jawaban")
+		writeErr(w, http.StatusForbidden, "this link does not accept responses")
 		return
 	}
 	rc := respondentFrom(r.Context())
 
-	// Cek akses jika mode restricted
+	// Check access when the share is in restricted mode
 	if sh.AccessMode == "restricted" {
 		allowed, err := s.st.IsEmailAllowed(r.Context(), sh.ID, rc.Email)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, "kesalahan server")
+			writeErr(w, http.StatusInternalServerError, "server error")
 			return
 		}
 		if !allowed {
-			writeErr(w, http.StatusForbidden, "email Anda tidak terdaftar dalam daftar akses kuesioner ini")
+			writeErr(w, http.StatusForbidden, "your email is not on the access list for this form")
 			return
 		}
 	}
@@ -177,7 +177,7 @@ func (s *Server) publicSubmit(w http.ResponseWriter, r *http.Request) {
 		ResponseID string          `json:"responseId"`
 	}
 	if err := decodeJSON(r, &in); err != nil || len(in.Answers) == 0 {
-		writeErr(w, http.StatusBadRequest, "jawaban kosong atau format salah")
+		writeErr(w, http.StatusBadRequest, "empty response or invalid format")
 		return
 	}
 	meta := map[string]any{
@@ -198,33 +198,33 @@ func (s *Server) publicSubmit(w http.ResponseWriter, r *http.Request) {
 			status = "draft"
 		}
 		if in.ResponseID != "" {
-			// Perbarui draf yang ada (harus masih berstatus 'draft' dan milik respondent ini)
+			// Update the existing draft (it must still be 'draft' and belong to this respondent)
 			resp, err = s.st.UpdateMultiResponseDraft(r.Context(), in.ResponseID, rc.RespondentID, sh.FormID, status, in.Answers, metaJSON)
 			if errors.Is(err, store.ErrNotFound) {
-				writeErr(w, http.StatusNotFound, "respons tidak ditemukan atau bukan milik Anda")
+				writeErr(w, http.StatusNotFound, "response not found or does not belong to you")
 				return
 			}
 		} else {
-			// Buat baris baru — pastikan tidak ada draf aktif yang belum diselesaikan
+			// Create a new row — make sure no unfinished draft is still active
 			if !in.Draft {
 				hasDraft, chkErr := s.st.HasDraftResponse(r.Context(), sh.FormID, rc.RespondentID)
 				if chkErr != nil {
-					writeErr(w, http.StatusInternalServerError, "kesalahan server")
+					writeErr(w, http.StatusInternalServerError, "server error")
 					return
 				}
 				if hasDraft {
-					writeErr(w, http.StatusConflict, "Anda masih memiliki draf yang belum diselesaikan — lanjutkan atau batalkan draf tersebut terlebih dahulu")
+					writeErr(w, http.StatusConflict, "You still have an unfinished draft — please continue or discard it first")
 					return
 				}
 			}
 			resp, err = s.st.CreateMultiResponseRow(r.Context(), sh.FormID, &sid, rc.RespondentID, status, in.Answers, metaJSON)
 		}
 	} else if in.ResponseID != "" {
-		// Single-response: menyelesaikan kembali respons yang sebelumnya dibatalkan
-		// pengirimannya (unsubmit -> status 'draft') menjadi 'submitted'.
+		// Single-response: re-completing a response that was previously unsubmitted
+		// was unsubmitted (status 'draft') back to 'submitted'.
 		resp, err = s.st.UpdateMultiResponseDraft(r.Context(), in.ResponseID, rc.RespondentID, sh.FormID, "submitted", in.Answers, metaJSON)
 		if errors.Is(err, store.ErrNotFound) {
-			writeErr(w, http.StatusNotFound, "respons tidak ditemukan atau bukan milik Anda")
+			writeErr(w, http.StatusNotFound, "response not found or does not belong to you")
 			return
 		}
 	} else {
@@ -232,7 +232,7 @@ func (s *Server) publicSubmit(w http.ResponseWriter, r *http.Request) {
 		resp, err = s.st.UpsertResponse(r.Context(), sh.FormID, &sid, rc.RespondentID, in.Answers, metaJSON)
 	}
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal menyimpan jawaban")
+		writeErr(w, http.StatusInternalServerError, "failed to save response")
 		return
 	}
 	if !in.Draft {
@@ -246,7 +246,7 @@ func (s *Server) publicSubmit(w http.ResponseWriter, r *http.Request) {
 }
 
 // POST /api/public/forms/{token}/responses/{responseId}/unsubmit
-// Mengubah respons yang sudah dikirim kembali menjadi draf sehingga bisa diedit.
+// Moves an already-submitted response back to draft so it can be edited.
 func (s *Server) unsubmitResponse(w http.ResponseWriter, r *http.Request) {
 	rc := respondentFrom(r.Context())
 	sh, ok := s.resolveShare(w, r)
@@ -254,13 +254,13 @@ func (s *Server) unsubmitResponse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !sh.AllowResponses {
-		writeErr(w, http.StatusForbidden, "tautan ini tidak menerima perubahan jawaban")
+		writeErr(w, http.StatusForbidden, "this link does not accept response edits")
 		return
 	}
 	responseID := r.PathValue("responseId")
 	resp, err := s.st.UnsubmitResponse(r.Context(), responseID, rc.RespondentID, sh.FormID)
 	if errors.Is(err, store.ErrNotFound) {
-		writeErr(w, http.StatusNotFound, "respons tidak ditemukan atau bukan milik Anda")
+		writeErr(w, http.StatusNotFound, "response not found or does not belong to you")
 		return
 	}
 	if err != nil {
@@ -270,7 +270,7 @@ func (s *Server) unsubmitResponse(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"id": resp.ID, "status": resp.Status})
 }
 
-// GET /api/public/forms/{token}/draft — ambil draf tersimpan di server.
+// GET /api/public/forms/{token}/draft — fetch the draft stored on the server.
 func (s *Server) myDraft(w http.ResponseWriter, r *http.Request) {
 	rc := respondentFrom(r.Context())
 	sh, ok := s.resolveShare(w, r)
@@ -283,14 +283,14 @@ func (s *Server) myDraft(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "kesalahan server")
+		writeErr(w, http.StatusInternalServerError, "server error")
 		return
 	}
 	draft.Answers = s.signAnswerUploads(draft.Answers)
 	writeJSON(w, http.StatusOK, draft)
 }
 
-// POST /api/public/forms/{token}/draft — simpan draf ke server (upsert).
+// POST /api/public/forms/{token}/draft — save a draft to the server (upsert).
 func (s *Server) saveDraftHandler(w http.ResponseWriter, r *http.Request) {
 	sh, ok := s.resolveShare(w, r)
 	if !ok {
@@ -303,28 +303,28 @@ func (s *Server) saveDraftHandler(w http.ResponseWriter, r *http.Request) {
 		CurPage int             `json:"curPage"`
 	}
 	if err := decodeJSON(r, &in); err != nil || len(in.Answers) == 0 {
-		writeErr(w, http.StatusBadRequest, "format salah atau jawaban kosong")
+		writeErr(w, http.StatusBadRequest, "invalid format or empty response")
 		return
 	}
 	sid := sh.ID
 	draft, err := s.st.UpsertDraft(r.Context(), sh.FormID, &sid, rc.RespondentID, in.Answers, in.CurPage)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "gagal menyimpan draf")
+		writeErr(w, http.StatusInternalServerError, "failed to save draft")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"id": draft.ID, "savedAt": draft.SavedAt})
 }
 
 // GET /api/wilayah?prov=&kab=&kec=
-// Mengembalikan daftar wilayah anak dari parameter paling spesifik yang diberikan:
-//   - hanya prov  → daftar kabupaten/kota di bawah provinsi tersebut
-//   - prov + kab  → daftar kecamatan di bawah kabupaten tersebut
-//   - prov + kab + kec → daftar desa/kelurahan di bawah kecamatan tersebut
-//   - prov + kab + kec + desa → daftar SLS di bawah desa/kelurahan tersebut
-//   - prov + kab + kec + desa + sls → daftar Sub SLS di bawah SLS tersebut
+// Returns the child regions of the most specific parameter supplied:
+//   - prov only   → the regencies/cities under that province
+//   - prov + kab  → the districts under that regency
+//   - prov + kab + kec → the villages under that district
+//   - prov + kab + kec + desa → the SLS units under that village
+//   - prov + kab + kec + desa + sls → the Sub-SLS units under that SLS
 //
-// Nilai parameter adalah kode_wilayah (misal "64", "6401", "6401010").
-// Endpoint ini tidak memerlukan autentikasi.
+// The parameter value is a kode_wilayah (for example "64", "6401", "6401010").
+// This endpoint requires no authentication.
 func (s *Server) wilayahList(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	prov := q.Get("prov")
@@ -347,12 +347,12 @@ func (s *Server) wilayahList(w http.ResponseWriter, r *http.Request) {
 	case prov != "":
 		parent = prov
 	default:
-		// Tidak ada parameter → kembalikan semua provinsi
+		// No parameter → return every province
 	}
 
 	items, err := s.st.GetWilayahByParent(r.Context(), parent)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "kesalahan server")
+		writeErr(w, http.StatusInternalServerError, "server error")
 		return
 	}
 	writeJSON(w, http.StatusOK, items)
@@ -362,17 +362,17 @@ var optionsProxyClient = &http.Client{
 	Timeout: 10 * time.Second,
 	CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		if len(via) >= 5 {
-			return errors.New("terlalu banyak redirect")
+			return errors.New("too many redirects")
 		}
 		return ensurePublicHost(req.URL.Hostname())
 	},
 }
 
-// ensurePublicHost menolak host yang mengarah ke jaringan privat/lokal, agar
-// endpoint proxy ini tidak bisa disalahgunakan untuk memindai jaringan internal (SSRF).
+// ensurePublicHost rejects hosts that point at private or local networks, so this
+// proxy endpoint cannot be abused to scan the internal network (SSRF).
 func ensurePublicHost(host string) error {
 	if host == "" {
-		return errors.New("host kosong")
+		return errors.New("empty host")
 	}
 	var ips []net.IP
 	if ip := net.ParseIP(host); ip != nil {
@@ -387,32 +387,32 @@ func ensurePublicHost(host string) error {
 	for _, ip := range ips {
 		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
 			ip.IsLinkLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast() {
-			return errors.New("alamat host tidak diizinkan")
+			return errors.New("host address is not allowed")
 		}
 	}
 	return nil
 }
 
-// GET /api/options-proxy?url=... — proxy sisi server untuk sumber opsi dropdown
-// dinamis (optionsApi di skema kuesioner) yang menunjuk ke API eksternal.
-// Dibuat agar browser tidak perlu connect-src langsung ke domain pihak ketiga
-// (yang bisa berbeda-beda tergantung konfigurasi pembuat formulir), sekaligus
+// GET /api/options-proxy?url=... — a server-side proxy for dynamic dropdown option
+// sources (optionsApi in the form schema) that point at an external API.
+// It exists so the browser never needs connect-src straight to a third-party domain
+// (which varies with whatever the form author configured), and at the same time keeps
 // mencegah token internal (Authorization admin/viewer/editor) ikut terkirim
-// ke server pihak ketiga. Endpoint ini tidak memerlukan autentikasi karena
-// hanya meneruskan permintaan GET ke URL yang sudah ditentukan di skema.
+// to a third-party server. This endpoint requires no authentication because it
+// only forwards a GET request to a URL already fixed in the schema.
 func (s *Server) optionsProxy(w http.ResponseWriter, r *http.Request) {
 	target := r.URL.Query().Get("url")
 	if target == "" {
-		writeErr(w, http.StatusBadRequest, "parameter url wajib diisi")
+		writeErr(w, http.StatusBadRequest, "the url parameter is required")
 		return
 	}
 	u, err := url.Parse(target)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		writeErr(w, http.StatusBadRequest, "url tidak valid")
+		writeErr(w, http.StatusBadRequest, "invalid url")
 		return
 	}
 	if err := ensurePublicHost(u.Hostname()); err != nil {
-		writeErr(w, http.StatusBadRequest, "url tidak diizinkan")
+		writeErr(w, http.StatusBadRequest, "url is not allowed")
 		return
 	}
 
@@ -420,21 +420,21 @@ func (s *Server) optionsProxy(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
-		writeErr(w, http.StatusBadGateway, "gagal membuat permintaan")
+		writeErr(w, http.StatusBadGateway, "failed to build the request")
 		return
 	}
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := optionsProxyClient.Do(req)
 	if err != nil {
-		writeErr(w, http.StatusBadGateway, "gagal menghubungi API eksternal")
+		writeErr(w, http.StatusBadGateway, "failed to reach the external API")
 		return
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 5<<20))
 	if err != nil {
-		writeErr(w, http.StatusBadGateway, "gagal membaca respons API eksternal")
+		writeErr(w, http.StatusBadGateway, "failed to read the external API response")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -442,18 +442,18 @@ func (s *Server) optionsProxy(w http.ResponseWriter, r *http.Request) {
 	w.Write(body)
 }
 
-// clientIP mengembalikan alamat IP pemanggil sebenarnya.
+// clientIP returns the caller's real IP address.
 //
-// X-Forwarded-For hanya dipercaya kalau koneksinya memang datang dari proxy yang
-// terdaftar di TRUSTED_PROXIES — kalau tidak, header itu bisa dipalsukan siapa saja
-// dan pembatasan berbasis IP (mis. allowlist API key) jadi tak berarti.
+// X-Forwarded-For is trusted only when the connection genuinely comes from a proxy
+// listed in TRUSTED_PROXIES — otherwise anyone could forge that header
+// and IP-based restrictions (an API key allowlist, say) become meaningless.
 func (s *Server) clientIP(r *http.Request) string {
 	host := remoteHost(r)
 	if len(s.cfg.TrustedProxies) == 0 || !ipInAny(host, s.cfg.TrustedProxies) {
 		return host
 	}
-	// Ambil entri paling kanan yang BUKAN proxy tepercaya: itulah klien sebenarnya.
-	// Entri di sebelah kirinya bisa saja ditulis sendiri oleh klien.
+	// Take the right-most entry that is NOT a trusted proxy: that is the real client.
+	// Entries to its left may have been written by the client itself.
 	parts := strings.Split(r.Header.Get("X-Forwarded-For"), ",")
 	for i := len(parts) - 1; i >= 0; i-- {
 		ip := strings.TrimSpace(parts[i])
@@ -475,7 +475,7 @@ func remoteHost(r *http.Request) string {
 	return host
 }
 
-// ipInAny mengecek apakah ip termasuk salah satu entri (IP tunggal atau CIDR).
+// ipInAny reports whether ip falls within any entry (a single IP or a CIDR).
 func ipInAny(ip string, entries []string) bool {
 	parsed := net.ParseIP(ip)
 	if parsed == nil {

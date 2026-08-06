@@ -1,5 +1,5 @@
 /* eForm Builder ↔ backend bridge.
-   Disuntikkan ke builder.html. Memakai fungsi global builder: serialize() & importJSON(). */
+   Injected into builder.html. Uses the builder's globals: serialize() & importJSON(). */
 (function () {
   var TOKEN = localStorage.getItem("eform_token");
   if (!TOKEN) { location.replace("/login"); return; }
@@ -47,7 +47,7 @@
     var btn = document.getElementById("btnSave");
     var origText = btn ? btn.textContent : "";
     _saving = true;
-    if (btn) { btn.disabled = true; btn.textContent = "Menyimpan…"; }
+    if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
     var inst = serialize();
     var body = JSON.stringify({
       title: titleOf(inst),
@@ -61,7 +61,7 @@
     req.then(function (f) {
       currentId = f.id;
       history.replaceState(null, "", "/builder?id=" + f.id);
-      toast("Tersimpan");
+      toast("Saved");
     }).catch(function (e) { toast(e.message, true); })
     .finally(function () {
       _saving = false;
@@ -78,7 +78,7 @@
   function on(id, ev, fn) { var e = document.getElementById(id); if (e) e.addEventListener(ev, fn); }
 
   document.addEventListener("DOMContentLoaded", function () {
-    // Render info profil user dari localStorage
+    // Render the user's profile details from localStorage
     try {
       var u = JSON.parse(localStorage.getItem("eform_user") || "null");
       if (u) {
@@ -92,14 +92,14 @@
       }
     } catch (_) {}
 
-    // Muat kuesioner jika ada id di URL
+    // Load the form when the URL carries an id
     if (currentId) {
       api("/api/forms/" + currentId).then(function (f) {
         if (f.schema && typeof importJSON === "function") importJSON(f.schema);
       }).catch(function (e) { toast(e.message, true); });
     }
 
-    // Wire tombol
+    // Wire up the buttons
     on("btnSave",   "click", doSave);
     on("btnLogout", "click", doLogout);
 

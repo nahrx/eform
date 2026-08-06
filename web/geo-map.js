@@ -1,9 +1,9 @@
-/* Memasang peta interaktif (Leaflet + ubin OpenStreetMap) ke setiap elemen
-   <div class="geo-map" data-lat="-1.23" data-lng="116.4"></div> yang muncul
-   di halaman — dipakai untuk field bertipe geopoint, baik saat mengisi
-   kuesioner maupun di tampilan detail jawaban (admin/viewer/editor).
-   Deteksi elemen baru/berubah otomatis lewat MutationObserver, sama seperti
-   searchable-select.js. Wajib dimuat SETELAH /vendor/leaflet/leaflet.js. */
+/* Mounts an interactive map (Leaflet + OpenStreetMap tiles) onto every
+   <div class="geo-map" data-lat="-1.23" data-lng="116.4"></div> that appears on
+   the page — used for geopoint fields, both while filling in a form and in the
+   response detail views (admin/viewer/editor).
+   New and changed elements are detected automatically via MutationObserver, just like
+   searchable-select.js. Must be loaded AFTER /vendor/leaflet/leaflet.js. */
 (function () {
   if (window.__geoMapInit) return;
   window.__geoMapInit = true;
@@ -17,9 +17,9 @@
 
   function setDefaultIcon() {
     if (window.L && window.L.Icon && window.L.Icon.Default) {
-      // Icon.Default._getIconUrl menggabungkan imagePath + nama file opsi
-      // (iconUrl/iconRetinaUrl/shadowUrl) — jangan isi opsi itu dengan path
-      // absolut, cukup set imagePath saja dan biarkan nama file bawaannya.
+      // Icon.Default._getIconUrl concatenates imagePath + the option's file name
+      // (iconUrl/iconRetinaUrl/shadowUrl) — do not point those options at a path
+      // absolute path; just set imagePath and leave the default file names alone.
       window.L.Icon.Default.mergeOptions({
         imagePath: "/vendor/leaflet/images/",
       });
@@ -94,7 +94,7 @@
       scan(document);
       return;
     }
-    // leaflet.js belum sempat load (mis. urutan script) — coba lagi sebentar.
+    // leaflet.js has not loaded yet (script order, for instance) — retry shortly.
     let tries = 0;
     const t = setInterval(() => {
       tries++;

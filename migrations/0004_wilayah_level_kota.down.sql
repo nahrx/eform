@@ -1,2 +1,2 @@
--- PostgreSQL tidak mendukung DROP VALUE dari enum.
--- Untuk rollback lengkap, jalankan 0002_wilayah.down.sql terlebih dahulu.
+-- PostgreSQL does not support dropping a value from an enum.
+-- For a full rollback, run 0002_wilayah.down.sql first.

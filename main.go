@@ -50,15 +50,15 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("eForm backend jalan di http://localhost:%s  (landing: /, admin: /admin, builder: /builder)", cfg.Port)
+		log.Printf("eForm backend listening on http://localhost:%s  (landing: /, admin: /admin, builder: /builder)", cfg.Port)
 		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("server: %v", err)
 		}
 	}()
 
-	// Pemangkasan log berkala. Tanpa ini activity_logs dan api_access_logs tumbuh
-	// selamanya — satu integrasi yang menarik data tiap menit saja sudah menambah
-	// ratusan ribu baris per tahun.
+	// Periodic log pruning. Without it activity_logs and api_access_logs grow
+	// forever — a single integration polling once a minute already adds
+	// hundreds of thousands of rows per year.
 	pruneCtx, stopPrune := context.WithCancel(context.Background())
 	defer stopPrune()
 	go runLogPruner(pruneCtx, st, cfg.LogRetentionDays)
@@ -72,7 +72,7 @@ func main() {
 	_ = httpServer.Shutdown(shutdownCtx)
 }
 
-// runLogPruner memangkas log lama sekali saat start lalu setiap 24 jam.
+// runLogPruner prunes old logs once at startup and then every 24 hours.
 func runLogPruner(ctx context.Context, st *store.Store, days int) {
 	if days <= 0 {
 		return
@@ -82,11 +82,11 @@ func runLogPruner(ctx context.Context, st *store.Store, days int) {
 		defer cancel()
 		act, api, err := st.PruneLogs(c, days)
 		if err != nil {
-			log.Printf("[prune] gagal memangkas log: %v", err)
+			log.Printf("[prune] failed to prune logs: %v", err)
 			return
 		}
 		if act > 0 || api > 0 {
-			log.Printf("[prune] log >%d hari dihapus: %d aktivitas, %d akses API", days, act, api)
+			log.Printf("[prune] logs older than %d days deleted: %d activity, %d API access", days, act, api)
 		}
 	}
 	prune()
@@ -103,7 +103,7 @@ func runLogPruner(ctx context.Context, st *store.Store, days int) {
 	}
 }
 
-// seedSuperadmin membuat user superadmin pertama jika tabel users masih kosong.
+// seedSuperadmin creates the first superadmin user if the users table is still empty.
 func seedSuperadmin(ctx context.Context, st *store.Store, sc config.SeedConfig) error {
 	n, err := st.CountUsers(ctx)
 	if err != nil {
@@ -120,10 +120,10 @@ func seedSuperadmin(ctx context.Context, st *store.Store, sc config.SeedConfig) 
 		return err
 	}
 	log.Println("============================================================")
-	log.Println(" SUPER ADMIN dibuat (login pertama):")
+	log.Println(" SUPER ADMIN created (first login):")
 	log.Printf("   username : %s", sc.Username)
 	log.Printf("   password : %s", sc.Password)
-	log.Println(" >> GANTI password ini segera, dan set SUPERADMIN_PASSWORD di .env")
+	log.Println(" >> CHANGE this password immediately, and set SUPERADMIN_PASSWORD in .env")
 	log.Println("============================================================")
 	return nil
 }
