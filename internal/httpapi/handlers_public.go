@@ -333,7 +333,7 @@ func (s *Server) wilayahList(w http.ResponseWriter, r *http.Request) {
 	desa := q.Get("desa")
 	sls := q.Get("sls")
 
-	// Gunakan parameter paling spesifik sebagai kode_parent
+	// Use the most specific parameter as kode_parent
 	var parent string
 	switch {
 	case sls != "":

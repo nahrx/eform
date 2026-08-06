@@ -95,7 +95,7 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS) error {
 		if err := tx.Commit(ctx); err != nil {
 			return err
 		}
-		log.Printf("[migrate] diterapkan: %s", version)
+		log.Printf("[migrate] applied: %s", version)
 		count++
 	}
 	if count == 0 {

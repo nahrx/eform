@@ -1,25 +1,56 @@
 /* Service worker for the offline mode of multi-response forms (PWA).
-   The IndexedDB contract (shared with web/public.html):
-   - DB: "eform-offline", versi 1
-   - Object store: "queue", keyPath "id" (autoIncrement)
-   - Record: {id, url, method, headers, body, ts} */
-const CACHE_NAME = "eform-v1";
-const DB_NAME = "eform-offline";
-const STORE_NAME = "queue";
+
+   The queue itself lives in /offline-queue.js, shared with web/public.html — see the
+   comment at the top of that file for why. This worker only decides what to cache
+   and when to run a flush. */
+importScripts("/offline-queue.js");
+
+const Q = self.EformOfflineQueue;
+const CACHE_NAME = "eform-v2";
+
+/* Assets the form page needs but which are not part of any API response. Without
+   them an offline page still renders, but region dropdowns lose their search box
+   and geopoint fields lose their map — so they are fetched during install rather
+   than waiting for a second visit. */
+const PRECACHE = [
+  "/offline-queue.js",
+  "/searchable-select.js",
+  "/geo-map.js",
+  "/vendor/leaflet/leaflet.js",
+  "/vendor/leaflet/leaflet.css",
+];
 
 const CACHEABLE_GET = [
   /^\/f\/[^/]+$/,
   /^\/api\/public\/forms\/[^/]+$/,
   /^\/api\/wilayah(\?.*)?$/,
   /^\/api\/options-proxy\?.*$/,
+  /^\/offline-queue\.js$/,
+  /^\/searchable-select\.js$/,
+  /^\/geo-map\.js$/,
+  /^\/vendor\/leaflet\/.*$/,
 ];
 
-self.addEventListener("install", () => {
+self.addEventListener("install", (event) => {
+  // Each asset is added individually: with addAll a single failure would throw
+  // away the whole pre-cache.
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) =>
+      Promise.all(PRECACHE.map((u) => cache.add(u).catch(() => {})))
+    )
+  );
   self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches
+      .keys()
+      .then((names) =>
+        Promise.all(names.filter((n) => n !== CACHE_NAME).map((n) => caches.delete(n)))
+      )
+      .then(() => self.clients.claim())
+  );
 });
 
 self.addEventListener("fetch", (event) => {
@@ -51,47 +82,20 @@ self.addEventListener("fetch", (event) => {
 });
 
 self.addEventListener("sync", (event) => {
-  if (event.tag === "eform-flush") event.waitUntil(flushQueue());
+  if (event.tag === "eform-flush") event.waitUntil(runFlush());
 });
 
-function openDB() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = () => {
-      if (!req.result.objectStoreNames.contains(STORE_NAME)) {
-        req.result.createObjectStore(STORE_NAME, { keyPath: "id", autoIncrement: true });
-      }
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-async function flushQueue() {
-  const db = await openDB();
-  const records = await new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, "readonly");
-    const req = tx.objectStore(STORE_NAME).getAll();
-    req.onsuccess = () => resolve(req.result || []);
-    req.onerror = () => reject(req.error);
-  });
-  records.sort((a, b) => a.ts - b.ts);
-  for (const rec of records) {
-    try {
-      const res = await fetch(rec.url, {
-        method: rec.method || "POST",
-        headers: rec.headers || {},
-        body: rec.body,
-      });
-      if (!res.ok) break; // something is still wrong (a server error, say) — keep it and retry later
-      await new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, "readwrite");
-        tx.objectStore(STORE_NAME).delete(rec.id);
-        tx.oncomplete = resolve;
-        tx.onerror = () => reject(tx.error);
-      });
-    } catch (_e) {
-      break; // still offline — stop; the rest is retried on the next sync/online event
-    }
+async function runFlush() {
+  let r;
+  try {
+    r = await Q.flush();
+  } catch (_e) {
+    return;
+  }
+  // The page keeps its own badge, but a background sync can run with no page open,
+  // so the outcome is broadcast to whatever clients exist.
+  if (r.sent || r.failed || r.uploaded) {
+    const clients = await self.clients.matchAll({ includeUncontrolled: true, type: "window" });
+    for (const c of clients) c.postMessage({ type: "eform-queue", ...r });
   }
 }

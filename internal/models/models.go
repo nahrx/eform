@@ -203,6 +203,30 @@ type ResponseRevision struct {
 	ChangedFields []string `json:"changedFields,omitempty"`
 }
 
+// OfflineQueueReport is one device's latest account of what its offline queue is
+// still holding. Metadata only: it says that work is stranded and on whose phone,
+// not what the work was. Recovering the answers still means reaching the user.
+type OfflineQueueReport struct {
+	ID           string `json:"id"`
+	FormID       string `json:"formId"`
+	RespondentID string `json:"respondentId"`
+	DeviceID     string `json:"deviceId"`
+
+	Pending int `json:"pending"`
+	Failed  int `json:"failed"`
+	Files   int `json:"files"`
+
+	OldestQueuedAt *time.Time      `json:"oldestQueuedAt,omitempty"`
+	Items          json.RawMessage `json:"items"`
+	UserAgent      string          `json:"userAgent"`
+	ReportedAt     time.Time       `json:"reportedAt"`
+
+	// Joined during listing so an admin can actually contact the user — the whole
+	// point of the report.
+	RespondentName  string `json:"respondentName,omitempty"`
+	RespondentEmail string `json:"respondentEmail,omitempty"`
+}
+
 // ActivityLog records one admin/superadmin action that changes data or takes data
 // out of the system (e.g. a CSV export).
 type ActivityLog struct {

@@ -88,6 +88,18 @@ func runLogPruner(ctx context.Context, st *store.Store, days int) {
 		if act > 0 || api > 0 {
 			log.Printf("[prune] logs older than %d days deleted: %d activity, %d API access", days, act, api)
 		}
+
+		// Queue reports are kept far longer than logs and on a fixed window rather than
+		// LOG_RETENTION_DAYS. A stale report is not evidence that the backlog was
+		// recovered — only that the device went quiet — so the row is the last trace
+		// that work was stranded, and dropping it early destroys the evidence instead
+		// of the problem.
+		const queueReportRetention = 180 * 24 * time.Hour
+		if n, err := st.PruneOfflineQueueReports(c, queueReportRetention); err != nil {
+			log.Printf("[prune] failed to prune queue reports: %v", err)
+		} else if n > 0 {
+			log.Printf("[prune] queue reports untouched for 180 days deleted: %d", n)
+		}
 	}
 	prune()
 

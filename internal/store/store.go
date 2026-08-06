@@ -1244,7 +1244,7 @@ func (s *Store) DeleteUser(ctx context.Context, id string) error {
 
 // buildPermissionFieldFilter builds the AND clause that restricts answers according to a
 // permission's field_filters.
-// Digunakan di ListViewerResponses, CountViewerResponses, editorListResponses, dll.
+// Used by ListViewerResponses, CountViewerResponses, editorListResponses, and others.
 func buildPermissionFieldFilter(filters map[string]string, args []any) (string, []any) {
 	clause := ""
 	for fieldName, val := range filters {
@@ -2548,6 +2548,85 @@ func (s *Store) ListResponseRevisions(ctx context.Context, responseID string, li
 		out = []models.ResponseRevision{}
 	}
 	return out, rows.Err()
+}
+
+/* ---------------- offline queue reports ---------------- */
+
+// UpsertOfflineQueueReport records one device's latest queue state.
+//
+// A device reporting an empty queue deletes its row rather than storing zeros. The
+// dashboard asks "whose device is holding data", so a clean device is not an answer
+// to it — and keeping the rows around would bury the few that matter under a row per
+// device per form forever.
+func (s *Store) UpsertOfflineQueueReport(ctx context.Context, rep *models.OfflineQueueReport) error {
+	if rep.Pending == 0 && rep.Failed == 0 && rep.Files == 0 {
+		_, err := s.pool.Exec(ctx,
+			`DELETE FROM offline_queue_reports
+			 WHERE form_id=$1 AND respondent_id=$2 AND device_id=$3`,
+			rep.FormID, rep.RespondentID, rep.DeviceID)
+		return err
+	}
+	items := rep.Items
+	if len(items) == 0 {
+		items = json.RawMessage("[]")
+	}
+	_, err := s.pool.Exec(ctx,
+		`INSERT INTO offline_queue_reports
+		   (form_id,respondent_id,device_id,pending,failed,files,oldest_queued_at,items,user_agent,reported_at)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,now())
+		 ON CONFLICT (form_id,respondent_id,device_id) DO UPDATE SET
+		   pending=EXCLUDED.pending, failed=EXCLUDED.failed, files=EXCLUDED.files,
+		   oldest_queued_at=EXCLUDED.oldest_queued_at, items=EXCLUDED.items,
+		   user_agent=EXCLUDED.user_agent, reported_at=now()`,
+		rep.FormID, rep.RespondentID, rep.DeviceID,
+		rep.Pending, rep.Failed, rep.Files, rep.OldestQueuedAt, items, rep.UserAgent)
+	return err
+}
+
+// ListOfflineQueueReports returns the devices still holding data for one form.
+//
+// Ordered by how bad it is rather than by time: rejected items first, because those
+// will never send themselves, then by how long the oldest item has been waiting.
+func (s *Store) ListOfflineQueueReports(ctx context.Context, formID string) ([]models.OfflineQueueReport, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT q.id,q.form_id,q.respondent_id,q.device_id,q.pending,q.failed,q.files,
+		        q.oldest_queued_at,q.items,q.user_agent,q.reported_at,
+		        COALESCE(r.name,''),COALESCE(r.email,'')
+		 FROM offline_queue_reports q
+		 LEFT JOIN respondents r ON r.id=q.respondent_id
+		 WHERE q.form_id=$1
+		 ORDER BY (q.failed>0) DESC, q.oldest_queued_at ASC NULLS LAST, q.reported_at DESC`, formID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []models.OfflineQueueReport{}
+	for rows.Next() {
+		rep := models.OfflineQueueReport{}
+		if err := rows.Scan(&rep.ID, &rep.FormID, &rep.RespondentID, &rep.DeviceID,
+			&rep.Pending, &rep.Failed, &rep.Files, &rep.OldestQueuedAt, &rep.Items,
+			&rep.UserAgent, &rep.ReportedAt, &rep.RespondentName, &rep.RespondentEmail); err != nil {
+			return nil, err
+		}
+		out = append(out, rep)
+	}
+	return out, rows.Err()
+}
+
+// PruneOfflineQueueReports drops reports nobody has refreshed in a long time.
+//
+// Note what this does NOT mean: a stale report is not proof the data was recovered,
+// only that the device stopped talking to us. So the window is deliberately long —
+// the row is the sole trace that work was stranded, and deleting it early would
+// erase the evidence rather than the problem.
+func (s *Store) PruneOfflineQueueReports(ctx context.Context, olderThan time.Duration) (int64, error) {
+	ct, err := s.pool.Exec(ctx,
+		`DELETE FROM offline_queue_reports WHERE reported_at < now() - $1::interval`,
+		olderThan.String())
+	if err != nil {
+		return 0, err
+	}
+	return ct.RowsAffected(), nil
 }
 
 // ChangedAnswerFields compares two sets of answers and returns the names of the fields whose

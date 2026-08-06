@@ -160,7 +160,7 @@ func (s *Server) respondentMW(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-/* ---------------- autentikasi API key (/api/v1) ---------------- */
+/* ---------------- API key authentication (/api/v1) ---------------- */
 
 const apiKeyPrefix = "eform_"
 

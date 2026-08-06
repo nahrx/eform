@@ -111,7 +111,7 @@ table.resp-tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:600p
     <div class="col-wrap" id="colWrap" hidden>
       <button class="btn" id="btnKolom">Columns ▾</button>
       <div class="col-panel" id="colPanel">
-        <div class="col-panel-h">Choose extra columns <span style="font-weight:400">(maks 5)</span></div>
+        <div class="col-panel-h">Choose extra columns <span style="font-weight:400">(max 5)</span></div>
         <div class="col-list" id="colList"></div>
         <div class="col-panel-foot">
           <button class="btn-sm" id="btnColReset">Reset</button>
@@ -126,7 +126,7 @@ table.resp-tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:600p
     <div class="export-wrap" id="exportWrap" hidden>
       <button class="btn primary" id="btnExport" aria-haspopup="true" aria-expanded="false">
         <svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3v9"/><polyline points="6.5,8.5 10,12 13.5,8.5"/><path d="M4 15h12"/></svg>
-        Ekspor<span class="export-caret">▾</span>
+        Export<span class="export-caret">▾</span>
       </button>
       <div class="export-menu" id="exportMenu" hidden>
         <button type="button" class="export-item" data-ext="xlsx">Excel<span class="export-ext">xlsx</span></button>
@@ -135,10 +135,42 @@ table.resp-tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:600p
     </div>
   </header>
 
+  <style>
+  .stranded-bar{display:flex;align-items:center;gap:12px;margin:0 0 14px;padding:12px 14px;
+    border:1px solid #f0c36d;background:#fff8e6;border-radius:10px}
+  .stranded-bar[hidden]{display:none}
+  .stranded-bar.severe{border-color:#e5928a;background:#fdf0ee}
+  .stranded-ic{font-size:18px;line-height:1}
+  .stranded-txt{flex:1;min-width:0;font-size:13px;line-height:1.45}
+  .stranded-txt strong{display:block}
+  .stranded-txt span{color:#6b5a3a}
+  .stranded-bar.severe .stranded-txt span{color:#8a4a42}
+  .stranded-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+  .stranded-tbl th,.stranded-tbl td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line,#e4e7ec);vertical-align:top}
+  .stranded-tbl th{font-weight:600;color:#5b6472;white-space:nowrap}
+  .stranded-stale{color:#b42318;font-weight:600}
+  .stranded-why{color:#8a4a42;font-size:11.5px;margin-top:3px}
+  @media(max-width:640px){
+    .stranded-bar{flex-wrap:wrap}
+    .stranded-bar .btn{width:100%}
+  }
+  </style>
+
   <!-- Active filter summary; hidden until a filter is applied -->
   <div class="active-bar" id="activeBar" hidden>
     <div class="active-chips" id="filterChips"></div>
     <button class="btn-reset" id="btnReset" onclick="resetFilters()">✕ Reset all</button>
+  </div>
+
+  <!-- Devices still holding answers that never reached the server. Hidden unless
+       something is actually stranded. -->
+  <div class="stranded-bar" id="strandedBar" hidden>
+    <span class="stranded-ic">⚠</span>
+    <div class="stranded-txt">
+      <strong id="strandedHead"></strong>
+      <span id="strandedSub"></span>
+    </div>
+    <button class="btn" id="btnStranded">Details</button>
   </div>
 
   <div class="tbl-outer">
@@ -240,8 +272,8 @@ async function init(){
     SCHEMA=form.schema;
     document.title="Responses · "+(form.title||"Form");
     document.getElementById("formTitle").textContent=form.title||"Form";
-    // The Export button only appears once the form has loaded; its menu
-    // pilihan formatnya diurus responses-ui.js.
+    // The Export button only appears once the form has loaded; its format menu is
+    // handled by responses-ui.js.
     document.getElementById("exportWrap").hidden=false;
 
     ALL_FIELDS=extractFields(SCHEMA);
@@ -259,9 +291,83 @@ async function init(){
     }
     buildShareFilter();
     await loadPage(0);
+    loadStranded();
   }catch(e){
     document.getElementById("formTitle").textContent="Failed to load: "+e.message;
   }
+}
+
+/* ---- devices still holding unsent answers ----
+   These reports are the only trace that work exists on someone's phone. Note what a
+   report cannot tell us: a device whose respondent token expired stops reporting
+   entirely, so an OLD report is not reassurance that the backlog cleared — it is the
+   opposite. That is why staleness is called out rather than just the counts. */
+const STRANDED_STALE_MS=3*24*60*60*1000;
+let STRANDED=null;
+async function loadStranded(){
+  if(MY_ROLE!=="superadmin"&&MY_ROLE!=="admin")return; // the report names respondents
+  let d;
+  try{d=await api("/api/forms/"+FORM_ID+"/queue-reports");}catch(_e){return;}
+  STRANDED=d;
+  const bar=document.getElementById("strandedBar");
+  if(!bar)return;
+  // Hide again when nothing is stranded any more, rather than leaving a stale warning
+  // on screen after a refresh that found the backlog cleared.
+  bar.hidden=!d.devices;
+  if(!d.devices)return;
+  const basi=(d.reports||[]).filter(r=>Date.now()-new Date(r.reportedAt).getTime()>STRANDED_STALE_MS).length;
+  bar.classList.toggle("severe",d.failed>0||basi>0);
+  const bagian=[];
+  if(d.pending>0)bagian.push(`${d.pending} waiting to be sent`);
+  if(d.failed>0)bagian.push(`${d.failed} rejected`);
+  document.getElementById("strandedHead").textContent=
+    `${d.devices} device${d.devices===1?"":"s"} still holding answers that never reached the server`;
+  document.getElementById("strandedSub").textContent=
+    bagian.join(" · ")+(basi?` · ${basi} device${basi===1?"":"s"} has not reported in over 3 days`:"");
+  document.getElementById("btnStranded").onclick=openStrandedDialog;
+}
+function strandedAge(ms){
+  const menit=Math.floor((Date.now()-ms)/60000);
+  if(menit<60)return menit+"m ago";
+  if(menit<1440)return Math.floor(menit/60)+"h ago";
+  return Math.floor(menit/1440)+"d ago";
+}
+function openStrandedDialog(){
+  if(!STRANDED)return;
+  const baris=(STRANDED.reports||[]).map(r=>{
+    const dilaporkan=new Date(r.reportedAt).getTime();
+    const basi=Date.now()-dilaporkan>STRANDED_STALE_MS;
+    const sebab=(r.items||[]).filter(i=>i.error).slice(0,3)
+      .map(i=>esc((i.status?"HTTP "+i.status+" — ":"")+i.error)).join("<br>");
+    return `<tr>
+      <td><strong>${esc(r.respondentName||"—")}</strong><br>
+          <span style="color:#6b7280">${esc(r.respondentEmail||"")}</span></td>
+      <td>${r.pending||0} waiting<br>${r.failed?`<span style="color:#b42318">${r.failed} rejected</span>`:""}
+          ${sebab?`<div class="stranded-why">${sebab}</div>`:""}</td>
+      <td>${r.oldestQueuedAt?esc(strandedAge(new Date(r.oldestQueuedAt).getTime())):"—"}</td>
+      <td class="${basi?"stranded-stale":""}">${esc(strandedAge(dilaporkan))}</td>
+    </tr>`;
+  }).join("");
+  const bg=document.createElement("div");
+  bg.className="pv-modal-bg";
+  bg.style.cssText="position:fixed;inset:0;background:rgba(19,23,30,.5);display:flex;align-items:center;justify-content:center;z-index:200";
+  bg.innerHTML=`<div style="background:#fff;border-radius:12px;padding:22px;max-width:760px;width:94%;max-height:86vh;overflow:auto;box-shadow:0 8px 40px -8px rgba(19,23,30,.3)">
+    <h3 style="margin:0 0 4px;font-size:16px">Devices holding unsent answers</h3>
+    <p style="margin:0 0 14px;font-size:12.5px;color:#5b6472">
+      These answers are on the users' phones and nowhere else. Contact them to get the data sent.
+      A device that has not reported recently has stopped talking to the server entirely — usually an expired sign-in — so its backlog cannot be assumed cleared.</p>
+    <table class="stranded-tbl">
+      <thead><tr><th>User</th><th>Backlog</th><th>Oldest item</th><th>Last reported</th></tr></thead>
+      <tbody>${baris||`<tr><td colspan="4">Nothing stranded.</td></tr>`}</tbody>
+    </table>
+    <div style="display:flex;justify-content:flex-end;margin-top:16px">
+      <button class="btn primary" id="strandedClose">Close</button>
+    </div>
+  </div>`;
+  document.body.appendChild(bg);
+  const close=()=>bg.remove();
+  bg.querySelector("#strandedClose").addEventListener("click",close);
+  bg.addEventListener("click",e=>{if(e.target===bg)close();});
 }
 
 /* ---- share filter dropdown ---- */

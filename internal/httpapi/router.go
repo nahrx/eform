@@ -49,6 +49,10 @@ func (s *Server) Routes() http.Handler {
 	mux.Handle("GET /api/forms/{id}/responses.csv", s.authMW(s.exportResponses))
 	mux.Handle("GET /api/forms/{id}/responses.xlsx", s.authMW(s.exportResponsesXLSX))
 	mux.Handle("GET /api/forms/{id}/fields/{fieldName}/suggested-values", s.authMW(s.requireRole(s.suggestedFieldValues, "superadmin", "admin")))
+	// Which devices are still holding unsent answers. Restricted to superadmin and the
+	// owning admin, not viewers or editors: the report names the respondent, and a
+	// viewer's respondent scope does not necessarily cover everyone who is stuck.
+	mux.Handle("GET /api/forms/{id}/queue-reports", s.authMW(s.requireRole(s.listQueueReports, "superadmin", "admin")))
 
 	// --- users (superadmin only) ---
 	mux.Handle("POST /api/users", s.authMW(s.requireRole(s.createUser, "superadmin")))
@@ -105,8 +109,8 @@ func (s *Server) Routes() http.Handler {
 	mux.Handle("GET /api/forms/{id}/responses/{responseId}/revisions", s.authMW(s.requireRole(s.listResponseRevisions, "superadmin", "admin", "editor", "viewer")))
 
 	// --- Public API for external systems: API key authentication, read-only ---
-	// Seluruh pembatasan (aktif, kedaluwarsa, IP, kuota) ada di apiKeyMW; cakupan datanya
-	// in store.APIKeyScope. There are no write endpoints here, and none will be added.
+	// Every restriction (active, expiry, IP, quota) lives in apiKeyMW; the data scope
+	// lives in store.APIKeyScope. There are no write endpoints here, and none will be added.
 	mux.Handle("GET /api/v1/me", s.apiKeyMW(s.apiMe))
 	mux.Handle("GET /api/v1/forms/{formId}/responses", s.apiKeyMW(s.apiListResponses))
 	mux.Handle("GET /api/v1/forms/{formId}/responses.csv", s.apiKeyMW(s.apiExportResponses))
@@ -144,6 +148,9 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/public/forms/{token}/manifest.webmanifest", s.publicManifest)
 	mux.HandleFunc("GET /api/public/forms/{token}/icon.png", s.publicIcon)
 	mux.HandleFunc("GET /sw.js", s.page("sw.js"))
+	// Requested by the browser before any script runs, so a <link rel="icon"> added
+	// from JavaScript cannot prevent it. Without this it 404s on every page load.
+	mux.HandleFunc("GET /favicon.ico", s.faviconICO)
 
 	// --- public: respondent (Google JWT required) ---
 	mux.Handle("GET /api/public/me", s.respondentMW(s.respondentMe))
@@ -157,6 +164,9 @@ func (s *Server) Routes() http.Handler {
 	mux.Handle("POST /api/public/forms/{token}/responses/{responseId}/unsubmit", s.respondentMW(s.limitRespondent(s.unsubmitResponse, 20, 60)))
 	mux.Handle("GET /api/public/forms/{token}/draft", s.respondentMW(s.myDraft))
 	mux.Handle("POST /api/public/forms/{token}/draft", s.respondentMW(s.limitRespondent(s.saveDraftHandler, 120, 300)))
+	// Offline devices report what their queue is still holding. Sent after every flush
+	// and on load, so the last known state survives the respondent's token expiring.
+	mux.Handle("POST /api/public/forms/{token}/queue-report", s.respondentMW(s.limitRespondent(s.queueReport, 30, 90)))
 
 	// --- Google OAuth (redirects, no JWT required) ---
 	mux.HandleFunc("GET /auth/google", s.googleLogin)
@@ -185,7 +195,7 @@ func (s *Server) Routes() http.Handler {
 		"responses.css", "responses-ui.js", "responses-core.js",
 		"builder.css", "builder.js", "builder-bridge.js",
 		"searchable-select.js", "geo-map.js", "revision-history.js",
-		"response-validation.js",
+		"response-validation.js", "offline-queue.js",
 		"i18n.js", "responsive-tables.js",
 	} {
 		mux.HandleFunc("GET /"+f, s.page(f))

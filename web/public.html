@@ -169,6 +169,22 @@ textarea.pv-in{width:100%;resize:vertical;min-height:72px}
 .pv-modal input,.pv-modal-in{width:100%;border:1.5px solid var(--line);border-radius:var(--radius-s);padding:10px 11px;font-size:13px;margin-bottom:12px;box-sizing:border-box;transition:border-color .15s,box-shadow .15s;font-family:inherit;color:var(--ink)}
 .pv-modal input:focus,.pv-modal-in:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .pv-modal-actions{display:flex;justify-content:flex-end;gap:8px}
+.pv-modal.pv-queuemodal{max-width:560px}
+/* Three actions instead of the usual two: let them keep their natural width and
+   drop to a second row rather than shrink until the labels break mid-phrase. */
+.pv-queuemodal .pv-modal-actions{flex-wrap:wrap}
+.pv-queuemodal .pv-modal-actions .btn{white-space:nowrap;flex:0 0 auto}
+.pv-qlist{max-height:52vh;overflow:auto;margin:0 0 14px;border:1px solid var(--line);border-radius:var(--radius-s)}
+.pv-qitem{padding:11px 12px;border-bottom:1px solid var(--line);font-size:12.5px}
+.pv-qitem:last-child{border-bottom:none}
+.pv-qhead{display:flex;justify-content:space-between;gap:10px;align-items:baseline;margin-bottom:3px}
+.pv-qkind{font-weight:700}
+.pv-qwhen{color:var(--muted);font-size:11.5px;white-space:nowrap}
+.pv-qerr{color:var(--bad);margin-bottom:7px;word-break:break-word}
+.pv-qacts{display:flex;gap:6px;flex-wrap:wrap}
+.pv-qacts button{padding:4px 9px;font-size:11.5px;border-radius:var(--radius-s);border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
+.pv-qacts button.danger{color:var(--bad);border-color:var(--bad)}
+.pv-qempty{padding:20px;text-align:center;color:var(--muted);font-size:12.5px}
 
 /* ---- navigation footer ---- */
 .pv-nav-area{flex:none;background:var(--panel);border-top:1px solid var(--line);padding:0 20px 4px;box-shadow:0 -2px 16px rgba(19,23,30,.06)}
@@ -309,11 +325,40 @@ textarea.pv-in{width:100%;resize:vertical;min-height:72px}
 </head>
 <body>
 <div id="root"><div class="init-wrap"><span class="init-msg">Loading form…</span></div></div>
+<script src="/offline-queue.js"></script>
 <script src="/searchable-select.js"></script>
 <script src="/vendor/leaflet/leaflet.js"></script>
 <script src="/geo-map.js"></script>
 <script>
 const SHARE_TOKEN=location.pathname.split("/").filter(Boolean).pop();
+
+/* The icon and manifest are attached here, at parse time, rather than after the
+   instrument JSON arrives.
+
+   On a phone the difference is the whole feature. "Add to home screen" pressed before
+   the manifest exists gives a plain bookmark instead of an installed app, and a plain
+   bookmark takes its picture from the favicon — of which there was none, so the icon
+   came out blank. Both now exist from the first paint, and neither depends on a
+   network round trip that a field connection may take seconds to finish. */
+(function installHeadIcons(){
+  const icon=size=>"/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/icon.png?size="+size;
+  const add=(rel,href,extra)=>{
+    const l=document.createElement("link");l.rel=rel;l.href=href;
+    if(extra)Object.assign(l,extra);
+    document.head.appendChild(l);
+  };
+  add("icon",icon(32),{type:"image/png",sizes:"32x32"});
+  add("icon",icon(192),{type:"image/png",sizes:"192x192"});
+  add("apple-touch-icon",icon(180));
+  const theme=document.createElement("meta");
+  theme.name="theme-color";theme.content="#0e7490";document.head.appendChild(theme);
+  // The manifest 404s for forms without offline mode — those are not installable, which
+  // is deliberate. Declaring it unconditionally costs one ignorable console warning and
+  // removes the race for the forms that are.
+  const m=document.createElement("link");m.id="pvManifestLink";m.rel="manifest";
+  m.href="/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/manifest.webmanifest";
+  document.head.appendChild(m);
+})();
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const txt=v=>v==null?"":(typeof v==="object"?(v.id||Object.values(v)[0]||""):v);
 
@@ -352,20 +397,44 @@ function clearDraft(){
 }
 
 /* ---- PWA & offline queue (multi-response forms with offline mode enabled only) ----
-   The IndexedDB contract is shared with web/sw.js: DB "eform-offline", store "queue" (keyPath id, autoIncrement). */
+   The queue itself is in /offline-queue.js, loaded by this page and imported by
+   web/sw.js so both run the identical flush. ---- */
+// The manifest, icons and theme colour are installed at parse time by
+// installHeadIcons(). What is left here needs to know that offline mode is on: the
+// service worker, the cache warm-up and the queue wiring.
+let PWA_READY=false;
 function setupPWA(){
-  if(document.getElementById("pvManifestLink"))return;
-  const link=document.createElement("link");link.id="pvManifestLink";link.rel="manifest";
-  link.href="/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/manifest.webmanifest";document.head.appendChild(link);
-  const touch=document.createElement("link");touch.rel="apple-touch-icon";
-  touch.href="/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/icon.png?size=192";document.head.appendChild(touch);
-  const theme=document.createElement("meta");theme.name="theme-color";theme.content="#0e7490";document.head.appendChild(theme);
-  if("serviceWorker" in navigator)navigator.serviceWorker.register("/sw.js").catch(()=>{});
+  if(PWA_READY)return;
+  PWA_READY=true;
+  if("serviceWorker" in navigator){
+    navigator.serviceWorker.register("/sw.js").catch(()=>{});
+    // A service worker only controls the page AFTER the initial requests finish, so
+    // a first visit caches nothing and a user who heads straight into the field
+    // gets a blank page. The Cache API is reachable from the page, so the warm-up
+    // happens here instead of waiting for a second load.
+    warmOfflineCache();
+    // Background sync can run with no page open, so the outcome comes back over
+    // postMessage to keep the badge from going stale.
+    navigator.serviceWorker.addEventListener("message",e=>{
+      if(e.data&&e.data.type==="eform-queue")updateOfflineBadge();
+    });
+  }
+}
+async function warmOfflineCache(){
+  if(!("caches" in window))return;
+  try{
+    const c=await caches.open(OFFLINE_CACHE);
+    const urls=[location.pathname,"/api/public/forms/"+encodeURIComponent(SHARE_TOKEN),
+                "/searchable-select.js","/geo-map.js",
+                "/vendor/leaflet/leaflet.js","/vendor/leaflet/leaflet.css"];
+    // One at a time: with addAll a single failure would discard the whole warm-up.
+    await Promise.all(urls.map(u=>c.add(u).catch(()=>{})));
+  }catch(_e){}
 }
 function renderInstallButton(){
   const wrap=document.getElementById("pvInstallWrap");if(!wrap)return;
   if(!(OFFLINE_MODE&&DEFERRED_INSTALL_PROMPT)){wrap.innerHTML="";return;}
-  wrap.innerHTML='<button class="btn" id="pvInstallBtn" style="padding:5px 10px;font-size:12px">⬇ Instal Aplikasi</button>';
+  wrap.innerHTML='<button class="btn" id="pvInstallBtn" style="padding:5px 10px;font-size:12px">⬇ Install App</button>';
   wrap.querySelector("#pvInstallBtn").onclick=async()=>{
     const prompt=DEFERRED_INSTALL_PROMPT;if(!prompt)return;
     prompt.prompt();await prompt.userChoice;DEFERRED_INSTALL_PROMPT=null;renderInstallButton();
@@ -373,62 +442,218 @@ function renderInstallButton(){
 }
 function updateOfflineBadge(){
   const el=document.getElementById("pvOfflineBadge");if(!el)return;
-  pendingCount().then(n=>{
-    el.textContent=n>0?`⏳ ${n} waiting to be sent`:"";
-    el.style.cssText=n>0?"font-size:11px;color:var(--warn);white-space:nowrap":"";
+  // Permanent failures are shown separately: a count that never goes down reads
+  // like "still processing" when it actually needs someone to act.
+  queueStats().then(({pending,failed})=>{
+    const parts=[];
+    if(pending>0)parts.push(`⏳ ${pending} waiting to be sent`);
+    if(failed>0)parts.push(`⚠ ${failed} rejected`);
+    el.textContent=parts.join(" · ");
+    const dapatDiklik=failed>0;
+    el.style.cssText=parts.length?`font-size:11px;color:var(--${failed>0?"bad":"warn"});white-space:nowrap${dapatDiklik?";cursor:pointer;text-decoration:underline":""}`:"";
+    // A count nobody can act on is just an alarm with no off switch, so once
+    // something has been rejected the badge becomes the way into the list.
+    el.title=dapatDiklik?"Tap to review the rejected items.":"";
+    el.onclick=dapatDiklik?openQueueDialog:null;
   });
 }
-const OFFLINE_DB_NAME="eform-offline",OFFLINE_STORE="queue";
-function openOfflineDB(){
-  return new Promise((resolve,reject)=>{
-    const req=indexedDB.open(OFFLINE_DB_NAME,1);
-    req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains(OFFLINE_STORE))req.result.createObjectStore(OFFLINE_STORE,{keyPath:"id",autoIncrement:true});};
-    req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);
+/* ---- rejected-items review ----
+   These records hold answers and photos that exist nowhere else: the server refused
+   them, so there is no copy on the server either. The list therefore offers retry
+   and export before it offers deletion. */
+function fmtWhen(ms){
+  if(!ms)return "";
+  const d=new Date(ms);
+  return d.toLocaleString(undefined,{dateStyle:"short",timeStyle:"short"});
+}
+function fmtSize(bytes){
+  if(!bytes)return "";
+  return bytes<1024?`${bytes} B`:bytes<1048576?`${(bytes/1024).toFixed(0)} KB`:`${(bytes/1048576).toFixed(1)} MB`;
+}
+async function openQueueDialog(){
+  const bg=document.createElement("div");bg.className="pv-modal-bg";
+  bg.innerHTML=`<div class="pv-modal pv-queuemodal">
+    <h3>Rejected items</h3>
+    <p class="pv-modal-sub">The server refused these, so they were kept on this device instead of being lost. Retry after fixing the cause — signing in again, for instance. Download a copy before discarding anything.</p>
+    <div class="pv-qlist" id="pvQList"><div class="pv-qempty">Loading…</div></div>
+    <div class="pv-modal-actions">
+      <button class="btn ghost" id="pvQExport">Download copy</button>
+      <button class="btn ghost" id="pvQRetryAll">Retry all</button>
+      <button class="btn primary" id="pvQClose">Close</button>
+    </div>
+  </div>`;
+  document.body.appendChild(bg);
+  const close=()=>bg.remove();
+  bg.querySelector("#pvQClose").addEventListener("click",close);
+  bg.addEventListener("click",e=>{if(e.target===bg)close();});
+  const list=bg.querySelector("#pvQList");
+
+  async function draw(){
+    let items=[];
+    try{items=await OQ.listFailed();}catch(_e){}
+    if(!items.length){
+      list.innerHTML=`<div class="pv-qempty">Nothing was rejected.</div>`;
+      return;
+    }
+    list.innerHTML=items.map(it=>{
+      const judul=it.kind==="file"
+        ?`Photo${it.name?" · "+esc(it.name):""}${it.size?" · "+fmtSize(it.size):""}`
+        :`Response${it.answerCount!=null?" · "+it.answerCount+" answer"+(it.answerCount===1?"":"s"):""}`;
+      const sebab=[it.status?"HTTP "+it.status:"",esc(it.error||"Rejected.")].filter(Boolean).join(" — ");
+      return `<div class="pv-qitem" data-kind="${it.kind}" data-id="${it.id}">
+        <div class="pv-qhead"><span class="pv-qkind">${judul}</span><span class="pv-qwhen">${esc(fmtWhen(it.failedAt||it.ts))}</span></div>
+        <div class="pv-qerr">${sebab}</div>
+        <div class="pv-qacts">
+          <button data-act="retry">Retry</button>
+          ${it.kind==="file"?`<button data-act="save">Save photo</button>`:""}
+          <button data-act="discard" class="danger">Discard</button>
+        </div>
+      </div>`;
+    }).join("");
+  }
+  await draw();
+
+  list.addEventListener("click",async e=>{
+    const btn=e.target.closest("button[data-act]");if(!btn)return;
+    const row=btn.closest(".pv-qitem");
+    const kind=row.dataset.kind,id=Number(row.dataset.id);
+    if(btn.dataset.act==="retry"){
+      await OQ.retryFailed(kind,id);
+      await flushOfflineQueue();
+      await draw();updateOfflineBadge();
+      return;
+    }
+    if(btn.dataset.act==="save"){
+      const rec=await OQ.getFile(id);
+      if(rec&&rec.blob)downloadBlob(rec.blob,rec.name||`photo-${id}.jpg`);
+      return;
+    }
+    // Deletion is the one step that cannot be undone, and what it deletes is data
+    // the server never received — so it is spelled out rather than confirmed vaguely.
+    if(!confirm("Discard this permanently? It was never received by the server, so this is the only copy."))return;
+    await OQ.discardFailed(kind,id);
+    await draw();updateOfflineBadge();
+  });
+
+  bg.querySelector("#pvQRetryAll").addEventListener("click",async()=>{
+    await OQ.retryAllFailed();
+    await flushOfflineQueue();
+    await draw();updateOfflineBadge();
+  });
+  bg.querySelector("#pvQExport").addEventListener("click",async()=>{
+    const dump=await OQ.exportFailed();
+    downloadBlob(new Blob([JSON.stringify(dump,null,2)],{type:"application/json"}),
+      `eform-rejected-${new Date().toISOString().slice(0,10)}.json`);
   });
 }
+function downloadBlob(blob,name){
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),0);
+}
+// Must match CACHE_NAME in web/sw.js. If they diverge, the page fills a cache that
+// the service worker then deletes on activate.
+const OFFLINE_CACHE="eform-v2";
+// The queue itself lives in /offline-queue.js, shared with the service worker.
+const OQ=self.EformOfflineQueue;
 function isNetworkError(e){return !navigator.onLine||e instanceof TypeError;}
-async function queueOfflineRequest(url,headers,body){
-  const db=await openOfflineDB();
-  await new Promise((resolve,reject)=>{
-    const tx=db.transaction(OFFLINE_STORE,"readwrite");
-    tx.objectStore(OFFLINE_STORE).add({url,method:"POST",headers,body,ts:Date.now()});
-    tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);
-  });
+async function requestBackgroundSync(){
   try{
     if("serviceWorker" in navigator&&"SyncManager" in window){
       const reg=await navigator.serviceWorker.ready;await reg.sync.register("eform-flush");
     }
   }catch(_e){}
-  updateOfflineBadge();
 }
-async function pendingCount(){
+async function queueOfflineRequest(url,headers,body){
+  await OQ.queueRequest(url,headers,body);
+  await requestBackgroundSync();
+  updateOfflineBadge();
+  // Usually a no-op right now — queueing happens because the network is down — but it
+  // gets the report out immediately in the case where the server refused rather than
+  // the connection failing.
+  reportQueueState();
+}
+// Keep the photo on this device and hand back the placeholder the answer carries
+// until flush() can swap in the real URL.
+async function storeOfflineUpload(file,fieldType){
+  const url="/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/uploads";
+  const ref=await OQ.storeFile(url,pubHeaders({}),file,file.name||"",fieldType);
+  await requestBackgroundSync();
+  return ref;
+}
+function queueStats(){return OQ?OQ.stats():Promise.resolve({pending:0,failed:0});}
+
+/* ---- reporting the backlog to the server ----
+   A queue stranded on one phone is invisible to the office, and if that phone breaks
+   the work is gone with no trace it ever existed. So the device tells the server what
+   it is still holding.
+
+   The endpoint needs a valid respondent session, which means the one failure we most
+   want reported — an expired token — is also the one that cannot be reported at the
+   moment it happens. That is why this is sent on every load and after every flush
+   rather than only when something breaks: the last successful report keeps standing,
+   and the dashboard treats its AGE as the warning. */
+const DEVICE_KEY="eform_device_id",REPORTED_KEY="eform_queue_reported";
+function deviceId(){
+  let v="";
+  try{v=localStorage.getItem(DEVICE_KEY)||"";}catch(_e){}
+  if(!v){
+    v=(self.crypto&&crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random().toString(36).slice(2))
+      .replace(/[^a-zA-Z0-9]/g,"").slice(0,32);
+    try{localStorage.setItem(DEVICE_KEY,v);}catch(_e){}
+  }
+  return v;
+}
+async function reportQueueState(){
+  if(!OFFLINE_MODE||!OQ||!RESP_TOKEN)return;
+  let body;
+  try{body=await OQ.reportPayload(deviceId());}catch(_e){return;}
+  const adaIsi=body.pending>0||body.failed>0||body.files>0;
+  let pernahLapor=false;
+  try{pernahLapor=localStorage.getItem(REPORTED_KEY)==="1";}catch(_e){}
+  // Nothing to say and nothing outstanding to retract: stay quiet rather than send a
+  // request per page load for every user whose queue is simply empty.
+  if(!adaIsi&&!pernahLapor)return;
   try{
-    const db=await openOfflineDB();
-    return await new Promise((resolve,reject)=>{
-      const req=db.transaction(OFFLINE_STORE,"readonly").objectStore(OFFLINE_STORE).count();
-      req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);
+    const r=await fetch("/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/queue-report",{
+      method:"POST",
+      headers:pubHeaders({"Content-Type":"application/json"}),
+      body:JSON.stringify(body)
     });
-  }catch(_e){return 0;}
+    if(!r.ok)return; // offline or the token expired — the previous report still stands
+    try{localStorage.setItem(REPORTED_KEY,adaIsi?"1":"0");}catch(_e){}
+  }catch(_e){}
 }
 async function flushOfflineQueue(){
   if(!navigator.onLine)return;
-  let db;try{db=await openOfflineDB();}catch(_e){return;}
-  const records=await new Promise((resolve,reject)=>{
-    const req=db.transaction(OFFLINE_STORE,"readonly").objectStore(OFFLINE_STORE).getAll();
-    req.onsuccess=()=>resolve(req.result||[]);req.onerror=()=>reject(req.error);
-  });
-  records.sort((a,b)=>a.ts-b.ts);
-  for(const rec of records){
-    try{
-      const res=await fetch(rec.url,{method:rec.method||"POST",headers:rec.headers||{},body:rec.body});
-      if(!res.ok)break;
-      await new Promise((resolve,reject)=>{
-        const tx=db.transaction(OFFLINE_STORE,"readwrite");tx.objectStore(OFFLINE_STORE).delete(rec.id);
-        tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);
-      });
-    }catch(_e){break;}
-  }
+  let r=null;
+  try{r=await OQ.flush();}catch(_e){}
+  if(r&&r.map)applyResolvedUploads(r.map);
   updateOfflineBadge();
+  reportQueueState();
+}
+/* Once a photo is on the server the placeholder in the answers is stale — and worse
+   than stale: the file record behind it has been deleted, so an edit saved later
+   would queue an answer whose attachment can never be found. Swap in the real URLs
+   and persist. */
+function applyResolvedUploads(map){
+  let changed=false;
+  const swap=v=>{
+    if(!isLocalRef(v))return v;
+    const hit=map[v.slice(OQ.LOCAL_PREFIX.length)];
+    if(!hit||!hit.url)return v;
+    changed=true;
+    return hit.url;
+  };
+  Object.keys(answers).forEach(k=>{
+    const v=answers[k];
+    answers[k]=Array.isArray(v)?v.map(swap):swap(v);
+  });
+  if(!changed)return;
+  document.querySelectorAll("input[type=hidden][data-k]").forEach(h=>{h.value=swap(h.value);});
+  saveDraft();
+  renderCurrentPage();
 }
 window.addEventListener("online",()=>flushOfflineQueue());
 function clearPendingUpload(key){
@@ -655,7 +880,13 @@ async function fetchForm(){
   MULTI_RESPONSE=!!data.multiResponse;
   ACCESS_MODE=data.accessMode||"public";
   OFFLINE_MODE=!!(SCHEMA?.settings?.offline?.enabled)&&MULTI_RESPONSE;
-  if(OFFLINE_MODE)setupPWA();
+  if(OFFLINE_MODE){
+    setupPWA();
+    // The flush at the bottom of this file runs before the instrument is loaded, so
+    // OFFLINE_MODE is still false there and the report would be skipped. This is the
+    // first moment we know the form uses offline mode at all.
+    flushOfflineQueue().catch(()=>{});
+  }
 
   if(!data.googleEnabled){
     setRoot(`<div class="init-wrap"><div class="pw-card"><div class="msg err" style="display:block">Google login has not been configured by the administrator.</div></div></div>`);
@@ -2296,6 +2527,17 @@ function wireSignaturePad(canvas){
       hidden.dispatchEvent(new Event("change",{bubbles:true}));
       setMsg("Signature saved.","ok");
     }catch(e){
+      if(OFFLINE_MODE&&isNetworkError(e)){
+        try{
+          const ref=await storeOfflineUpload(new File([blob],`signature-${Date.now()}.png`,{type:"image/png"}),"signature");
+          hidden.value=ref;
+          dirty=false;
+          hidden.dispatchEvent(new Event("change",{bubbles:true}));
+          updateOfflineBadge();
+          setMsg("Signature saved on this device — it will be sent once you are back online.","ok");
+          return;
+        }catch(_e2){}
+      }
       setMsg(e.message||"Failed to save the signature","error");
     }finally{
       uploading=false;
@@ -2353,7 +2595,7 @@ async function openBarcodeScanner(input){
   const bg=document.createElement("div");bg.className="pv-modal-bg";
   bg.innerHTML=`<div class="pv-modal pv-scanmodal">
     <h3>Pindai Barcode</h3>
-    <p class="pv-modal-sub">Arahkan kamera ke barcode/QR.</p>
+    <p class="pv-modal-sub">Point the camera at the barcode or QR code.</p>
     <video id="scanVideo" autoplay playsinline muted></video>
     <div class="pv-modal-actions"><button class="btn ghost" id="scanCancel">Cancel</button></div>
   </div>`;
@@ -2414,7 +2656,7 @@ function wirePhotoField(wrap){
     uploadBtn.disabled=true;
     fileInput.disabled=true;
     state.className="pv-photostate pending";
-    state.textContent="Mengupload file…";
+    state.textContent="Uploading the file…";
     try{
       const fd=new FormData();
       fd.append("file",pending.file);
@@ -2433,6 +2675,21 @@ function wirePhotoField(wrap){
       hidden.dispatchEvent(new Event("change",{bubbles:true}));
     }catch(e){
       fileInput.disabled=false;
+      // Offline the upload can never succeed, and refusing it would strand the whole
+      // response: submit is blocked while a file is still pending. So the photo is
+      // kept on the device and the answer points at it until it can be sent.
+      if(OFFLINE_MODE&&isNetworkError(e)){
+        try{
+          const ref=await storeOfflineUpload(pending.file,fieldType);
+          hidden.value=ref;
+          fileInput.value="";
+          clearPendingUpload(key);
+          hidden.dispatchEvent(new Event("change",{bubbles:true}));
+          updateOfflineBadge();
+          renderPhotoPreview(wrap);
+          return;
+        }catch(_e2){}
+      }
       renderPhotoPreview(wrap,e.message);
     }
   });
@@ -2450,6 +2707,19 @@ function wirePhotoField(wrap){
     hidden.dispatchEvent(new Event("change",{bubbles:true}));
   });
 }
+/* Placeholder answers have no URL the browser can render, so the blob is pulled back
+   out of IndexedDB and turned into an object URL. Kept in a map because
+   renderPhotoPreview is synchronous and runs on every re-render. */
+const LOCAL_PREVIEWS=Object.create(null);
+function isLocalRef(v){return typeof v==="string"&&OQ&&v.startsWith(OQ.LOCAL_PREFIX);}
+function loadLocalPreview(ref,onReady){
+  if(LOCAL_PREVIEWS[ref]!==undefined)return LOCAL_PREVIEWS[ref];
+  LOCAL_PREVIEWS[ref]=""; // claim the slot so a re-render does not queue a second read
+  OQ.getFile(ref.slice(OQ.LOCAL_PREFIX.length)).then(rec=>{
+    if(rec&&rec.blob){LOCAL_PREVIEWS[ref]=URL.createObjectURL(rec.blob);onReady&&onReady();}
+  }).catch(()=>{});
+  return "";
+}
 function renderPhotoPreview(wrap,errorMsg){
   const hidden=wrap.querySelector("input[type=hidden]");
   const fileInput=wrap.querySelector(".pv-photofile");
@@ -2465,7 +2735,7 @@ function renderPhotoPreview(wrap,errorMsg){
   if(pending&&pending.file){
     const dis=disabled?" disabled":"";
     const media=pending.objectUrl?`<img class="pv-photoimg" src="${pending.objectUrl}">`:`<span style="font-size:12.5px;color:var(--ink-soft)">${esc(pending.file.name)}</span>`;
-    preview.innerHTML=`${media}<button type="button" class="pv-smbtn pv-photocancel"${dis}>Batalkan pilihan</button>`;
+    preview.innerHTML=`${media}<button type="button" class="pv-smbtn pv-photocancel"${dis}>Cancel selection</button>`;
     preview.hidden=false;
     uploadBtn.disabled=disabled;
     state.className="pv-photostate pending";
@@ -2473,6 +2743,16 @@ function renderPhotoPreview(wrap,errorMsg){
     return;
   }
   uploadBtn.disabled=true;
+  if(isLocalRef(savedValue)){
+    const dis=disabled?" disabled":"";
+    const src=loadLocalPreview(savedValue,()=>renderPhotoPreview(wrap));
+    const media=src?`<img class="pv-photoimg" src="${src}">`:`<span style="font-size:12.5px;color:var(--ink-soft)">Attachment saved on this device</span>`;
+    preview.innerHTML=`${media}<button type="button" class="pv-smbtn pv-photoclear"${dis}>Remove</button>`;
+    preview.hidden=false;
+    state.className="pv-photostate pending";
+    state.textContent="Saved on this device — it will be uploaded once you are back online.";
+    return;
+  }
   if(savedValue){
     const dis=disabled?" disabled":"";
     const src=mediaSourceOf(savedValue)||savedValue;
@@ -2483,7 +2763,7 @@ function renderPhotoPreview(wrap,errorMsg){
     }
     preview.hidden=false;
     state.className="pv-photostate ok";
-    state.textContent="File siap digunakan.";
+    state.textContent="File is ready to use.";
     return;
   }
   preview.hidden=true;
