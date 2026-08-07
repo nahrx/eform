@@ -158,6 +158,7 @@ function newField(type){const f={uid:uid(),kind:"field",type,name:autoName(type)
   if(CHOICE.has(type)){f.options=[{value:"1",label:"Option 1"}];f.optionSource="manual";f.optionsRef="";f.optionsFilterBy="";f.optionsApi={};}
   if(NUMERIC.has(type)){f.min="";f.max="";f.step="";f.unit="";}
   if(TEXTY.has(type)){f.maxLength="";f.pattern="";f.placeholder="";}
+  if(type==="photo"){f.autoCompress=true;f.maxPhotoKB="";}
   if(type==="calculated")f.calculate=""; if(type==="note")f.html=""; if(type==="markdown")f.markdown="";
   f.skips=[];f.validations=[];return f;}
 
@@ -545,6 +546,11 @@ function fieldForm(c){const t=c.type;let html=headBar(t,c.name);
   if(NUMERIC.has(t))html+=`<div class="row3">${mini("min","Min",c.min)}${mini("max","Max",c.max)}${mini("step","Step",c.step)}</div><div class="field"><label>Unit</label><input class="ctrl" data-k="unit" value="${esc(c.unit||"")}"></div>`;
   if(DATETIME.has(t)){const it=DT_INPUT_TYPE[t];html+=`<div class="row2">${mini("min","From",c.min,it)}${mini("max","To",c.max,it)}</div>`;}
   if(TEXTY.has(t))html+=`<div class="row2">${mini("maxLength","Max characters",c.maxLength,"number")}<div class="field"><label>Placeholder</label><input class="ctrl" data-k="placeholder" value="${esc(c.placeholder||"")}"></div></div><div class="field"><label>Pattern (regex)</label><input class="ctrl mono" data-k="pattern" value="${esc(c.pattern||"")}"></div>`;
+  if(t==="photo"){
+    // Absent means on, so fields built before this option existed keep compressing.
+    const ac=c.autoCompress!==false;
+    html+=`<div class="group"><div class="gh">Photo upload</div><label class="check"><input type="checkbox" data-k="autoCompress" ${ac?"checked":""}> Compress the photo before uploading</label>${ac?`<div class="field" style="margin-top:8px"><label>Max photo size (KB)</label><input class="ctrl" type="number" step="1" min="1" inputmode="numeric" data-k="maxPhotoKB" placeholder="200" value="${esc(c.maxPhotoKB??"")}"><div class="help" style="margin-left:0;margin-top:4px">Leave empty for the 200 KB default. A very detailed photo may still land slightly above the limit — it is uploaded anyway rather than blocking the enumerator.</div></div>`:`<div class="help" style="margin-left:0;margin-top:6px">The original camera file is uploaded as it is — often several MB per photo.</div>`}</div>`;
+  }
   if(CHOICE.has(t))html+=optionsBlock(c);
   const dvHtml=(()=>{
     if(t==="note"||t==="markdown"||t==="calculated")return"";
@@ -590,7 +596,7 @@ function skipsBlock(c){let rows=(c.skips||[]).map((s,i)=>`<div class="mini" data
 function validationsBlock(c){let rows=(c.validations||[]).map((v,i)=>`<div class="mini" data-vi="${i}"><input class="ctrl mono" data-vf="test" placeholder="test (TRUE=pass)" value="${esc(v.test||"")}"><div class="mr" style="grid-template-columns:1fr auto;margin-top:6px"><input class="ctrl" data-vf="message" placeholder="message" value="${esc(typeof v.message==="object"?(v.message.id||""):(v.message||""))}"><button class="x" data-vrm>×</button></div><select class="ctrl" data-vf="severity" style="margin-top:6px">${opt("error","error — blocks",v.severity||"error")}${opt("warning","warning — can continue",v.severity||"error")}</select></div>`).join("");return `<div class="group"><div class="gh">Validation</div><div id="valRows">${rows}</div><button class="add-row" id="addVal">+ Add rule</button></div>`;}
 
 function wireForm(pane,node){
-  pane.querySelectorAll("[data-k]").forEach(inp=>{const h=()=>{node[inp.dataset.k]=inp.type==="checkbox"?inp.checked:inp.value;if(node.kind==="roster"&&inp.dataset.k==="min"){render();return;}softUpdate();};inp.addEventListener("input",h);inp.addEventListener("change",h);});
+  pane.querySelectorAll("[data-k]").forEach(inp=>{const h=()=>{node[inp.dataset.k]=inp.type==="checkbox"?inp.checked:inp.value;if(node.kind==="roster"&&inp.dataset.k==="min"){render();return;}if(inp.dataset.k==="autoCompress"){render();return;}softUpdate();};inp.addEventListener("input",h);inp.addEventListener("change",h);});
   pane.querySelectorAll("[data-rowdefault-index]").forEach(inp=>{
     const onChange=()=>{
       const idx=Number(inp.getAttribute("data-rowdefault-index"));
@@ -641,6 +647,13 @@ function serNode(n){
   if(c.type==="calculated"&&clean(c.calculate))o.calculate=c.calculate;if(c.type==="calculated"&&c.autofill)o.autofill=true;
   if(clean(c.unit))o.unit=c.unit;
   ["min","max","step","maxLength"].forEach(k=>{if(clean(c[k]))o[k]=num(c[k]);});
+  // Only the off state and an explicit budget are written; an untouched field stays
+  // absent from the schema and falls back to the runtime default, which is what keeps
+  // the photo fields that predate this option compressing at 200 KB.
+  if(c.type==="photo"){
+    if(c.autoCompress===false)o.autoCompress=false;
+    else if(clean(c.maxPhotoKB))o.maxPhotoKB=num(c.maxPhotoKB);
+  }
   if(clean(c.pattern))o.pattern=c.pattern;if(clean(c.placeholder))o.placeholder=loc(c.placeholder);
   if(CHOICE.has(c.type)){const mode=c.optionSource||(c.optionsApi&&c.optionsApi.url?"api":(c.optionsRef?"ref":"manual"));
     if(mode==="api"&&c.optionsApi&&c.optionsApi.url){const a={url:c.optionsApi.url};["valueField","labelField","parentParam","searchParam","path","method","depKeys"].forEach(k=>{if(clean(c.optionsApi[k]))a[k]=c.optionsApi[k];});o.optionsApi=a;if(clean(c.optionsFilterBy))o.optionsFilterBy=c.optionsFilterBy;}
@@ -700,7 +713,7 @@ function impNode(n,forceKind){
   if(kind==="page"||kind==="block"||kind==="section"){return {uid:uid(),kind,name:n.name||autoName(kind),title:textOf(n.title),visibleWhen:n.visibleWhen||"",components:(n.components||[]).map(c=>impNode(c))};}
   if(kind==="roster"){return {uid:uid(),kind:"roster",name:n.name||autoName("roster"),title:textOf(n.title),rowTitle:n.rowTitle||"",rosterType:n.rosterType||"inline",min:n.min??"",max:n.max??"",countFrom:n.countFrom||"",requiredRows:!!n.requiredRows,itemLabel:textOf(n.itemLabel),rowDefaults:textOf(n.rowDefaults),rowDisplay:n.rowDisplay||[],visibleWhen:n.visibleWhen||"",components:(n.components||[]).map(c=>impNode(c))};}
   const f=newField(n.type||"text");f.uid=uid();f.name=n.name||f.name;f.label=textOf(n.label);f.hint=textOf(n.hint);f.html=textOf(n.html);f.markdown=textOf(n.markdown);f.calculate=n.calculate||"";f.autofill=!!n.autofill;
-  ["required","readOnly","allowRemark","promptOnAdd","visibleWhen","enableWhen","requiredWhen","unit","pattern","optionsRef","optionsFilterBy","min","max","step","maxLength","defaultValue"].forEach(k=>{if(n[k]!=null)f[k]=n[k];});
+  ["required","readOnly","allowRemark","promptOnAdd","visibleWhen","enableWhen","requiredWhen","unit","pattern","optionsRef","optionsFilterBy","min","max","step","maxLength","maxPhotoKB","autoCompress","defaultValue"].forEach(k=>{if(n[k]!=null)f[k]=n[k];});
   f.placeholder=textOf(n.placeholder);
   if(n.options)f.options=n.options.map(o=>({value:String(o.value),label:textOf(o.label),skipTo:o.skipTo||""}));
   if(n.optionsApi){f.optionsApi={...n.optionsApi};f.optionSource="api";}else if(n.optionsRef){f.optionSource="ref";}else if(CHOICE.has(f.type))f.optionSource="manual";
@@ -1281,7 +1294,7 @@ function pvField(c,row){
   else if(c.type==="photo"||c.type==="file"){
     const isPhoto=c.type==="photo";
     const disClass=(enabled&&!c.readOnly)?"":" pv-photolabel-dis";
-    ctrl=`<div class="pv-photowrap"><input type="hidden" ${da} value="${esc(val)}"><label class="pv-photolabel${disClass}"><input type="file" class="pv-photofile"${isPhoto?' accept="image/*" capture="environment"':''}${disAll}>${isPhoto?'📷 Take / Choose Photo':'📎 Choose File'}</label><div class="pv-photopreview" hidden></div></div>`;
+    ctrl=`<div class="pv-photowrap" data-field-type="${isPhoto?'photo':'file'}" data-max-kb="${isPhoto?photoMaxKB(c):0}"><input type="hidden" ${da} value="${esc(val)}"><label class="pv-photolabel${disClass}"><input type="file" class="pv-photofile"${isPhoto?' accept="image/*" capture="environment"':''}${disAll}>${isPhoto?'📷 Take / Choose Photo':'📎 Choose File'}</label><div class="pv-photopreview" hidden></div></div>`;
   }
   else if(c.type==="signature")ctrl=`<div class="pv-sigwrap"><input type="hidden" ${da}><canvas class="pv-sigpad" width="400" height="140"${(enabled&&!c.readOnly)?"":' data-disabled="1"'}></canvas><div class="pv-sigactions"><button type="button" class="pv-smbtn pv-sigclear"${disAll}>Clear signature</button></div></div>`;
   else if(c.type==="barcode")ctrl=`<div class="pv-inbtn"><input ${da} class="pv-in" value="${esc(val)}" placeholder="scan / type code"${dis}${rdOnly}><button type="button" class="pv-smbtn pv-scanbtn"${disAll}>📷 Pindai</button></div>`;
@@ -1436,13 +1449,26 @@ function wirePhotoField(wrap){
   const preview=wrap.querySelector(".pv-photopreview");
   if(!hidden||!fileInput||!preview)return;
   if(hidden.value)showPhotoPreview(preview,hidden.value,fileInput.disabled);
-  fileInput.addEventListener("change",()=>{
-    const f=fileInput.files[0];if(!f)return;
+  fileInput.addEventListener("change",async()=>{
+    let f=fileInput.files[0];if(!f)return;
+    // The preview never uploads, but running the same compression here is what lets
+    // an admin see what their KB setting actually does to a real camera photo.
+    const maxKB=Number(wrap.dataset.maxKb||0);
+    let note="";
+    if(wrap.dataset.fieldType==="photo"&&maxKB>0&&window.ImageCompress){
+      const res=await ImageCompress.compress(f,maxKB);
+      if(res.changed){
+        f=res.file;
+        note=`${fmtBytes(res.originalSize)} → ${fmtBytes(f.size)}`+(res.reachedTarget?"":` (still above ${maxKB} KB)`);
+      }else{
+        note=`${fmtBytes(f.size)} — ${res.reason}`;
+      }
+    }
     const reader=new FileReader();
     reader.onload=e=>{
       hidden.value=e.target.result;
       hidden.dispatchEvent(new Event("change",{bubbles:true}));
-      showPhotoPreview(preview,e.target.result,false);
+      showPhotoPreview(preview,e.target.result,false,note);
     };
     reader.readAsDataURL(f);
   });
@@ -1453,13 +1479,17 @@ function wirePhotoField(wrap){
     hidden.dispatchEvent(new Event("change",{bubbles:true}));
   });
 }
-function showPhotoPreview(preview,dataUrl,disabled){
+/* Defined in /image-compress.js — see the note on the same helper in public.html. */
+function photoMaxKB(c){return window.ImageCompress?ImageCompress.maxKBFor(c):0;}
+function fmtBytes(b){const n=Number(b)||0;return n>=1048576?(n/1048576).toFixed(1)+" MB":Math.max(1,Math.round(n/1024))+" KB";}
+function showPhotoPreview(preview,dataUrl,disabled,note){
   const isImage=dataUrl.startsWith("data:image");
   const dis=disabled?" disabled":"";
+  const sizeNote=note?`<div style="flex-basis:100%;font-size:11.5px;color:var(--muted)">${esc(note)}</div>`:"";
   if(isImage)
-    preview.innerHTML=`<img class="pv-photoimg" src="${dataUrl}"><button type="button" class="pv-smbtn pv-photoclear"${dis}>Remove photo</button>`;
+    preview.innerHTML=`<img class="pv-photoimg" src="${dataUrl}"><button type="button" class="pv-smbtn pv-photoclear"${dis}>Remove photo</button>${sizeNote}`;
   else
-    preview.innerHTML=`<span style="font-size:12.5px;color:var(--ink-soft)">File dipilih</span><button type="button" class="pv-smbtn pv-photoclear"${dis}>Delete</button>`;
+    preview.innerHTML=`<span style="font-size:12.5px;color:var(--ink-soft)">File selected</span><button type="button" class="pv-smbtn pv-photoclear"${dis}>Delete</button>${sizeNote}`;
   preview.hidden=false;
 }
 

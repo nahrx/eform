@@ -195,7 +195,7 @@ func (s *Server) Routes() http.Handler {
 		"responses.css", "responses-ui.js", "responses-core.js",
 		"builder.css", "builder.js", "builder-bridge.js",
 		"searchable-select.js", "geo-map.js", "revision-history.js",
-		"response-validation.js", "offline-queue.js",
+		"response-validation.js", "offline-queue.js", "image-compress.js",
 		"i18n.js", "responsive-tables.js",
 	} {
 		mux.HandleFunc("GET /"+f, s.page(f))

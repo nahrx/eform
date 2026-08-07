@@ -6,16 +6,17 @@
 importScripts("/offline-queue.js");
 
 const Q = self.EformOfflineQueue;
-const CACHE_NAME = "eform-v2";
+const CACHE_NAME = "eform-v3";
 
 /* Assets the form page needs but which are not part of any API response. Without
-   them an offline page still renders, but region dropdowns lose their search box
-   and geopoint fields lose their map — so they are fetched during install rather
-   than waiting for a second visit. */
+   them an offline page still renders, but region dropdowns lose their search box,
+   geopoint fields lose their map, and photos queue up at full camera size — so they
+   are fetched during install rather than waiting for a second visit. */
 const PRECACHE = [
   "/offline-queue.js",
   "/searchable-select.js",
   "/geo-map.js",
+  "/image-compress.js",
   "/vendor/leaflet/leaflet.js",
   "/vendor/leaflet/leaflet.css",
 ];

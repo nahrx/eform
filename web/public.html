@@ -326,6 +326,7 @@ textarea.pv-in{width:100%;resize:vertical;min-height:72px}
 <body>
 <div id="root"><div class="init-wrap"><span class="init-msg">Loading form…</span></div></div>
 <script src="/offline-queue.js"></script>
+<script src="/image-compress.js"></script>
 <script src="/searchable-select.js"></script>
 <script src="/vendor/leaflet/leaflet.js"></script>
 <script src="/geo-map.js"></script>
@@ -425,7 +426,7 @@ async function warmOfflineCache(){
   try{
     const c=await caches.open(OFFLINE_CACHE);
     const urls=[location.pathname,"/api/public/forms/"+encodeURIComponent(SHARE_TOKEN),
-                "/searchable-select.js","/geo-map.js",
+                "/searchable-select.js","/geo-map.js","/image-compress.js",
                 "/vendor/leaflet/leaflet.js","/vendor/leaflet/leaflet.css"];
     // One at a time: with addAll a single failure would discard the whole warm-up.
     await Promise.all(urls.map(u=>c.add(u).catch(()=>{})));
@@ -1691,14 +1692,14 @@ function fieldHtml(c,rp,scopes){
     ctrl=`<div class="pv-inbtn"><input type="text" data-k="${ke}" class="pv-in" placeholder="lat, lng"${dis}${rdOnly}><button type="button" class="pv-smbtn pv-geobtn"${disAll}>📍 Get Location</button></div><div class="pv-geomsg"></div>${geoMap}`;
   }
   else if(c.type==="barcode")
-    ctrl=`<div class="pv-inbtn"><input type="text" data-k="${ke}" class="pv-in" placeholder="scan / type the code"${dis}${rdOnly}><button type="button" class="pv-smbtn pv-scanbtn"${disAll}>📷 Pindai</button></div>`;
+    ctrl=`<div class="pv-inbtn"><input type="text" data-k="${ke}" class="pv-in" placeholder="scan / type the code"${dis}${rdOnly}><button type="button" class="pv-smbtn pv-scanbtn"${disAll}>📷 Scan</button></div>`;
   else if(c.type==="signature")
     ctrl=`<div class="pv-sigwrap"><input type="hidden" data-k="${ke}" value="${esc(val)}"><canvas class="pv-sigpad" width="400" height="140"${(enabled&&!c.readOnly)?"":' data-disabled="1"'}></canvas><div class="pv-sigactions"><button type="button" class="pv-smbtn pv-sigsave"${disAll} disabled>Save signature</button><button type="button" class="pv-smbtn pv-sigclear"${disAll}>Clear signature</button><span class="pv-sigmsg"></span></div></div>`;
   else if(c.type==="photo"||c.type==="file"){
     const isPhoto=c.type==="photo";
     const disClass=(!enabled||c.readOnly)?' pv-photolabel-dis':'';
     const dis2=(!enabled||c.readOnly)?' disabled':'';
-    ctrl=`<div class="pv-photowrap" data-field-type="${isPhoto?'photo':'file'}"><input type="hidden" data-k="${ke}" value="${esc(val)}"><div class="pv-photorow"><label class="pv-photolabel${disClass}"><input type="file" class="pv-photofile"${isPhoto?' accept="image/*" capture="environment"':''}${dis2}>${isPhoto?'📷 Take / Choose Photo':'📎 Choose File'}</label><button type="button" class="pv-smbtn pv-photoupload"${dis2} disabled>Upload</button></div><div class="pv-photostate"></div><div class="pv-photopreview" hidden></div></div>`;
+    ctrl=`<div class="pv-photowrap" data-field-type="${isPhoto?'photo':'file'}" data-max-kb="${isPhoto?photoMaxKB(c):0}"><input type="hidden" data-k="${ke}" value="${esc(val)}"><div class="pv-photorow"><label class="pv-photolabel${disClass}"><input type="file" class="pv-photofile"${isPhoto?' accept="image/*" capture="environment"':''}${dis2}>${isPhoto?'📷 Take / Choose Photo':'📎 Choose File'}</label><button type="button" class="pv-smbtn pv-photoupload"${dis2} disabled>Upload</button></div><div class="pv-photostate"></div><div class="pv-photopreview" hidden></div></div>`;
   }
   else
     ctrl=`<input type="text" data-k="${ke}" class="pv-in" placeholder="${esc(c.placeholder||"")}"${dis}${rdOnly}>`;
@@ -2629,6 +2630,9 @@ async function openBarcodeScanner(input){
 }
 
 /* ---- foto / file upload ---- */
+/* Defined in /image-compress.js; falls back to no compression if that script failed
+   to load, so a photo field still works rather than throwing during render. */
+function photoMaxKB(c){return window.ImageCompress?ImageCompress.maxKBFor(c):0;}
 function wirePhotoField(wrap){
   if(wrap._wired)return;wrap._wired=true;
   const hidden=wrap.querySelector("input[type=hidden]");
@@ -2640,13 +2644,34 @@ function wirePhotoField(wrap){
   const key=hidden.dataset.k;
   const fieldType=wrap.dataset.fieldType||"file";
   renderPhotoPreview(wrap);
-  fileInput.addEventListener("change",()=>{
+  wrap._pickSeq=0;
+  fileInput.addEventListener("change",async()=>{
     const f=fileInput.files[0];if(!f)return;
     clearPendingUpload(key);
+    let use=f,note="";
+    const maxKB=Number(wrap.dataset.maxKb||0);
+    if(fieldType==="photo"&&maxKB>0&&window.ImageCompress){
+      state.className="pv-photostate pending";
+      state.textContent="Compressing the photo…";
+      // Shrinking a large photo takes a moment; if the enumerator picks another
+      // one meanwhile, the slower result must not overwrite the newer choice.
+      const seq=++wrap._pickSeq;
+      const res=await ImageCompress.compress(f,maxKB);
+      if(seq!==wrap._pickSeq)return;
+      use=res.file;
+      if(res.changed){
+        note=`Compressed ${fmtSize(res.originalSize)} → ${fmtSize(use.size)}.`;
+        // Even the smallest setting can miss the budget on a very detailed photo.
+        // It is still uploaded: refusing it would leave the enumerator standing in
+        // the field with no way to record the answer.
+        if(!res.reachedTarget)note+=` Still above the ${maxKB} KB limit.`;
+      }
+    }
     PENDING_UPLOADS[key]={
-      file:f,
+      file:use,
       fieldType,
-      objectUrl:(fieldType==="photo"||String(f.type||"").startsWith("image/"))?URL.createObjectURL(f):""
+      note,
+      objectUrl:(fieldType==="photo"||String(use.type||"").startsWith("image/"))?URL.createObjectURL(use):""
     };
     renderPhotoPreview(wrap);
   });
@@ -2739,7 +2764,8 @@ function renderPhotoPreview(wrap,errorMsg){
     preview.hidden=false;
     uploadBtn.disabled=disabled;
     state.className="pv-photostate pending";
-    state.textContent=errorMsg||"File selected. Press Upload to store it on the server.";
+    const picked=(pending.note?pending.note+" ":"")+"Press Upload to store it on the server.";
+    state.textContent=errorMsg||picked;
     return;
   }
   uploadBtn.disabled=true;
