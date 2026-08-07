@@ -240,7 +240,7 @@ func (s *Server) apiKeyMW(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		if !key.IsActive {
-			s.logAPIAccess(r, key, key.KeyPrefix, ip, http.StatusUnauthorized, 0, "key nonaktif")
+			s.logAPIAccess(r, key, key.KeyPrefix, ip, http.StatusUnauthorized, 0, "key is inactive")
 			writeErr(w, http.StatusUnauthorized, "invalid API key")
 			return
 		}

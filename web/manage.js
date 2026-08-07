@@ -254,7 +254,7 @@ async function refreshShares(){
       const isEditing=s.id===editingShareId;
       const badges=[];
       if(s.hasPassword)badges.push(`<span class="tag tag-icon">${ICON_LOCK} Password</span>`);
-      if(s.multiResponse)badges.push('<span class="tag">Multi-respons</span>');
+      if(s.multiResponse)badges.push('<span class="tag">Multi-response</span>');
       if(s.accessMode==="restricted")badges.push('<span class="tag">Terbatas</span>');
 
       const editSection=isEditing?`<div class="share-edit">
@@ -263,7 +263,7 @@ async function refreshShares(){
         </div>
         <div class="edit-row" style="gap:16px;flex-wrap:wrap">
           <label class="muted"><input type="checkbox" id="eallow_${s.id}" ${s.allowResponses?"checked":""}> Accepting responses</label>
-          <label class="muted"><input type="checkbox" id="emulti_${s.id}" ${s.multiResponse?"checked":""}> Multi-respons</label>
+          <label class="muted"><input type="checkbox" id="emulti_${s.id}" ${s.multiResponse?"checked":""}> Multi-response</label>
         </div>
         <div class="edit-row" style="gap:16px;flex-wrap:wrap">
           <span class="edit-lbl">Akses</span>
@@ -271,7 +271,7 @@ async function refreshShares(){
           <label class="muted"><input type="radio" name="eacc_${s.id}" value="restricted" ${s.accessMode==="restricted"?"checked":""}> Terbatas</label>
         </div>
         <div class="edit-row"><span class="edit-lbl">New password</span>
-          <input id="epw_${s.id}" type="text" placeholder="${s.hasPassword?"Password already set — fill in to change":"Opsional"}" style="flex:1">
+          <input id="epw_${s.id}" type="text" placeholder="${s.hasPassword?"Password already set — fill in to change":"Optional"}" style="flex:1">
         </div>
         ${s.hasPassword?`<div class="edit-row"><span class="edit-lbl"></span>
           <label class="muted"><input type="checkbox" id="eclearpw_${s.id}"> Remove the existing password</label>
@@ -392,7 +392,7 @@ async function removeEditorPerm(permId,name){
       await api("/api/editor-permissions/"+permId,{method:"DELETE"});
       await refreshUserPermList();
     }catch(e){
-      adminToast("Gagal: "+e.message,true);
+      adminToast("Failed: "+e.message,true);
     }
   });
 }
@@ -528,7 +528,7 @@ async function addAllowedEditorRespondent(){
     picker.innerHTML=`<option value="">— select respondent —</option>`+
       (formRespondents.respondents||[]).filter(r=>!allowed.has(r.id)).map(r=>
         `<option value="${esc(r.id)}">${esc(r.name||r.email||r.id)}</option>`).join("");
-  }catch(e){adminToast("Gagal: "+e.message,true);}
+  }catch(e){adminToast("Failed: "+e.message,true);}
 }
 
 async function removeAllowedEditorRespondent(id){
@@ -544,7 +544,7 @@ async function removeAllowedEditorRespondent(id){
     picker.innerHTML=`<option value="">— select respondent —</option>`+
       (formRespondents.respondents||[]).filter(r=>!allowed.has(r.id)).map(r=>
         `<option value="${esc(r.id)}">${esc(r.name||r.email||r.id)}</option>`).join("");
-  }catch(e){adminToast("Gagal: "+e.message,true);}
+  }catch(e){adminToast("Failed: "+e.message,true);}
 }
 
 async function saveEpDetail(){
@@ -565,7 +565,7 @@ function convertEpToViewer(){
       epDetailDlg.close();
       await refreshUserPermList();
       adminToast("Access switched to viewer");
-    }catch(e){adminToast("Gagal: "+e.message,true);}
+    }catch(e){adminToast("Failed: "+e.message,true);}
   });
 }
 
@@ -574,7 +574,7 @@ let _vpPermCache=[];
 async function removeViewerPerm(permId,viewerName){
   adminConfirm(`Revoke access for "${viewerName}" on this form?`,async()=>{
     try{await api("/api/viewer-permissions/"+permId,{method:"DELETE"});await refreshUserPermList();}
-    catch(e){adminToast("Gagal: "+e.message,true);}
+    catch(e){adminToast("Failed: "+e.message,true);}
   });
 }
 
@@ -746,7 +746,7 @@ async function submitUserAdd(){
       :{email,note,respondentAccess,fieldFilters};
     const{results}=await api(path,{method:"POST",body:JSON.stringify({items:[item]})});
     const res=results&&results[0];
-    if(res&&res.status==="error"){adminToast("Gagal: "+res.error,true);return;}
+    if(res&&res.status==="error"){adminToast("Failed: "+res.error,true);return;}
     if(respondentAccess==="selected"&&_uaSelectedRespondents.length&&res.permissionId){
       const respPath=role==="viewer"
         ?"/api/viewer-permissions/"+res.permissionId+"/respondents"
@@ -758,7 +758,7 @@ async function submitUserAdd(){
     userAddDlg.close();
     await refreshUserPermList();
     adminToast("User ditambahkan");
-  }catch(e){adminToast("Gagal: "+e.message,true);}
+  }catch(e){adminToast("Failed: "+e.message,true);}
   finally{btn.disabled=false;btn.textContent="Add";}
 }
 
@@ -830,7 +830,7 @@ async function addAllowedRespondent(){
     picker.innerHTML=`<option value="">— select respondent —</option>`+
       (formRespondents.respondents||[]).filter(r=>!allowed.has(r.id)).map(r=>
         `<option value="${esc(r.id)}">${esc(r.name||r.email||r.id)}</option>`).join("");
-  }catch(e){adminToast("Gagal: "+e.message,true);}
+  }catch(e){adminToast("Failed: "+e.message,true);}
 }
 
 async function removeAllowedRespondent(id){
@@ -846,7 +846,7 @@ async function removeAllowedRespondent(id){
     picker.innerHTML=`<option value="">— select respondent —</option>`+
       (formRespondents.respondents||[]).filter(r=>!allowed.has(r.id)).map(r=>
         `<option value="${esc(r.id)}">${esc(r.name||r.email||r.id)}</option>`).join("");
-  }catch(e){adminToast("Gagal: "+e.message,true);}
+  }catch(e){adminToast("Failed: "+e.message,true);}
 }
 
 function buildFieldCheckboxes(containerId,schema,checked){
@@ -896,7 +896,7 @@ function convertVpToEditor(){
       vpDetailDlg.close();
       await refreshUserPermList();
       adminToast("Access switched to editor");
-    }catch(e){adminToast("Gagal: "+e.message,true);}
+    }catch(e){adminToast("Failed: "+e.message,true);}
   });
 }
 
@@ -965,7 +965,7 @@ async function refreshApiKeys(){
         </div>
         <div class="share-badges">${badges.join("")}</div>
         <div class="share-url-row"><code class="share-url">eform_${esc(k.keyPrefix)}…</code></div>
-        <div class="share-meta muted">${used} · ${k.requestCount||0}× permintaan${k.expiresAt?` · berlaku sampai ${new Date(k.expiresAt).toLocaleString("id-ID")}`:""}</div>
+        <div class="share-meta muted">${used} · ${k.requestCount||0}× requests${k.expiresAt?` · valid until ${new Date(k.expiresAt).toLocaleString()}`:""}</div>
         <div class="acts" style="margin-top:10px">
           <button class="btn" type="button" onclick="openApiKeyDlg('${k.id}')">Configure</button>
           <button class="btn" type="button" onclick="openApiLogDlg('${k.id}','${esc(k.label||k.keyPrefix)}')">Access Log</button>
@@ -1118,7 +1118,7 @@ async function submitApiKey(){
       showApiKeyReveal(res.key);
     }
     await refreshApiKeys();
-  }catch(e){adminToast("Gagal: "+e.message,true);}
+  }catch(e){adminToast("Failed: "+e.message,true);}
   finally{btn.disabled=false;}
 }
 
@@ -1163,7 +1163,7 @@ function rotateApiKey(id,label){
       const res=await api("/api/api-keys/"+id+"/rotate",{method:"POST"});
       await refreshApiKeys();
       showApiKeyReveal(res.key);
-    }catch(e){adminToast("Gagal: "+e.message,true);}
+    }catch(e){adminToast("Failed: "+e.message,true);}
   });
 }
 
@@ -1173,7 +1173,7 @@ function deleteApiKey(id,label){
       await api("/api/api-keys/"+id,{method:"DELETE"});
       await refreshApiKeys();
       adminToast("API key deleted");
-    }catch(e){adminToast("Gagal: "+e.message,true);}
+    }catch(e){adminToast("Failed: "+e.message,true);}
   });
 }
 

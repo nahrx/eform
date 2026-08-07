@@ -1,6 +1,6 @@
 // cmd/seeder/main.go — CLI that loads region data from a CSV into the database.
 //
-// Penggunaan:
+// Usage:
 //
 //	go run ./cmd/seeder -file data/wilayah_indonesia.csv
 //
@@ -57,11 +57,11 @@ func main() {
 
 	rows, err := readCSV(*csvPath)
 	if err != nil {
-		log.Fatalf("baca CSV: %v", err)
+		log.Fatalf("read CSV: %v", err)
 	}
 	log.Printf("CSV read: %d rows found", len(rows))
 
-	// Urutkan berdasarkan panjang code: provinsi(2) → kabupaten/kota(4) → kecamatan(7) → desa(10+)
+	// Sort by code length: province(2) -> regency/city(4) -> district(7) -> village(10+)
 	// so the kode_parent foreign key always exists before its children are inserted.
 	sort.Slice(rows, func(i, j int) bool {
 		return len(rows[i].code) < len(rows[j].code)
@@ -85,14 +85,14 @@ func readCSV(path string) ([]wilayahRow, error) {
 
 	header, err := r.Read()
 	if err != nil {
-		return nil, fmt.Errorf("baca header: %w", err)
+		return nil, fmt.Errorf("read header: %w", err)
 	}
 	idx := map[string]int{}
 	for i, h := range header {
 		idx[strings.ToLower(strings.TrimSpace(h))] = i
 	}
 	colKode   := colIndex(idx, "kode_wilayah", 0)
-	colNama   := colIndex(idx, "nama_wilayah", 1)
+	colName   := colIndex(idx, "nama_wilayah", 1)
 	colLevel  := colIndex(idx, "level", 2)
 	colParent := colIndex(idx, "kode_parent", 3)
 
@@ -107,12 +107,12 @@ func readCSV(path string) ([]wilayahRow, error) {
 		if err != nil {
 			return nil, fmt.Errorf("row %d: %w", lineNum, err)
 		}
-		if len(rec) <= colKode || len(rec) <= colNama || len(rec) <= colLevel {
+		if len(rec) <= colKode || len(rec) <= colName || len(rec) <= colLevel {
 			log.Printf("[WARN] row %d skipped: incomplete columns", lineNum)
 			continue
 		}
 		code  := strings.TrimSpace(rec[colKode])
-		name  := strings.TrimSpace(rec[colNama])
+		name  := strings.TrimSpace(rec[colName])
 		level := strings.TrimSpace(rec[colLevel])
 		if code == "" || name == "" || level == "" {
 			continue

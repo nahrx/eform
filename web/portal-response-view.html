@@ -583,8 +583,8 @@ function toggleNav(open){
   const btn=document.getElementById("btnMenu");
   if(btn)btn.setAttribute("aria-expanded",open?"true":"false");
   if(open){
-    const aktif=sb.querySelector(".pg-item.active")||sb.querySelector(".pg-item");
-    if(aktif)aktif.scrollIntoView({block:"nearest"});
+    const activeItem=sb.querySelector(".pg-item.active")||sb.querySelector(".pg-item");
+    if(activeItem)activeItem.scrollIntoView({block:"nearest"});
   }else if(btn&&!btn.hidden){
     btn.focus({preventScroll:true});
   }
@@ -842,7 +842,7 @@ function renderEditField(c,answers,rp){
   // Calculated — read-only
   if(c.type==="calculated"){
     const d=val==null||val===""?"—":esc(String(val));
-    return`<div class="ed-field"><div class="ed-label">${label} <span style="font-size:10px;color:var(--muted)">(dihitung otomatis)</span></div>${desc}<div class="rv-answer">${d}</div></div>`;
+    return`<div class="ed-field"><div class="ed-label">${label} <span style="font-size:10px;color:var(--muted)">(calculated automatically)</span></div>${desc}<div class="rv-answer">${d}</div></div>`;
   }
 
   // Photo / File / Signature — read-only preview while editing

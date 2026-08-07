@@ -278,7 +278,7 @@ function renderFieldFilters() {
   });
 }
 
-/* ---- ringkasan filter aktif ---- */
+/* ---- active filter summary ---- */
 
 // labelForValue turns a filter value into human-readable text — region code "6472"
 // becomes "SAMARINDA" — by consulting the options already fetched.
@@ -327,7 +327,7 @@ function updateFilterUI() {
   applyFilterSummary(parts);
 }
 
-/* ---- header tabel ---- */
+/* ---- table header ---- */
 
 // responsive-tables.js uses data-label as the column label when the table turns into
 // cards on phones — without it the sort icon (↕) would end up in the label.

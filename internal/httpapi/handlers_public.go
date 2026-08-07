@@ -146,7 +146,7 @@ func (s *Server) checkAccess(w http.ResponseWriter, r *http.Request) {
 
 // POST /api/public/forms/{token}/responses — submit or save a draft response.
 // Body: {answers, draft?: bool, responseId?: string}
-// Memerlukan JWT respondent (login Google).
+// Requires a respondent JWT (Google login).
 func (s *Server) publicSubmit(w http.ResponseWriter, r *http.Request) {
 	sh, ok := s.resolveShare(w, r)
 	if !ok {
@@ -220,15 +220,15 @@ func (s *Server) publicSubmit(w http.ResponseWriter, r *http.Request) {
 			resp, err = s.st.CreateMultiResponseRow(r.Context(), sh.FormID, &sid, rc.RespondentID, status, in.Answers, metaJSON)
 		}
 	} else if in.ResponseID != "" {
-		// Single-response: re-completing a response that was previously unsubmitted
-		// was unsubmitted (status 'draft') back to 'submitted'.
+		// Single-response: putting a response that was previously unsubmitted
+		// (status 'draft') back to 'submitted'.
 		resp, err = s.st.UpdateMultiResponseDraft(r.Context(), in.ResponseID, rc.RespondentID, sh.FormID, "submitted", in.Answers, metaJSON)
 		if errors.Is(err, store.ErrNotFound) {
 			writeErr(w, http.StatusNotFound, "response not found or does not belong to you")
 			return
 		}
 	} else {
-		// Single-response: upsert (satu respons per respondent)
+		// Single-response: upsert (one response per respondent)
 		resp, err = s.st.UpsertResponse(r.Context(), sh.FormID, &sid, rc.RespondentID, in.Answers, metaJSON)
 	}
 	if err != nil {
@@ -397,7 +397,7 @@ func ensurePublicHost(host string) error {
 // sources (optionsApi in the form schema) that point at an external API.
 // It exists so the browser never needs connect-src straight to a third-party domain
 // (which varies with whatever the form author configured), and at the same time keeps
-// mencegah token internal (Authorization admin/viewer/editor) ikut terkirim
+// stops an internal token (an admin/viewer/editor Authorization header) being forwarded
 // to a third-party server. This endpoint requires no authentication because it
 // only forwards a GET request to a URL already fixed in the schema.
 func (s *Server) optionsProxy(w http.ResponseWriter, r *http.Request) {

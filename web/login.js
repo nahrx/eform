@@ -24,7 +24,7 @@
     try{
       const r=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username,password})});
       const data=await r.json();
-      if(!r.ok) throw new Error(data.error||"Gagal masuk");
+      if(!r.ok) throw new Error(data.error||"Sign-in failed");
       localStorage.setItem("eform_token",data.token);
       localStorage.setItem("eform_user",JSON.stringify(data.user));
       redirectByRole(data.user);

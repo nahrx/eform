@@ -1,14 +1,14 @@
 # ============================================================
 # eForm BPS Kalimantan Timur — Docker Compose
 # ============================================================
-# Penggunaan:
-#   1. Salin .env.example ke .env, lalu sesuaikan nilainya.
+# Usage:
+#   1. Copy .env.example to .env and adjust the values.
 #   2. docker compose up -d
 #
-# Urutan startup otomatis:
-#   db  →  app (migrasi + seed superadmin)  →  seeder (data wilayah)
+# Automatic startup order:
+#   db  ->  app (migrations + superadmin seed)  ->  seeder (region data)
 #
-# Memerlukan Docker Compose v2 (perintah: docker compose).
+# Requires Docker Compose v2 (command: docker compose).
 # ============================================================
 
 services:
@@ -38,14 +38,14 @@ services:
       - eform_net
 
   # ----------------------------------------------------------
-  # Aplikasi utama
-  # Migrasi skema & seed superadmin dijalankan otomatis saat startup.
+  # Main application
+  # Schema migrations and the superadmin seed run automatically at startup.
   # ----------------------------------------------------------
   app:
     build:
       context: .
       dockerfile: Dockerfile
-    image: eform-backend:latest # diberi nama agar di-reuse oleh service seeder
+    image: eform-backend:latest # named so the seeder service can reuse it
     container_name: eform_app
     restart: unless-stopped
     depends_on:
@@ -60,8 +60,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-eform}
       POSTGRES_SSLMODE: disable
 
-      # JWT — WAJIB diganti di produksi (string panjang acak)
-      JWT_SECRET: ${JWT_SECRET:-GANTI_DI_PRODUKSI_PAKAI_STRING_PANJANG_ACAK}
+      # JWT — MUST be replaced in production (a long random string)
+      JWT_SECRET: ${JWT_SECRET:-REPLACE_IN_PRODUCTION_WITH_A_LONG_RANDOM_STRING}
       JWT_TTL_HOURS: ${JWT_TTL_HOURS:-24}
 
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
@@ -69,16 +69,16 @@ services:
       WEB_DIR: /app/web
       PUBLIC_DIR: /app/public
 
-      # Identitas instansi yang tampil di halaman
+      # Organisation identity shown on the pages
       ORGANISATION_NAME: ${ORGANISATION_NAME:-BPS Provinsi Kalimantan Timur}
       ORGANISATION_NICKNAME: ${ORGANISATION_NICKNAME:-BPS Kaltim}
 
-      # Superadmin awal (hanya dibuat jika tabel users masih kosong)
+      # Initial superadmin (created only while the users table is empty)
       SUPERADMIN_USERNAME: ${SUPERADMIN_USERNAME:-admin}
       SUPERADMIN_EMAIL: ${SUPERADMIN_EMAIL:-admin@bps.go.id}
       SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD:-admin12345}
 
-      # Google OAuth (opsional — kosongkan jika tidak dipakai)
+      # Google OAuth (optional — leave empty if unused)
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GOOGLE_REDIRECT_URL: ${GOOGLE_REDIRECT_URL:-}
@@ -96,14 +96,14 @@ services:
       - eform_net
 
   # ----------------------------------------------------------
-  # Seeder data wilayah Indonesia
-  # Dijalankan sekali setelah app sehat (migrasi sudah selesai).
-  # Idempoten: aman dijalankan ulang, tidak menduplikasi data.
+  # Seeder for the Indonesian region data (wilayah).
+  # Runs once, after the app is healthy and migrations have finished.
+  # Idempotent: safe to run again, it does not duplicate rows.
   # ----------------------------------------------------------
   seeder:
-    image: eform-backend:latest # reuse image yang sama, tidak build ulang
+    image: eform-backend:latest # reuse the same image, no rebuild
     container_name: eform_seeder
-    restart: "no" # cukup satu kali; restart manual jika perlu
+    restart: "no" # once is enough; restart by hand if needed
     depends_on:
       app:
         condition: service_healthy

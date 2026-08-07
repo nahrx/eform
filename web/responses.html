@@ -57,7 +57,7 @@ input,select{font-family:inherit}
 .ff-input:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
 .ff-input::placeholder{color:var(--muted)}
 
-/* tabel area */
+/* table area */
 .tbl-outer{flex:1;overflow:auto;padding:18px 20px}
 .tbl-wrap{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:auto}
 table.resp-tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:600px}
@@ -238,7 +238,7 @@ const COL_KEY="eform_cols_"+FORM_ID;
 let SEL_COLS=[], ALL_FIELDS=[], SHARE_MAP={};
 
 // state filter & sort
-let SORT_BY="waktu", SORT_DIR="desc";
+let SORT_BY="time", SORT_DIR="desc";
 let FILTER_STATUS="", FILTER_SHARE="", FILTER_SEARCH="";
 let FIELD_FILTERS={};       // fieldName → text value (ILIKE)
 let FIELD_EXACT_FILTERS={}; // fieldName → exact value (=, for dropdown/radio/date)
@@ -317,13 +317,13 @@ async function loadStranded(){
   if(!d.devices)return;
   const basi=(d.reports||[]).filter(r=>Date.now()-new Date(r.reportedAt).getTime()>STRANDED_STALE_MS).length;
   bar.classList.toggle("severe",d.failed>0||basi>0);
-  const bagian=[];
-  if(d.pending>0)bagian.push(`${d.pending} waiting to be sent`);
-  if(d.failed>0)bagian.push(`${d.failed} rejected`);
+  const parts=[];
+  if(d.pending>0)parts.push(`${d.pending} waiting to be sent`);
+  if(d.failed>0)parts.push(`${d.failed} rejected`);
   document.getElementById("strandedHead").textContent=
     `${d.devices} device${d.devices===1?"":"s"} still holding answers that never reached the server`;
   document.getElementById("strandedSub").textContent=
-    bagian.join(" · ")+(basi?` · ${basi} device${basi===1?"":"s"} has not reported in over 3 days`:"");
+    parts.join(" · ")+(basi?` · ${basi} device${basi===1?"":"s"} has not reported in over 3 days`:"");
   document.getElementById("btnStranded").onclick=openStrandedDialog;
 }
 function strandedAge(ms){
@@ -334,7 +334,7 @@ function strandedAge(ms){
 }
 function openStrandedDialog(){
   if(!STRANDED)return;
-  const baris=(STRANDED.reports||[]).map(r=>{
+  const rows=(STRANDED.reports||[]).map(r=>{
     const dilaporkan=new Date(r.reportedAt).getTime();
     const basi=Date.now()-dilaporkan>STRANDED_STALE_MS;
     const sebab=(r.items||[]).filter(i=>i.error).slice(0,3)
@@ -358,7 +358,7 @@ function openStrandedDialog(){
       A device that has not reported recently has stopped talking to the server entirely — usually an expired sign-in — so its backlog cannot be assumed cleared.</p>
     <table class="stranded-tbl">
       <thead><tr><th>User</th><th>Backlog</th><th>Oldest item</th><th>Last reported</th></tr></thead>
-      <tbody>${baris||`<tr><td colspan="4">Nothing stranded.</td></tr>`}</tbody>
+      <tbody>${rows||`<tr><td colspan="4">Nothing stranded.</td></tr>`}</tbody>
     </table>
     <div style="display:flex;justify-content:flex-end;margin-top:16px">
       <button class="btn primary" id="strandedClose">Close</button>
@@ -479,7 +479,7 @@ function resetFilters(){
 /* ---- sort ---- */
 function toggleSort(col){
   if(SORT_BY===col)SORT_DIR=SORT_DIR==="asc"?"desc":"asc";
-  else{SORT_BY=col;SORT_DIR=col==="waktu"?"desc":"asc";}
+  else{SORT_BY=col;SORT_DIR=col==="time"?"desc":"asc";}
   loadPage(0);
 }
 
@@ -583,7 +583,7 @@ document.getElementById("btnColReset")?.addEventListener("click",()=>{
   loadPage(0);
 });
 
-/* ---- render tabel ---- */
+/* ---- table rendering ---- */
 // responsive-tables.js uses data-label as the column label when the table turns into
 // cards on phones — without it the sort icon (↕) would end up in the label.
 
@@ -609,7 +609,7 @@ function renderTable(){
     ${sortTh("status","Status","td-status")}
     ${sortTh("share","Share","td-share")}
     ${sortTh("who","Respondent","td-who")}
-    ${sortTh("waktu","Time","td-time")}
+    ${sortTh("time","Time","td-time")}
     ${extraTh}
     <th class="td-act">Aksi</th>
   </tr></thead><tbody>`;

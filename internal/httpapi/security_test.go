@@ -81,7 +81,7 @@ func TestParseResponseFilter(t *testing.T) {
 			"f_name":       {"bud"},
 			"fe_kabupaten": {"6472"},
 			"fea_kategori": {"a,b"},
-			"sortBy":       {"waktu"},
+			"sortBy":       {"time"},
 			"sortDir":      {"asc"},
 		}
 		f := parseResponseFilter(q)
@@ -113,7 +113,7 @@ func TestParseResponseFilter(t *testing.T) {
 		// A query string must not be usable to build a gigantic WHERE clause.
 		q := url.Values{}
 		for i := 0; i < 40; i++ {
-			q.Set("f_kolom"+string(rune('a'+i%26))+string(rune('0'+i/26)), "x")
+			q.Set("f_col"+string(rune('a'+i%26))+string(rune('0'+i/26)), "x")
 		}
 		f := parseResponseFilter(q)
 		if len(f.FieldFilters) > 10 {
@@ -174,7 +174,7 @@ func TestClientIPWithTrustedProxy(t *testing.T) {
 		}
 	})
 
-	t.Run("rantai proxy: ambil klien sebenarnya", func(t *testing.T) {
+	t.Run("proxy chain: pick the real client", func(t *testing.T) {
 		r := httptest.NewRequest("GET", "/", nil)
 		r.RemoteAddr = "10.0.0.5:1234"
 		// The client writes "9.9.9.9" itself to spoof; the proxy appends the real IP

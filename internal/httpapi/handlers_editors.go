@@ -90,7 +90,7 @@ func (s *Server) exportEditorPermissionsCSV(w http.ResponseWriter, r *http.Reque
 	cw.Flush()
 }
 
-// getEditorPermission mengambil detail satu permission editor.
+// getEditorPermission fetches the details of a single editor permission.
 func (s *Server) getEditorPermission(w http.ResponseWriter, r *http.Request) {
 	p, err := s.st.GetEditorPermissionByID(r.Context(), r.PathValue("permId"))
 	if errors.Is(err, store.ErrNotFound) {

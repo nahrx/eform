@@ -5,11 +5,11 @@ FROM golang:1.23-alpine AS builder
 
 WORKDIR /src
 
-# Download dependencies (layer di-cache selama go.mod/go.sum tidak berubah)
+# Download dependencies (this layer stays cached while go.mod/go.sum are unchanged)
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy seluruh source
+# Copy the whole source tree
 COPY . .
 
 # Compile dua binary: server utama + seeder wilayah
@@ -21,21 +21,21 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/eform-seeder ./cm
 # ============================================================
 FROM alpine:3.20
 
-# ca-certificates  : diperlukan untuk HTTPS keluar (OAuth Google, dll.)
-# tzdata           : zona waktu (Asia/Makassar, dll.)
-# wget             : dipakai healthcheck di Docker Compose
+# ca-certificates  : needed for outbound HTTPS (Google OAuth and so on)
+# tzdata           : time zones (Asia/Makassar and so on)
+# wget             : used by the Docker Compose healthcheck
 RUN apk add --no-cache ca-certificates tzdata wget
 
 WORKDIR /app
 
-# Binary dari stage build
+# Binaries from the build stage
 COPY --from=builder /bin/eform-backend /bin/eform-seeder ./
 
-# Aset statis (halaman web + landing page)
+# Static assets (web pages + landing page)
 COPY web/    ./web/
 COPY public/ ./public/
 
-# Data wilayah untuk seeder
+# Region data for the seeder
 COPY data/   ./data/
 
 EXPOSE 8080

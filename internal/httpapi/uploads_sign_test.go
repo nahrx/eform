@@ -61,8 +61,8 @@ func TestVerifyRejectsForgedSignatures(t *testing.T) {
 func TestSignatureIsBoundToOnePath(t *testing.T) {
 	// A signature for one file must not open a different file.
 	s := testServer()
-	a := "/uploads/2026/06/25/abc/rahasia-a.jpg"
-	b := "/uploads/2026/06/25/abc/rahasia-b.jpg"
+	a := "/uploads/2026/06/25/abc/secret-a.jpg"
+	b := "/uploads/2026/06/25/abc/secret-b.jpg"
 
 	u, _ := url.Parse(s.signUploadURL(a))
 	if s.verifyUploadURL(b, u.Query()) {
@@ -88,7 +88,7 @@ func TestSignAnswerUploadsWalksNestedStructures(t *testing.T) {
 		"name":"Budi",
 		"files":["/uploads/a/c.pdf","not-a-path"],
 		"nested":{"ktp":"/uploads/a/d.png"},
-		"link":"https://contoh.id/gambar.jpg"
+		"link":"https://example.test/image.jpg"
 	}`)
 	out := s.signAnswerUploads(raw)
 
@@ -110,7 +110,7 @@ func TestSignAnswerUploadsWalksNestedStructures(t *testing.T) {
 	if m["name"] != "Budi" {
 		t.Error("ordinary answers must not change")
 	}
-	if m["link"] != "https://contoh.id/gambar.jpg" {
+	if m["link"] != "https://example.test/image.jpg" {
 		t.Error("external URLs must not be signed")
 	}
 }

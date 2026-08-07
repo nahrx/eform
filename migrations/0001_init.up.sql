@@ -35,8 +35,8 @@ CREATE TABLE IF NOT EXISTS form_shares (
     label           TEXT NOT NULL DEFAULT '',
     is_active       BOOLEAN NOT NULL DEFAULT TRUE,
     allow_responses BOOLEAN NOT NULL DEFAULT TRUE,
-    password_hash   TEXT,                 -- opsional: proteksi password
-    expires_at      TIMESTAMPTZ,          -- opsional: kedaluwarsa
+    password_hash   TEXT,                 -- optional: password protection
+    expires_at      TIMESTAMPTZ,          -- optional: expiry
     view_count      BIGINT NOT NULL DEFAULT 0,
     created_by      UUID REFERENCES users(id) ON DELETE SET NULL,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()

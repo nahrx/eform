@@ -448,7 +448,7 @@ func splitFilterValues(raw string) []string {
 	return out
 }
 
-// applyRangeFilter menangani parameter "fer_<field>_min"/"fer_<field>_max" (filter rentang
+// applyRangeFilter handles the "fer_<field>_min"/"fer_<field>_max" parameters (range filter
 // numeric, for number/integer/decimal/currency/range/rating fields). Returns true when the
 // key matches this pattern (whether or not the value is used, it counts as "already handled").
 func applyRangeFilter(f *store.ResponseFilter, key, val string) bool {
@@ -685,7 +685,7 @@ func parseResponseFilter(q url.Values) store.ResponseFilter {
 		SortDir: q.Get("sortDir"),
 	}
 	// Each filter kind is capped at 10 entries so the query string cannot be used
-	// menyusun WHERE raksasa.
+	// building one enormous WHERE clause.
 	const maxPerKind = 10
 	for key, vals := range q {
 		if len(vals) == 0 {

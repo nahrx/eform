@@ -72,7 +72,7 @@ func TestXLSXStructureIsValid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("not a valid zip: %v", err)
 	}
-	wajib := map[string]bool{
+	required := map[string]bool{
 		"[Content_Types].xml":        false,
 		"_rels/.rels":                false,
 		"xl/workbook.xml":            false,
@@ -80,8 +80,8 @@ func TestXLSXStructureIsValid(t *testing.T) {
 		"xl/worksheets/sheet1.xml":   false,
 	}
 	for _, f := range zr.File {
-		if _, ada := wajib[f.Name]; ada {
-			wajib[f.Name] = true
+		if _, ok := required[f.Name]; ok {
+			required[f.Name] = true
 		}
 		rc, err := f.Open()
 		if err != nil {
@@ -113,8 +113,8 @@ func TestXLSXStructureIsValid(t *testing.T) {
 			}
 		}
 	}
-	for name, ada := range wajib {
-		if !ada {
+	for name, ok := range required {
+		if !ok {
 			t.Errorf("required part missing: %s", name)
 		}
 	}

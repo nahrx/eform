@@ -16,7 +16,7 @@ func TestValidatePassword(t *testing.T) {
 	}{
 		{"long & unguessable", "kopi-tubruk-pagi", "admin64", "admin@bps.go.id", true},
 		{"tepat batas minimum", strings.Repeat("x", MinPasswordLen) + "y", "admin64", "", true},
-		{"too short", "rahasia9", "admin64", "", false},
+		{"too short", "secret99", "admin64", "", false},
 		{"common password", "password123", "admin64", "", false},
 		{"contains the username", "admin64hebat", "admin64", "", false},
 		{"contains part of the email", "budi-sekali-kuat", "u1", "budi@bps.go.id", false},

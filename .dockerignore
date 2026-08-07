@@ -2,7 +2,7 @@
 .git
 .gitignore
 
-# Env file (dikirim lewat docker-compose environment, bukan file)
+# Env file (passed through docker-compose environment, not as a file)
 .env
 
 # Build artifacts

@@ -145,7 +145,7 @@ const H={"Authorization":"Bearer "+TOKEN,"Content-Type":"application/json"};
 let SCHEMA=null, PERM=null, RESPONSES=[], TOTAL=0, PAGE=0;
 const PAGE_SIZE=50;
 let SEL_COLS=[], ALL_FIELDS=[];
-let SORT_BY="waktu", SORT_DIR="desc";
+let SORT_BY="time", SORT_DIR="desc";
 let FILTER_SEARCH="", FILTER_STATUS="";
 let FIELD_FILTERS={}, FIELD_EXACT_FILTERS={}, FIELD_ANY_FILTERS={}, FIELD_RANGE_FILTERS={};
 const NUMER_TYPES=new Set(["number","integer","decimal","currency","range","rating"]);
@@ -268,7 +268,7 @@ function onFieldMultiSelect(el){
 
 function toggleSort(col){
   if(SORT_BY===col)SORT_DIR=SORT_DIR==="asc"?"desc":"asc";
-  else{SORT_BY=col;SORT_DIR=col==="waktu"?"desc":"asc";}
+  else{SORT_BY=col;SORT_DIR=col==="time"?"desc":"asc";}
   loadPage(0);
 }
 
@@ -348,7 +348,7 @@ function renderTable(){
     <th class="td-num">#</th>
     ${sortTh("status","Status","td-status")}
     ${sortTh("who","Respondent","td-who")}
-    ${sortTh("waktu","Time","td-time")}
+    ${sortTh("time","Time","td-time")}
     ${extraTh}
     <th></th>
   </tr></thead><tbody>`;

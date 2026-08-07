@@ -49,7 +49,7 @@
     chips.innerHTML = parts.map(p => `<span class="filter-chip">${p}</span>`).join("");
   };
 
-  /* ---- dropdown pilihan format ekspor ---- */
+  /* ---- export format dropdown ---- */
 
   // The Export button replaces two separate buttons (CSV & Excel) to keep the top bar
   // from filling up, especially on phones. The page supplies downloadExport(ext); this

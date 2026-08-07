@@ -308,7 +308,7 @@ async function saveAdminUser(id){
     if(u){u.username=username;u.email=email;u.role=role;}
     document.getElementById("uedit-"+id)?.remove();
     _renderUsersTab();
-  }catch(e){if(msg)msg.textContent="Gagal: "+e.message;}
+  }catch(e){if(msg)msg.textContent="Failed: "+e.message;}
 }
 
 async function deleteAdminUser(id,name){
@@ -317,7 +317,7 @@ async function deleteAdminUser(id,name){
     try{
       await api("/api/users/"+id,{method:"DELETE"});
       await loadUsers();
-    }catch(e){adminToast("Gagal: "+e.message,true);}
+    }catch(e){adminToast("Failed: "+e.message,true);}
   });
 }
 
@@ -354,7 +354,7 @@ async function createUserFromPanel(){
     if($("#uRole")) $("#uRole").value="admin";
     await loadUsers();
   }catch(e){
-    if(msg) msg.textContent="Gagal: "+e.message;
+    if(msg) msg.textContent="Failed: "+e.message;
   }finally{
     if(btn){btn.disabled=false;btn.textContent="+ Create User";}
   }

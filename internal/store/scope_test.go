@@ -39,7 +39,7 @@ func TestMaskAnswers(t *testing.T) {
 	})
 
 	t.Run("a requested but absent column produces nothing", func(t *testing.T) {
-		got := maskAnswers(raw, []string{"tidak_ada"})
+		got := maskAnswers(raw, []string{"no_such_field"})
 		var m map[string]any
 		_ = json.Unmarshal(got, &m)
 		if len(m) != 0 {
@@ -84,13 +84,13 @@ func TestResponseScopeClauses(t *testing.T) {
 		// that nothing is returned — not that everything is.
 		sc := ResponseScope{
 			FormID: "f1", RespondentAccess: "selected",
-			PermissionID: "p1", AllowedTable: "tabel_ngawur",
+			PermissionID: "p1", AllowedTable: "bogus_table",
 		}
 		clause, _ := sc.clauses(nil)
 		if !strings.Contains(clause, "false") {
 			t.Fatalf("an unknown table must deny outright, got %q", clause)
 		}
-		if strings.Contains(clause, "tabel_ngawur") {
+		if strings.Contains(clause, "bogus_table") {
 			t.Error("an unknown table name must never reach the SQL")
 		}
 	})

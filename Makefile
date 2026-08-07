@@ -1,5 +1,5 @@
 # eForm Backend — Makefile
-# Pakai: make <target>. Env dibaca dari shell / .env (lihat .env.example).
+# Usage: make <target>. Environment comes from the shell or .env (see .env.example).
 
 APP      := eform-backend
 BIN      := bin/$(APP)
@@ -9,7 +9,7 @@ PG_USER  ?= postgres
 
 .PHONY: help tidy build run dev vet test clean db-create db-drop dl-deps seed db-backup db-restore
 
-help: ## Tampilkan daftar target
+help: ## List the available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
 	  awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
 
@@ -21,35 +21,35 @@ build: ## Compile ke bin/
 	go build -o $(BIN) .
 	@echo "→ $(BIN)"
 
-run: build ## Build lalu jalankan
+run: build ## Build, then run
 	./$(BIN)
 
-dev: ## Jalankan tanpa build artifact (go run)
+dev: ## Run without producing a build artifact (go run)
 	go run .
 
 vet: ## go vet
 	go vet $(PKG)
 
-test: ## Jalankan unit test (jika ada)
+test: ## Run the unit tests
 	go test $(PKG)
 
-clean: ## Hapus artifact
+clean: ## Remove build artifacts
 	rm -rf bin
 
-db-create: ## Buat database lokal ($(DB_NAME))
+db-create: ## Create the local database ($(DB_NAME))
 	createdb -U $(PG_USER) $(DB_NAME) || true
 
-db-drop: ## Hapus database lokal ($(DB_NAME)) — HATI-HATI
+db-drop: ## Drop the local database ($(DB_NAME)) — DESTRUCTIVE
 	dropdb -U $(PG_USER) $(DB_NAME) || true
 
-seed: ## Seed data wilayah dari data/wilayah_indonesia.csv ke database
+seed: ## Load the region data from data/wilayah_indonesia.csv into the database
 	go run ./cmd/seeder -file data/wilayah_indonesia.csv
 
 db-backup: ## Backup database ke backups/eform-YYYYmmdd-HHMMSS.dump (format custom, terkompresi)
 	@mkdir -p backups
 	@set -a; [ -f .env ] && . ./.env; set +a; 	 f=backups/eform-$$(date +%Y%m%d-%H%M%S).dump; 	 PGPASSWORD="$$POSTGRES_PASSWORD" pg_dump 	   -h "$${POSTGRES_HOST:-localhost}" -p "$${POSTGRES_PORT:-5432}" 	   -U "$${POSTGRES_USER:-postgres}" -d "$${POSTGRES_DB:-eform}" 	   --format=custom --no-owner --no-privileges -f "$$f"; 	 echo "-> $$f ($$(du -h "$$f" | cut -f1))"
 
-db-restore: ## Pulihkan dari backup: make db-restore FILE=backups/xxx.dump — MENIMPA data yang ada
-	@[ -n "$(FILE)" ] || { echo "Pakai: make db-restore FILE=backups/eform-....dump"; exit 1; }
+db-restore: ## Restore from a backup: make db-restore FILE=backups/xxx.dump — OVERWRITES existing data
+	@[ -n "$(FILE)" ] || { echo "Usage: make db-restore FILE=backups/eform-....dump"; exit 1; }
 	@set -a; [ -f .env ] && . ./.env; set +a; 	 PGPASSWORD="$$POSTGRES_PASSWORD" pg_restore 	   -h "$${POSTGRES_HOST:-localhost}" -p "$${POSTGRES_PORT:-5432}" 	   -U "$${POSTGRES_USER:-postgres}" -d "$${POSTGRES_DB:-eform}" 	   --clean --if-exists --no-owner --no-privileges "$(FILE)"
-	@echo "pulih dari $(FILE)"
+	@echo "restored from $(FILE)"

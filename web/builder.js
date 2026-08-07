@@ -21,7 +21,7 @@ const Expr=(function(){
     const t=[];let i=0;const n=src.length;const id=c=>/[A-Za-z0-9_]/.test(c);
     while(i<n){let c=src[i];
       if(c===" "||c==="\t"||c==="\n"||c==="\r"){i++;continue;}
-      if(c==="$"&&src[i+1]==="{"){let j=i+2,s="";while(j<n&&src[j]!=="}")s+=src[j++];if(src[j]!=="}")throw new Error("${ } tidak ditutup");i=j+1;t.push({t:"ref",v:s.trim()});continue;}
+      if(c==="$"&&src[i+1]==="{"){let j=i+2,s="";while(j<n&&src[j]!=="}")s+=src[j++];if(src[j]!=="}")throw new Error("${ } was never closed");i=j+1;t.push({t:"ref",v:s.trim()});continue;}
       if(c==="'"||c==='"'){const q=c;let j=i+1,s="";while(j<n&&src[j]!==q){if(src[j]==="\\"){s+=src[j+1];j+=2;}else s+=src[j++];}if(src[j]!==q)throw new Error("unterminated string");i=j+1;t.push({t:"str",v:s});continue;}
       if((c>="0"&&c<="9")||(c==="."&&src[i+1]>="0"&&src[i+1]<="9")){let j=i,s="";while(j<n&&((src[j]>="0"&&src[j]<="9")||src[j]===".")){s+=src[j++];}i=j;t.push({t:"num",v:parseFloat(s)});continue;}
       if(/[A-Za-z_]/.test(c)){let j=i,s="";while(j<n&&id(src[j]))s+=src[j++];i=j;
@@ -291,7 +291,7 @@ function renderCanvas(){
 
 function nodeHead(node,kind,placeholder){
   const h=document.createElement("div"); h.className="node-head";
-  h.innerHTML=`<span class="tag ${kind}">${kind}</span><input class="ti" value="${esc(node.title||"")}" placeholder="${esc(placeholder||"judul "+kind+" (optional)")}">
+  h.innerHTML=`<span class="tag ${kind}">${kind}</span><input class="ti" value="${esc(node.title||"")}" placeholder="${esc(placeholder||kind+" title (optional)")}">
     <button class="icon-btn" data-a="sel" title="Settings">⚙</button><button class="icon-btn danger" data-a="del" title="Delete">🗑</button>`;
   h.querySelector(".ti").addEventListener("input",e=>{node.title=e.target.value;runValidation();renderPages();});
   h.querySelector('[data-a="sel"]').addEventListener("click",e=>{e.stopPropagation();select(node.uid,e.ctrlKey||e.metaKey||e.shiftKey);});
@@ -469,7 +469,7 @@ function renderInspector(){
       </div>
       <button class="btn" id="dupAllBtn" style="width:100%;margin-bottom:8px">⧉ Duplicate all (${selectedSet.size})</button>
       <button class="btn danger" id="delAllBtn" style="width:100%;margin-bottom:8px">🗑 Delete all (${selectedSet.size})</button>
-      <button class="btn ghost" id="clearSelBtn" style="width:100%">Batalkan pilihan</button>
+      <button class="btn ghost" id="clearSelBtn" style="width:100%">Cancel selection</button>
     </div>`;
     pane.querySelector("#dupAllBtn").addEventListener("click",()=>duplicateSelected());
     pane.querySelector("#delAllBtn").addEventListener("click",()=>{if(confirm(`Delete the ${selectedSet.size} selected items?`)){[...selectedSet].forEach(uid=>removeNode(uid));selected=null;selectedSet=new Set();render();}});
@@ -516,7 +516,7 @@ function rosterForm(n){
   const dispBlock = `<div class="group"><div class="gh">Fields shown in the row list</div>${childFields.length?childFields.map(f=>`<label class="check"><input type="checkbox" data-rowdisp="${esc(f.name)}" ${(n.rowDisplay||[]).includes(f.name)?"checked":""}> ${esc(f.label||f.name)}</label>`).join(""):`<div class="help" style="margin-left:0">Add a field to the roster first.</div>`}<div class="help" style="margin-left:0;margin-top:6px">For subpage rosters: this field's value becomes each row's summary on the main page.</div></div>`;
   const rowDefaultEditor=(n.rosterType==="separate")
     ? (minRows>0
-      ? `<div class="group"><div class="gh">Default row value (auto-fills the first field)</div>${Array.from({length:minRows},(_,i)=>`<div class="field"><label>Baris ${i+1}</label><input class="ctrl" data-rowdefault-index="${i}" value="${esc((rowDefaultLines[i]||"").trim())}" placeholder="Contoh: Usaha ${i+1}"></div>`).join("")}<div class="help" style="margin-left:0">This value is prefilled into the first field of every row created by Min rows. It never overwrites a value you changed by hand.</div></div>`
+      ? `<div class="group"><div class="gh">Default row value (auto-fills the first field)</div>${Array.from({length:minRows},(_,i)=>`<div class="field"><label>Row ${i+1}</label><input class="ctrl" data-rowdefault-index="${i}" value="${esc((rowDefaultLines[i]||"").trim())}" placeholder="Example: Business ${i+1}"></div>`).join("")}<div class="help" style="margin-left:0">This value is prefilled into the first field of every row created by Min rows. It never overwrites a value you changed by hand.</div></div>`
       : `<div class="group"><div class="gh">Default row value</div><div class="help" style="margin-left:0;margin-bottom:6px">Set Min rows first so the per-row editor appears. You can also fill it quickly using one value per line.</div><textarea class="ctrl" data-k="rowDefaults" rows="4" placeholder="Usaha Budi&#10;Usaha Rudi&#10;Usaha Dudi">${esc(n.rowDefaults||"")}</textarea></div>`)
     : "";
   return `${headBar("roster",n.name)}
@@ -527,9 +527,9 @@ function rosterForm(n){
   <div class="field"><label>Roster title (optional)</label><input class="ctrl" data-k="title" value="${esc(n.title||"")}"></div>
   <div class="field"><label>Roster row title <span class="help">e.g. "Business" — used in the add-row button &amp; popup</span></label><input class="ctrl" data-k="rowTitle" placeholder="Usaha" value="${esc(n.rowTitle||"")}"></div>
   <div class="row2"><div class="field"><label>Min rows</label><input class="ctrl" type="number" step="1" min="0" inputmode="numeric" data-k="min" value="${esc(n.min??"")}"></div><div class="field"><label>Max rows</label><input class="ctrl" type="number" step="1" min="0" inputmode="numeric" data-k="max" value="${esc(n.max??"")}"></div></div>
-  <div class="field"><label>Row count from field (countFrom) <span class="help">automatically generates rows; kosongkan untuk pakai tombol "+ Add ${n.rowTitle?esc(n.rowTitle):"baris"}" with a popup</span></label><input class="ctrl mono" data-k="countFrom" value="${esc(n.countFrom||"")}"></div>
+  <div class="field"><label>Row count from field (countFrom) <span class="help">automatically generates rows; leave empty to use the "+ Add ${n.rowTitle?esc(n.rowTitle):"row"}" button with a popup</span></label><input class="ctrl mono" data-k="countFrom" value="${esc(n.countFrom||"")}"></div>
   <div class="field"><label class="chk"><input type="checkbox" data-k="requiredRows" ${n.requiredRows?"checked":""}> At least one row must be added (minimum 1 row)</label></div>
-  <div class="field"><label>Per-row label (itemLabel)</label><input class="ctrl" data-k="itemLabel" placeholder="Usaha {{index}}: \${nama}" value="${esc(n.itemLabel||"")}"></div>
+  <div class="field"><label>Per-row label (itemLabel)</label><input class="ctrl" data-k="itemLabel" placeholder="Item {{index}}: \${nama}" value="${esc(n.itemLabel||"")}"></div>
   ${rowDefaultEditor}
   ${dispBlock}
   <div class="field"><label>Visible when</label><textarea class="ctrl" data-k="visibleWhen">${esc(n.visibleWhen||"")}</textarea></div>
@@ -540,7 +540,7 @@ function fieldForm(c){const t=c.type;let html=headBar(t,c.name);
   if(t!=="note")html+=`<div class="field"><label>Question label</label><input class="ctrl" data-k="label" value="${esc(c.label||"")}"></div>`;
   html+=`<div class="field"><label>Hint</label><input class="ctrl" data-k="hint" value="${esc(c.hint||"")}"></div>`;
   if(t==="note")html+=`<div class="field"><label>HTML content</label><textarea class="ctrl" data-k="html" rows="3">${esc(c.html||"")}</textarea></div>`;
-  if(t==="markdown")html+=`<div class="field"><label>Description (Markdown)</label><textarea class="ctrl" data-k="markdown" rows="6" placeholder="# Filling instructions&#10;&#10;Answer according to **actual conditions**. See:&#10;- first point&#10;- second point&#10;&#10;> Important note.">${esc(c.markdown||"")}</textarea><div class="help" style="margin-left:0;margin-top:4px">Supports: # heading, **bold**, *italic*, \`kode\`, list (- / 1.), &gt; kutipan, [teks](url), --- garis.</div></div>`;
+  if(t==="markdown")html+=`<div class="field"><label>Description (Markdown)</label><textarea class="ctrl" data-k="markdown" rows="6" placeholder="# Filling instructions&#10;&#10;Answer according to **actual conditions**. See:&#10;- first point&#10;- second point&#10;&#10;> Important note.">${esc(c.markdown||"")}</textarea><div class="help" style="margin-left:0;margin-top:4px">Supports: # heading, **bold**, *italic*, \`kode\`, list (- / 1.), &gt; quote, [text](url), --- rule.</div></div>`;
   if(t==="calculated")html+=`<div class="field"><label>Formula (calculate)</label><textarea class="ctrl" data-k="calculate" placeholder="\${a}+\${b}">${esc(c.calculate||"")}</textarea></div><label class="check" style="margin-top:6px"><input type="checkbox" data-k="autofill" ${c.autofill?"checked":""}> Autofill — filled automatically but can be edited</label>`;
   if(NUMERIC.has(t))html+=`<div class="row3">${mini("min","Min",c.min)}${mini("max","Max",c.max)}${mini("step","Step",c.step)}</div><div class="field"><label>Unit</label><input class="ctrl" data-k="unit" value="${esc(c.unit||"")}"></div>`;
   if(DATETIME.has(t)){const it=DT_INPUT_TYPE[t];html+=`<div class="row2">${mini("min","From",c.min,it)}${mini("max","To",c.max,it)}</div>`;}
@@ -694,7 +694,7 @@ function importJSON(obj){try{
   pages.forEach(p=>st.pages.push(impNode(p,"page")));
   if(!st.pages.length)st.pages.push(blankState().pages[0]);
   state=st;selected=null;view={type:"page",uid:state.pages[0].uid};render();
-}catch(e){alert("Gagal impor: "+e.message);}}
+}catch(e){alert("Import failed: "+e.message);}}
 function impNode(n,forceKind){
   const kind=forceKind||n.kind||"field";
   if(kind==="page"||kind==="block"||kind==="section"){return {uid:uid(),kind,name:n.name||autoName(kind),title:textOf(n.title),visibleWhen:n.visibleWhen||"",components:(n.components||[]).map(c=>impNode(c))};}
@@ -1015,7 +1015,7 @@ function renderPreview(){
     body.innerHTML=pvPage(p);
     if(navArea){
       const pct=pages.length>1?Math.round(((pv.page+1)/pages.length)*100):100;
-      navArea.innerHTML=`<div class="pv-nav-err" id="pvNavErr"></div><div class="pv-nav">${pv.page>0?`<button class="btn" id="pvPrev">← Sebelumnya</button>`:`<span></span>`}<div class="pv-prog-wrap"><div class="pv-progbar-track"><div class="pv-progbar" style="width:${pct}%"></div></div><span class="pv-prog">Page ${pv.page+1} / ${pages.length}</span></div>${pv.page<pages.length-1?`<button class="btn primary" id="pvNext">Lanjut →</button>`:`<button class="btn primary" id="pvDone">Selesai</button>`}</div>`;
+      navArea.innerHTML=`<div class="pv-nav-err" id="pvNavErr"></div><div class="pv-nav">${pv.page>0?`<button class="btn" id="pvPrev">← Sebelumnya</button>`:`<span></span>`}<div class="pv-prog-wrap"><div class="pv-progbar-track"><div class="pv-progbar" style="width:${pct}%"></div></div><span class="pv-prog">Page ${pv.page+1} / ${pages.length}</span></div>${pv.page<pages.length-1?`<button class="btn primary" id="pvNext">Lanjut →</button>`:`<button class="btn primary" id="pvDone">Finish</button>`}</div>`;
     }
   }
   bindPreview(body);body.scrollTop=keep;renderPvSide();
@@ -1243,7 +1243,7 @@ function pvField(c,row){
   if(c.type==="hidden")return "";
   const rp=rowStoragePrefix(row);
   if(!evalVisible(c.visibleWhen,rp))return "";
-  if(row?ROW_SKIP_HIDDEN.get(rp.slice(0,-1))?.has(c.name):SKIP_HIDDEN.has(c.name))return ""; // skip-to: page atau baris roster
+  if(row?ROW_SKIP_HIDDEN.get(rp.slice(0,-1))?.has(c.name):SKIP_HIDDEN.has(c.name))return ""; // skip-to: a page or a roster row
   if(c.type==="note")return `<div class="pv-note pv-field">${c.html||""}</div>`;
   if(c.type==="markdown")return `<div class="pv-note pv-field pv-md">${mdToHtml(c.markdown||"")}</div>`;
   const key=row?`${rp}${c.name}`:c.name;
@@ -1277,7 +1277,7 @@ function pvField(c,row){
   else if(c.type==="select"){const ro=resolveOptions(c,rp);ctrl=optWrap(ro,()=>`<select ${da} class="pv-in"${disAll}><option value="">— select —</option>${ro.opts.map(o=>`<option value="${esc(o.value)}"${String(val)===String(o.value)?" selected":""}>${esc(o.label)}</option>`).join("")}</select>`,key);}
   else if(c.type==="checkbox"||c.type==="multiselect"){const ro=resolveOptions(c,rp);ctrl=optWrap(ro,()=>`<div class="pv-radios">${ro.opts.map(o=>`<label class="pv-opt"><input type="checkbox" data-kc="${esc(key)}" value="${esc(o.value)}"${(Array.isArray(val)&&val.map(String).includes(String(o.value)))?" checked":""}${disAll}> ${esc(o.label)}</label>`).join("")}</div>`,key);}
   else if(DATETIME.has(c.type))ctrl=`<input ${da} type="${DT_INPUT_TYPE[c.type]}" class="pv-in" value="${esc(val)}"${clean(c.min)?` min="${esc(c.min)}"`:""}${clean(c.max)?` max="${esc(c.max)}"`:""} style="width:auto"${dis}${rdOnly}>`;
-  else if(c.type==="geopoint")ctrl=`<div class="pv-inbtn"><input ${da} class="pv-in" value="${esc(val)}" placeholder="lat, lng"${dis}${rdOnly}><button type="button" class="pv-smbtn pv-geobtn"${disAll}>📍 Ambil Lokasi</button></div><div class="pv-geomsg"></div>`;
+  else if(c.type==="geopoint")ctrl=`<div class="pv-inbtn"><input ${da} class="pv-in" value="${esc(val)}" placeholder="lat, lng"${dis}${rdOnly}><button type="button" class="pv-smbtn pv-geobtn"${disAll}>📍 Get Location</button></div><div class="pv-geomsg"></div>`;
   else if(c.type==="photo"||c.type==="file"){
     const isPhoto=c.type==="photo";
     const disClass=(enabled&&!c.readOnly)?"":" pv-photolabel-dis";

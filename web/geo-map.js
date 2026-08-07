@@ -10,7 +10,16 @@
 
   const style = document.createElement("style");
   style.textContent = `
-.geo-map{width:100%;height:220px;border-radius:var(--radius-s,7px);border:1.5px solid var(--line,#dfe4ea);overflow:hidden;margin-top:8px;background:var(--panel-2,#f7f9fb)}
+/* Leaflet stacks its own panes and controls from 400 up to 1000, which is far above
+   anything the app uses for its own chrome (the mobile page drawer is 60, dialogs 80,
+   the response overlay 150). Left alone, a map three fields down the page paints over
+   the drawer the moment it opens — and over dialogs too.
+
+   Rather than bidding the app's numbers higher than Leaflet's, the map is given its
+   own stacking context. Everything Leaflet does then happens inside this box and is
+   placed on the page as a single layer at z-index 0, so its internal scale can never
+   compete with the page again. */
+.geo-map{width:100%;height:220px;border-radius:var(--radius-s,7px);border:1.5px solid var(--line,#dfe4ea);overflow:hidden;margin-top:8px;background:var(--panel-2,#f7f9fb);position:relative;z-index:0;isolation:isolate}
 .geo-map .leaflet-control-attribution{font-size:10px}
 `;
   document.head.appendChild(style);

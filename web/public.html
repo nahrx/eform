@@ -496,12 +496,12 @@ async function openQueueDialog(){
       return;
     }
     list.innerHTML=items.map(it=>{
-      const judul=it.kind==="file"
+      const heading=it.kind==="file"
         ?`Photo${it.name?" · "+esc(it.name):""}${it.size?" · "+fmtSize(it.size):""}`
         :`Response${it.answerCount!=null?" · "+it.answerCount+" answer"+(it.answerCount===1?"":"s"):""}`;
       const sebab=[it.status?"HTTP "+it.status:"",esc(it.error||"Rejected.")].filter(Boolean).join(" — ");
       return `<div class="pv-qitem" data-kind="${it.kind}" data-id="${it.id}">
-        <div class="pv-qhead"><span class="pv-qkind">${judul}</span><span class="pv-qwhen">${esc(fmtWhen(it.failedAt||it.ts))}</span></div>
+        <div class="pv-qhead"><span class="pv-qkind">${heading}</span><span class="pv-qwhen">${esc(fmtWhen(it.failedAt||it.ts))}</span></div>
         <div class="pv-qerr">${sebab}</div>
         <div class="pv-qacts">
           <button data-act="retry">Retry</button>
@@ -696,8 +696,8 @@ const Expr=(function(){
     const t=[];let i=0;const n=src.length;const id=c=>/[A-Za-z0-9_]/.test(c);
     while(i<n){let c=src[i];
       if(c===" "||c==="\t"||c==="\n"||c==="\r"){i++;continue;}
-      if(c==="$"&&src[i+1]==="{"){let j=i+2,s="";while(j<n&&src[j]!=="}")s+=src[j++];if(src[j]!=="}")throw new Error("${ } tidak ditutup");i=j+1;t.push({t:"ref",v:s.trim()});continue;}
-      if(c==="'"||c==='"'){const q=c;let j=i+1,s="";while(j<n&&src[j]!==q){if(src[j]==="\\"){s+=src[j+1];j+=2;}else s+=src[j++];}if(src[j]!==q)throw new Error("teks tidak ditutup");i=j+1;t.push({t:"str",v:s});continue;}
+      if(c==="$"&&src[i+1]==="{"){let j=i+2,s="";while(j<n&&src[j]!=="}")s+=src[j++];if(src[j]!=="}")throw new Error("${ } was never closed");i=j+1;t.push({t:"ref",v:s.trim()});continue;}
+      if(c==="'"||c==='"'){const q=c;let j=i+1,s="";while(j<n&&src[j]!==q){if(src[j]==="\\"){s+=src[j+1];j+=2;}else s+=src[j++];}if(src[j]!==q)throw new Error("string was never closed");i=j+1;t.push({t:"str",v:s});continue;}
       if((c>="0"&&c<="9")||(c==="."&&src[i+1]>="0"&&src[i+1]<="9")){let j=i,s="";while(j<n&&((src[j]>="0"&&src[j]<="9")||src[j]===".")){s+=src[j++];}i=j;t.push({t:"num",v:parseFloat(s)});continue;}
       if(/[A-Za-z_]/.test(c)){let j=i,s="";while(j<n&&id(src[j]))s+=src[j++];i=j;
         if(s==="true")t.push({t:"bool",v:true});else if(s==="false")t.push({t:"bool",v:false});else if(s==="null")t.push({t:"null"});else t.push({t:"id",v:s});continue;}
@@ -1047,7 +1047,7 @@ function renderMyResponsesList(meta,responses){
       :`<button class="btn btn-xs" onclick="event.stopPropagation();unsubmitResponseAPI('${r.id}')">Batalkan Submit</button>`;
     const rowAttrs=isDraft?"":` onclick="viewSubmittedResponse('${esc(r.id)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();viewSubmittedResponse('${esc(r.id)}')}" role="button" tabindex="0"`;
     return `<div class="resp-item${isDraft?"":" resp-item-clickable"}"${rowAttrs}>
-      <div class="resp-item-left"><span class="resp-num">Respons ${responses.length-i}</span>${badge}</div>
+      <div class="resp-item-left"><span class="resp-num">Response ${responses.length-i}</span>${badge}</div>
       <div class="resp-item-right">
         <span class="resp-date">${isDraft?"Draft · "+fmt(r.submittedAt):fmt(r.submittedAt)}</span>
         ${ALLOW?action:""}
@@ -1330,7 +1330,7 @@ function renderViewField(c,ans,rp){
     const src=getMediaSource(val);
     if(!src)return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer-box"><span style="color:var(--muted);font-style:italic">—</span></div></div>`;
     const alt=esc(viewRowInterp(txt(c.label)||c.name,ans,rp));
-    return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-photo-wrap"><a class="rv-photo-link" href="${esc(src)}" target="_blank" rel="noreferrer">Buka gambar</a><img class="rv-photo-img" src="${esc(src)}" alt="${alt}"></div></div>`;
+    return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-photo-wrap"><a class="rv-photo-link" href="${esc(src)}" target="_blank" rel="noreferrer">Open image</a><img class="rv-photo-img" src="${esc(src)}" alt="${alt}"></div></div>`;
   }
   if(c.type==="file"){
     const src=getMediaSource(val);
@@ -1455,7 +1455,7 @@ function renderViewPage(){
 
 function pvDialog(msg,onConfirm,opts){
   opts=opts||{};
-  const cancelBtn=opts.noCancel?"":`<button id="pvDlgCancel" style="padding:8px 16px;border:1px solid #dfe4ea;border-radius:7px;background:#fff;color:#13171e;font-family:inherit;font-size:13px;cursor:pointer">${opts.cancelLabel||"Batal"}</button>`;
+  const cancelBtn=opts.noCancel?"":`<button id="pvDlgCancel" style="padding:8px 16px;border:1px solid #dfe4ea;border-radius:7px;background:#fff;color:#13171e;font-family:inherit;font-size:13px;cursor:pointer">${opts.cancelLabel||"Cancel"}</button>`;
   const ovl=document.createElement("div");
   ovl.style.cssText="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45)";
   ovl.innerHTML=`<div style="background:#fff;border-radius:12px;padding:28px 24px;max-width:380px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,.18);font-family:inherit">
@@ -1688,7 +1688,7 @@ function fieldHtml(c,rp,scopes){
   else if(c.type==="geopoint"){
     const g=parseGeoPoint(val);
     const geoMap=g?`<div class="geo-map" data-lat="${g.lat}" data-lng="${g.lng}"></div>`:"";
-    ctrl=`<div class="pv-inbtn"><input type="text" data-k="${ke}" class="pv-in" placeholder="lat, lng"${dis}${rdOnly}><button type="button" class="pv-smbtn pv-geobtn"${disAll}>📍 Ambil Lokasi</button></div><div class="pv-geomsg"></div>${geoMap}`;
+    ctrl=`<div class="pv-inbtn"><input type="text" data-k="${ke}" class="pv-in" placeholder="lat, lng"${dis}${rdOnly}><button type="button" class="pv-smbtn pv-geobtn"${disAll}>📍 Get Location</button></div><div class="pv-geomsg"></div>${geoMap}`;
   }
   else if(c.type==="barcode")
     ctrl=`<div class="pv-inbtn"><input type="text" data-k="${ke}" class="pv-in" placeholder="scan / type the code"${dis}${rdOnly}><button type="button" class="pv-smbtn pv-scanbtn"${disAll}>📷 Pindai</button></div>`;
@@ -2112,7 +2112,7 @@ function collectAllErrors(){
         }
       }
     }
-    (function walkR(comps,pfx){(comps||[]).forEach(c=>{if(!evalVisible(c.visibleWhen,pfx))return;if(c.kind==="roster"){if(c.requiredRows&&rosterCount(c,pfx)===0)errors.push({pageIdx:pi,key:"pvroster_"+c.name,label:txt(c.title)||c.name,rp:"",msg:"Belum ada baris yang ditambahkan"});}else if(c.kind!=="field"&&c.components)walkR(c.components,pfx);});})(page.components||[],"");
+    (function walkR(comps,pfx){(comps||[]).forEach(c=>{if(!evalVisible(c.visibleWhen,pfx))return;if(c.kind==="roster"){if(c.requiredRows&&rosterCount(c,pfx)===0)errors.push({pageIdx:pi,key:"pvroster_"+c.name,label:txt(c.title)||c.name,rp:"",msg:"No rows have been added yet"});}else if(c.kind!=="field"&&c.components)walkR(c.components,pfx);});})(page.components||[],"");
   }
   return errors;
 }
@@ -2333,7 +2333,7 @@ function renderRosterRow(){
   const hasStructure=(roster.components||[]).some(c=>c.kind==="block"||c.kind==="section");
   let fieldsHtml=(roster.components||[]).map(f=>nodeHtml(f,rp)).join("");
   if(!hasStructure&&fieldsHtml)fieldsHtml=`<div class="pv-card">${fieldsHtml}</div>`;
-  let html=`${userBar}<div class="pv-page"><div class="pv-rrow-hdr"><div class="pv-rrow-bread"><button id="pvBack" class="pv-rrow-back">← ${pageTitle}</button><span class="pv-rrow-sep">›</span><span class="pv-rrow-rname">${rosterTitle}</span><span class="pv-rrow-num">Baris ${rowIdx+1} dari ${total}</span></div><div class="pv-rrow-title">${rowLabel(roster,rowIdx)}</div></div>${fieldsHtml}</div>`;
+  let html=`${userBar}<div class="pv-page"><div class="pv-rrow-hdr"><div class="pv-rrow-bread"><button id="pvBack" class="pv-rrow-back">← ${pageTitle}</button><span class="pv-rrow-sep">›</span><span class="pv-rrow-rname">${rosterTitle}</span><span class="pv-rrow-num">Row ${rowIdx+1} of ${total}</span></div><div class="pv-rrow-title">${rowLabel(roster,rowIdx)}</div></div>${fieldsHtml}</div>`;
   pvBody.innerHTML=html;pvBody.scrollTop=keepScroll;
   const navArea=document.getElementById("pvNavArea");
   const saveDraftBtn=ALLOW?`<button class="pv-savedraft" id="pvSaveDraft">Save Draft</button>`:"";
@@ -2570,7 +2570,7 @@ function wireGeoButton(btn){
     const input=btn.previousElementSibling;
     if(msg){msg.textContent="";msg.classList.remove("error");}
     if(!navigator.geolocation){if(msg){msg.textContent="Geolocation is not supported by this browser.";msg.classList.add("error");}return;}
-    const orig=btn.textContent;btn.disabled=true;btn.textContent="Mencari…";
+    const orig=btn.textContent;btn.disabled=true;btn.textContent="Searching…";
     navigator.geolocation.getCurrentPosition(
       pos=>{
         btn.disabled=false;btn.textContent=orig;

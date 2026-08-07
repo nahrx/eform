@@ -26,7 +26,7 @@ func Connect(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 		if lastErr == nil {
 			return pool, nil
 		}
-		log.Printf("[db] menunggu PostgreSQL siap (%d/10): %v", i+1, lastErr)
+		log.Printf("[db] waiting for PostgreSQL to become ready (%d/10): %v", i+1, lastErr)
 		time.Sleep(2 * time.Second)
 	}
 	pool.Close()

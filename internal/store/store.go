@@ -20,7 +20,7 @@ type ResponseFilter struct {
 	Status            string              // 'submitted'|'draft'|'' (empty = all)
 	ShareID           string              // uuid string or '' (empty = all)
 	Search            string              // partial search over meta.name / meta.email
-	SortBy            string              // 'waktu'|'status'|'share'|'who'|schema field name
+	SortBy            string              // 'time'|'status'|'share'|'who'|schema field name
 	SortDir           string              // 'asc'|'desc'
 	FieldFilters      map[string]string   // fieldName → text value (ILIKE, for free-text fields)
 	FieldExactFilters map[string]string   // fieldName → exact value (=, for dropdown/radio/date)
@@ -77,7 +77,7 @@ func (sc ResponseScope) clauses(args []any) (string, []any) {
 }
 
 // source builds the row source: submitted responses, plus drafts when the scope allows it.
-// $1 selalu formID.
+// $1 is always formID.
 func (sc ResponseScope) source() string {
 	base := `SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at
 		    FROM form_responses WHERE form_id=$1`
@@ -555,7 +555,7 @@ func (s *Store) GetShareByToken(ctx context.Context, token string) (*models.Shar
 	return sh, nil
 }
 
-// GetShareByID mengambil satu share berdasarkan ID.
+// GetShareByID fetches a single share by its ID.
 func (s *Store) GetShareByID(ctx context.Context, id string) (*models.Share, error) {
 	sh := &models.Share{}
 	err := s.pool.QueryRow(ctx,
@@ -745,7 +745,7 @@ func (s *Store) CreateMultiResponseRow(ctx context.Context, formID string, share
 	return r, err
 }
 
-// GetResponseByID mengambil satu respons berdasarkan ID-nya.
+// GetResponseByID fetches a single response by its ID.
 // If it is not in form_responses, look in response_drafts (the single-response draft).
 func (s *Store) GetResponseByID(ctx context.Context, id string) (*models.Response, error) {
 	r := &models.Response{}
@@ -876,7 +876,8 @@ func (s *Store) ListAllResponsesByForm(ctx context.Context, formID string, f Res
 		sortDir = "ASC"
 	}
 	sortCol := map[string]string{
-		"waktu":  "submitted_at",
+		"time":   "submitted_at",
+		"waktu":  "submitted_at", // legacy value still sent by cached pages
 		"status": "status",
 		"share":  "share_id",
 		"who":    "meta->>'name'",
@@ -1304,7 +1305,7 @@ func (s *Store) GetViewerPermission(ctx context.Context, viewerID, formID string
 	return p, err
 }
 
-// GetViewerPermissionByID mengambil permission berdasarkan ID-nya.
+// GetViewerPermissionByID fetches a permission by its ID.
 func (s *Store) GetViewerPermissionByID(ctx context.Context, permID string) (*models.ViewerFormPermission, error) {
 	p := &models.ViewerFormPermission{}
 	err := scanViewerPerm(p,
@@ -1320,7 +1321,7 @@ func (s *Store) GetViewerPermissionByID(ctx context.Context, permID string) (*mo
 	return p, err
 }
 
-// GetViewerAllowedRespondentByID mengambil data allowed respondent berdasarkan ID.
+// GetViewerAllowedRespondentByID fetches an allowed-respondent row by its ID.
 func (s *Store) GetViewerAllowedRespondentByID(ctx context.Context, id string) (*models.ViewerAllowedRespondent, error) {
 	ar := &models.ViewerAllowedRespondent{}
 	err := s.pool.QueryRow(ctx,
@@ -1522,7 +1523,8 @@ func (s *Store) ListScopedResponses(ctx context.Context, sc ResponseScope, f Res
 		sortDir = "ASC"
 	}
 	sortCol := map[string]string{
-		"waktu":  "submitted_at",
+		"time":   "submitted_at",
+		"waktu":  "submitted_at", // legacy value still sent by cached pages
 		"share":  "share_id",
 		"who":    "meta->>'name'",
 		"status": "status",
@@ -1853,7 +1855,7 @@ func (s *Store) CreateEditorPermission(ctx context.Context, editorID, formID, re
 	return p, err
 }
 
-// GetEditorPermissionByID mengambil permission editor berdasarkan ID.
+// GetEditorPermissionByID fetches an editor permission by its ID.
 func (s *Store) GetEditorPermissionByID(ctx context.Context, permID string) (*models.EditorFormPermission, error) {
 	p := &models.EditorFormPermission{}
 	var ffRaw json.RawMessage
@@ -1965,7 +1967,7 @@ func (s *Store) GetEditorResponseByID(ctx context.Context, editorID, formID, res
 	return resp, nil
 }
 
-// GetEditorAllowedRespondentByID mengambil data allowed respondent (editor) berdasarkan ID.
+// GetEditorAllowedRespondentByID fetches an editor allowed-respondent row by its ID.
 func (s *Store) GetEditorAllowedRespondentByID(ctx context.Context, id string) (*models.EditorAllowedRespondent, error) {
 	ar := &models.EditorAllowedRespondent{}
 	err := s.pool.QueryRow(ctx,
@@ -2058,7 +2060,8 @@ func (s *Store) ListEditorResponses(ctx context.Context, editorID, formID string
 		sortDir = "ASC"
 	}
 	sortCol := map[string]string{
-		"waktu":  "submitted_at",
+		"time":   "submitted_at",
+		"waktu":  "submitted_at", // legacy value still sent by cached pages
 		"share":  "share_id",
 		"who":    "meta->>'name'",
 		"status": "status",
@@ -2292,7 +2295,7 @@ func (s *Store) ListAPIKeysByForm(ctx context.Context, formID string) ([]models.
 	return out, rows.Err()
 }
 
-// GetAPIKeyByID mengambil satu API key berdasarkan ID-nya.
+// GetAPIKeyByID fetches a single API key by its ID.
 func (s *Store) GetAPIKeyByID(ctx context.Context, id string) (*models.FormAPIKey, error) {
 	k := &models.FormAPIKey{}
 	err := scanAPIKey(k, s.pool.QueryRow(ctx, `SELECT `+apiKeyCols+` FROM form_api_keys WHERE id=$1`, id))

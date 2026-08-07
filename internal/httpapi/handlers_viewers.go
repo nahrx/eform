@@ -614,7 +614,7 @@ func (s *Server) viewerGetResponse(w http.ResponseWriter, r *http.Request) {
 }
 
 // viewerExportResponsesXLSX downloads the responses as Excel, honouring the restrictions
-// permission viewer persis seperti ekspor CSV-nya.
+// the viewer's permission exactly as its CSV export does.
 func (s *Server) viewerExportResponsesXLSX(w http.ResponseWriter, r *http.Request) {
 	viewerID := userFrom(r.Context()).Subject
 	formID := r.PathValue("id")
