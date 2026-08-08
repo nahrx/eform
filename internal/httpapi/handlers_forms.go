@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -82,6 +83,7 @@ func (s *Server) createForm(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "failed to save")
 		return
 	}
+	s.snapshotSchema(r, f.ID, in.Version, in.Schema)
 	writeJSON(w, http.StatusCreated, f)
 }
 
@@ -131,7 +133,20 @@ func (s *Server) updateForm(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "failed to save")
 		return
 	}
+	s.snapshotSchema(r, f.ID, in.Version, in.Schema)
 	writeJSON(w, http.StatusOK, f)
+}
+
+// snapshotSchema captures the instrument as it now stands, so responses collected from
+// here on can point at the exact questions that were asked.
+//
+// A failure is logged and swallowed rather than failing the save: losing a snapshot
+// costs provenance on responses arriving before the next save, while refusing the save
+// costs the admin their editing work outright. The first is the cheaper loss.
+func (s *Server) snapshotSchema(r *http.Request, formID, version string, schema json.RawMessage) {
+	if _, err := s.st.EnsureSchemaVersion(r.Context(), formID, version, schema); err != nil {
+		log.Printf("[schema-version] form %s: %v", formID, err)
+	}
 }
 
 func (s *Server) deleteForm(w http.ResponseWriter, r *http.Request) {
@@ -567,6 +582,38 @@ func (s *Server) getResponseDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, s.signResponse(resp))
+}
+
+// responseSchemaVersion reports which instrument a response was filled against and
+// whether the form has been edited since.
+//
+// Kept as its own endpoint rather than folded into the response payload: the answer is
+// the same for every reader, while the response itself is filtered per role, and the
+// detail pages for admin, viewer, and editor can each ask for it without any of the
+// scoped response queries having to grow a column.
+func (s *Server) responseSchemaVersion(w http.ResponseWriter, r *http.Request) {
+	if !s.ensureResultAccess(w, r) {
+		return
+	}
+	formID := r.PathValue("id")
+	if _, ok := s.ensureFormAccess(w, r, formID); !ok {
+		return
+	}
+	resp, err := s.st.GetResponseByID(r.Context(), r.PathValue("responseId"))
+	if errors.Is(err, store.ErrNotFound) || (err == nil && resp.FormID != formID) {
+		writeErr(w, http.StatusNotFound, "response not found")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "failed to fetch data")
+		return
+	}
+	info, err := s.st.GetResponseSchemaInfo(r.Context(), resp.ID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "failed to fetch data")
+		return
+	}
+	writeJSON(w, http.StatusOK, info)
 }
 
 func (s *Server) deleteResponse(w http.ResponseWriter, r *http.Request) {

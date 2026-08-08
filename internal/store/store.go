@@ -469,6 +469,106 @@ func (s *Store) UpdateForm(ctx context.Context, id, title, desc string, schema j
 	return f, err
 }
 
+// ---- instrument schema versions -------------------------------------------------
+
+// EnsureSchemaVersion records the form's schema as a snapshot and returns its id,
+// reusing the existing row when that exact schema was already captured.
+//
+// Identity is the content hash, not the version string: admins routinely save without
+// bumping the version, so keying on the label would fold genuinely different
+// instruments into one snapshot and defeat the point of keeping them.
+func (s *Store) EnsureSchemaVersion(ctx context.Context, formID, version string, schema json.RawMessage) (string, error) {
+	if len(schema) == 0 {
+		schema = json.RawMessage(`{}`)
+	}
+	var id string
+	err := s.pool.QueryRow(ctx,
+		`WITH v AS (SELECT $3::jsonb AS s)
+		 INSERT INTO form_schema_versions(form_id, version, schema, schema_hash)
+		 SELECT $1, $2, v.s, md5(v.s::text) FROM v
+		 ON CONFLICT (form_id, schema_hash)
+		   -- a no-op update, so the row that already exists is still RETURNED
+		   DO UPDATE SET form_id = form_schema_versions.form_id
+		 RETURNING id`,
+		formID, version, schema,
+	).Scan(&id)
+	return id, err
+}
+
+// CurrentSchemaVersionID returns the newest snapshot for a form, used as the fallback
+// when a submission does not name the version it was filled against.
+func (s *Store) CurrentSchemaVersionID(ctx context.Context, formID string) (string, error) {
+	var id string
+	err := s.pool.QueryRow(ctx,
+		`SELECT id FROM form_schema_versions
+		 WHERE form_id=$1 ORDER BY created_at DESC LIMIT 1`, formID,
+	).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	return id, err
+}
+
+// SchemaVersionBelongsToForm guards the version id a client sends back with a
+// submission. The id only labels data, but a respondent must still not be able to pin
+// their answers to another form's instrument.
+func (s *Store) SchemaVersionBelongsToForm(ctx context.Context, formID, versionID string) bool {
+	var n int
+	err := s.pool.QueryRow(ctx,
+		`SELECT 1 FROM form_schema_versions WHERE id=$1 AND form_id=$2`, versionID, formID,
+	).Scan(&n)
+	return err == nil
+}
+
+// PinResponseSchemaVersion records which instrument a response was filled against.
+// It only ever fills an empty pin: a response's history must not be rewritten later.
+func (s *Store) PinResponseSchemaVersion(ctx context.Context, responseID, versionID string) error {
+	_, err := s.pool.Exec(ctx,
+		`UPDATE form_responses SET schema_version_id=$2
+		 WHERE id=$1 AND schema_version_id IS NULL`, responseID, versionID)
+	return err
+}
+
+// ResponseSchemaInfo describes the instrument a response was filled against, and
+// whether the form has been edited since.
+type ResponseSchemaInfo struct {
+	Known    bool      `json:"known"`
+	Version  string    `json:"version"`
+	PinnedAt time.Time `json:"pinnedAt"`
+	Outdated bool      `json:"outdated"`
+	// True when the snapshot was created after the response was submitted, which can
+	// only mean the pin was assigned retroactively by the 0020 backfill rather than
+	// recorded at the time. Such a pin says what the instrument looks like now, not
+	// what was asked then — a distinction worth surfacing rather than papering over.
+	Backfilled bool `json:"backfilled"`
+}
+
+// GetResponseSchemaInfo answers "was this response filled against the instrument I am
+// looking at now?" — what the response detail page needs in order to warn that what it
+// renders may no longer match what was actually asked.
+func (s *Store) GetResponseSchemaInfo(ctx context.Context, responseID string) (*ResponseSchemaInfo, error) {
+	info := &ResponseSchemaInfo{}
+	err := s.pool.QueryRow(ctx,
+		`SELECT v.version, v.created_at,
+		        (v.schema_hash IS DISTINCT FROM md5(f.schema::text)) AS outdated,
+		        (v.created_at > r.submitted_at)                      AS backfilled
+		 FROM form_responses r
+		 JOIN form_schema_versions v ON v.id = r.schema_version_id
+		 JOIN forms f ON f.id = r.form_id
+		 WHERE r.id = $1`, responseID,
+	).Scan(&info.Version, &info.PinnedAt, &info.Outdated, &info.Backfilled)
+	if errors.Is(err, pgx.ErrNoRows) {
+		// Either the response does not exist, or it predates pinning and the backfill
+		// never reached it. Both mean "we cannot say", which is not an error.
+		return &ResponseSchemaInfo{Known: false}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	info.Known = true
+	return info, nil
+}
+
 func (s *Store) SetFormStatus(ctx context.Context, id, status string) error {
 	ct, err := s.pool.Exec(ctx, `UPDATE forms SET status=$2, updated_at=now() WHERE id=$1`, id, status)
 	if err != nil {

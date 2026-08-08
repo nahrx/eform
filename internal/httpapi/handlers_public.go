@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -63,12 +64,24 @@ func (s *Server) publicGetForm(w http.ResponseWriter, r *http.Request) {
 	}
 	s.st.IncrementShareView(r.Context(), sh.ID)
 
+	// Handed to the client so a submission can name the instrument it was actually
+	// filled against. That matters more here than in an online-only app: offline
+	// responses sit queued on the device and may arrive days later, by which time the
+	// newest snapshot is no longer the one the enumerator saw.
+	schemaVersionID, verr := s.st.EnsureSchemaVersion(r.Context(), f.ID, f.Version, f.Schema)
+	if verr != nil {
+		// Not fatal: the form still has to open. The submission then falls back to the
+		// current snapshot rather than recording a wrong one.
+		log.Printf("[schema-version] form %s: %v", f.ID, verr)
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
-		"id":             f.ID,
-		"title":          f.Title,
-		"description":    f.Description,
-		"version":        f.Version,
-		"schema":         f.Schema,
+		"id":              f.ID,
+		"title":           f.Title,
+		"description":     f.Description,
+		"version":         f.Version,
+		"schemaVersionId": schemaVersionID,
+		"schema":          f.Schema,
 		"allowResponses": sh.AllowResponses,
 		"multiResponse":  sh.MultiResponse,
 		"accessMode":     sh.AccessMode,
@@ -175,6 +188,9 @@ func (s *Server) publicSubmit(w http.ResponseWriter, r *http.Request) {
 		Answers    json.RawMessage `json:"answers"`
 		Draft      bool            `json:"draft"`
 		ResponseID string          `json:"responseId"`
+		// Which instrument the client was actually showing. Carried by the device
+		// through an offline queue, so it can be older than the newest snapshot.
+		SchemaVersionID string `json:"schemaVersionId"`
 	}
 	if err := decodeJSON(r, &in); err != nil || len(in.Answers) == 0 {
 		writeErr(w, http.StatusBadRequest, "empty response or invalid format")
@@ -235,6 +251,7 @@ func (s *Server) publicSubmit(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "failed to save response")
 		return
 	}
+	s.pinSchemaVersion(r, resp.ID, sh.FormID, in.SchemaVersionID)
 	if !in.Draft {
 		_ = s.st.DeleteDraft(r.Context(), sh.FormID, rc.RespondentID)
 	}
@@ -243,6 +260,31 @@ func (s *Server) publicSubmit(w http.ResponseWriter, r *http.Request) {
 		code = http.StatusOK
 	}
 	writeJSON(w, code, map[string]any{"id": resp.ID, "status": resp.Status, "submittedAt": resp.SubmittedAt})
+}
+
+// pinSchemaVersion records which instrument a response was filled against.
+//
+// The id comes from the client, so it is checked against this form before use — it only
+// labels data, but a respondent still must not be able to point their answers at another
+// form's instrument. An unusable id falls back to the form's current snapshot, which is
+// right for an online submission and the best guess available for an offline one.
+//
+// The pin is best effort: a response that saved successfully is never rejected over its
+// provenance label. GetResponseSchemaInfo reports an unpinned response as "unknown"
+// rather than pretending.
+func (s *Server) pinSchemaVersion(r *http.Request, responseID, formID, claimed string) {
+	versionID := claimed
+	if versionID == "" || !s.st.SchemaVersionBelongsToForm(r.Context(), formID, versionID) {
+		cur, err := s.st.CurrentSchemaVersionID(r.Context(), formID)
+		if err != nil {
+			log.Printf("[schema-version] response %s: no snapshot for form %s: %v", responseID, formID, err)
+			return
+		}
+		versionID = cur
+	}
+	if err := s.st.PinResponseSchemaVersion(r.Context(), responseID, versionID); err != nil {
+		log.Printf("[schema-version] response %s: %v", responseID, err)
+	}
 }
 
 // POST /api/public/forms/{token}/responses/{responseId}/unsubmit

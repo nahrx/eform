@@ -364,6 +364,11 @@ const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&g
 const txt=v=>v==null?"":(typeof v==="object"?(v.id||Object.values(v)[0]||""):v);
 
 let SCHEMA=null, ALLOW=true, PW="", apiCache={};
+/* Which snapshot of the instrument this page is showing. Sent back with every
+   submission so the response records the questions that were actually put, rather than
+   whatever the form has been edited into by the time the answers arrive — which,
+   offline, can be days later. */
+let SCHEMA_VERSION_ID="";
 let PAGES=[], curPage=0, answers={};
 let rosterView=null;
 let RESP_TOKEN=localStorage.getItem("eform_resp_token")||"";
@@ -878,6 +883,7 @@ async function fetchForm(){
   if(r.status===401){askPassword(data.error);return;}
   if(!r.ok)throw new Error(data.error||"Failed to load");
   SCHEMA=data.schema; ALLOW=data.allowResponses;
+  SCHEMA_VERSION_ID=data.schemaVersionId||"";
   MULTI_RESPONSE=!!data.multiResponse;
   ACCESS_MODE=data.accessMode||"public";
   OFFLINE_MODE=!!(SCHEMA?.settings?.offline?.enabled)&&MULTI_RESPONSE;
@@ -1518,7 +1524,7 @@ async function saveDraftToServer(){
     let savedAt,offlineQueued=false;
     if(MULTI_RESPONSE){
       // For multi-response, save the draft into form_responses (not response_drafts)
-      const body={answers:ans,draft:true};
+      const body={answers:ans,draft:true,schemaVersionId:SCHEMA_VERSION_ID};
       if(EDITING_RESPONSE_ID)body.responseId=EDITING_RESPONSE_ID;
       const url="/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/responses";
       const headers=pubHeaders({"Content-Type":"application/json"});
@@ -2872,7 +2878,9 @@ async function submit(){
   if(!Object.keys(ans).length){msg.className="msg err";msg.textContent="No answers have been filled in yet.";return;}
   btn.disabled=true;btn.textContent="Submitting…";
   const headers=pubHeaders({"Content-Type":"application/json"});
-  const body={answers:ans};
+  // Travels with the queued payload when offline, so a response sent days later still
+  // names the instrument it was filled against rather than today's.
+  const body={answers:ans,schemaVersionId:SCHEMA_VERSION_ID};
   if(EDITING_RESPONSE_ID)body.responseId=EDITING_RESPONSE_ID;
   const url="/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/responses";
   let r;

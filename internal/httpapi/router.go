@@ -108,6 +108,11 @@ func (s *Server) Routes() http.Handler {
 	// answer change history: the form's owning admin, or an authorised editor
 	mux.Handle("GET /api/forms/{id}/responses/{responseId}/revisions", s.authMW(s.requireRole(s.listResponseRevisions, "superadmin", "admin", "editor", "viewer")))
 
+	// which instrument this response was filled against, and whether the form has been
+	// edited since — read by every response detail page to warn that what it renders
+	// may no longer be what was asked
+	mux.Handle("GET /api/forms/{id}/responses/{responseId}/schema-version", s.authMW(s.requireRole(s.responseSchemaVersion, "superadmin", "admin", "editor", "viewer")))
+
 	// --- Public API for external systems: API key authentication, read-only ---
 	// Every restriction (active, expiry, IP, quota) lives in apiKeyMW; the data scope
 	// lives in store.APIKeyScope. There are no write endpoints here, and none will be added.
@@ -196,6 +201,7 @@ func (s *Server) Routes() http.Handler {
 		"builder.css", "builder.js", "builder-bridge.js",
 		"searchable-select.js", "geo-map.js", "revision-history.js",
 		"response-validation.js", "offline-queue.js", "image-compress.js",
+		"schema-version-notice.js",
 		"i18n.js", "responsive-tables.js",
 	} {
 		mux.HandleFunc("GET /"+f, s.page(f))
