@@ -147,8 +147,6 @@
     "roster title (optional)": "judul roster (opsional)",
     "Choices": "Pilihan",
     "Other": "Lainnya",
-    "Block → Section → field. Roster bisa di Block/Section. Section bisa di dalam Roster. Inline tampil di halaman ini; subhalaman muncul di panel Halaman.":
-      "Block → Section → field. Roster can be inside a Block/Section. Section can be inside a Roster. Inline shows on this page; subpage appears in the Pages panel.",
     "Roster row template": "Template baris roster",
     "open →": "buka →",
 
@@ -198,8 +196,6 @@
     "+ Add option": "+ Tambah opsi",
     "Source table (field)": "Tabel sumber (variabel)",
     "— select a table —": "— pilih tabel —",
-    "Belum ada tabel inline. Definisikan dulu di pengaturan instrumen → Reference data, lalu pilih di sini.":
-      "No inline tables yet. Define one first in instrument settings → Reference data, then select it here.",
     "Cascading filter (parent field)": "Filter berjenjang (field induk)",
     "API URL ": "URL API ",
     "use {dataKey} to substitute the field's value": "gunakan {dataKey} untuk substitusi nilai field",
@@ -210,8 +206,6 @@
     "Parent param ": "Parent param ",
     "Response path ": "Path respons ",
     "optional": "opsional",
-    "{dataKey} di URL diganti nilai field tersebut. Trigger dataKey memblokir fetch & mereset pilihan saat belum terisi. path bila array bersarang.":
-      "{dataKey} in the URL is replaced with that field's value. Trigger dataKey blocks the fetch & resets the choice until filled. path is for nested arrays.",
     "Roster type": "Jenis roster",
     "Subpage": "Subhalaman",
     "Roster title (optional)": "Judul roster (opsional)",
@@ -224,14 +218,8 @@
     "Per-row label (itemLabel)": "Label tiap baris (itemLabel)",
     "Fields shown in the row list": "Field tampil di daftar baris",
     "Add a field to the roster first.": "Tambah field ke roster dulu.",
-    "Untuk roster subhalaman: nilai field ini jadi ringkasan tiap baris di halaman utama.":
-      "For subpage rosters: this field's value becomes the summary for each row on the main page.",
     "Default row value (auto-fills the first field)": "Nilai awal baris (auto isi field pertama)",
-    "Nilai ini otomatis diisi ke field pertama tiap baris yang dibuat dari Min baris. Tidak menimpa nilai yang sudah Anda ubah manual.":
-      "This value is auto-filled into the first field of each row created from Min rows. It won't overwrite values you've already edited manually.",
     "Default row value": "Nilai awal baris",
-    "Isi Min baris dulu agar editor per baris muncul. Anda juga bisa isi cepat dalam format 1 baris = 1 nilai.":
-      "Fill in Min rows first so the per-row editor appears. You can also fill it quickly in a 1-line-per-value format.",
     "Open the roster template editor →": "Buka editor template roster →",
 
     // ---- builder: instrument settings panel (offline, reference data, navigation) ----
@@ -245,8 +233,6 @@
     "Must be completed before continuing": "Wajib selesai sebelum lanjut",
     "Offline Mode (PWA)": "Mode Offline (PWA)",
     "Enable offline mode": "Aktifkan mode offline",
-    "Kuesioner bisa di-install seperti aplikasi native di ponsel dan diisi tanpa internet — jawaban tersimpan di perangkat lalu terkirim otomatis saat online kembali. ":
-      "The form can be installed like a native app on a phone and filled out without internet — answers are stored on the device and sent automatically once back online. ",
     "Only applies": "Hanya berlaku",
     " to share links set as ": " untuk tautan share yang diatur sebagai ",
     "multi-response": "multi-respons",
@@ -266,8 +252,6 @@
     "Delete this?": "Hapus ini?",
     "Copied ✓": "Tersalin ✓",
     "Please check again, file too large.": "Cek lagi, terlalu besar.",
-    "Tidak ada lokasi yang cocok untuk elemen ini. Pilih dulu section/block/halaman tujuan, lalu tempel.":
-      "No matching location for this element. Select a target section/block/page first, then paste.",
     "Cannot access camera: ": "Tidak bisa mengakses kamera: ",
     "Failed to get location: ": "Gagal mengambil lokasi: ",
     "Geolocation is not supported by this browser.": "Geolocation tidak didukung browser ini.",
@@ -276,10 +260,6 @@
     "Scan Barcode": "Pindai Barcode",
     "Point the camera at the barcode/QR code.": "Arahkan kamera ke barcode/QR.",
     "Searching…": "Mencari…",
-    "Lengkapi pertanyaan wajib / perbaiki isian yang tidak valid sebelum melanjutkan.":
-      "Complete required questions / fix invalid entries before continuing.",
-    "Lengkapi pertanyaan wajib / perbaiki isian yang tidak valid sebelum mengirim.":
-      "Complete required questions / fix invalid entries before submitting.",
 
     // ---- builder: expression engine (validation messages) ----
     "expected '": "diharapkan '",
@@ -318,8 +298,6 @@
     "Export": "Ekspor",
     "Change History": "Riwayat Perubahan",
     "Activity Log": "Riwayat Aksi",
-    "Jejak aksi yang mengubah data atau mengeluarkan data dari sistem, termasuk unduhan CSV. Tercatat otomatis dan tidak dapat diubah dari aplikasi.":
-      "A trail of actions that change data or take data out of the system, including CSV downloads. Recorded automatically and not editable from the app.",
     "No actions recorded yet.": "Belum ada aksi tercatat.",
     "Actor": "Pelaku",
     "Action": "Aksi",
@@ -333,8 +311,6 @@
     "Create API Key": "Buat API Key",
     "Configure API Key": "Konfigurasi API Key",
     "New API Key": "API Key Baru",
-    "API key dipakai sistem lain untuk menarik jawaban kuesioner ini lewat endpoint read-only. Karena jawaban bisa bersifat rahasia, batasi tiap key seketat mungkin: pilih variabel yang boleh terbaca, batasi barisnya, kunci ke alamat IP tertentu, dan beri masa berlaku.":
-      "API keys let other systems pull this form's responses through read-only endpoints. Because responses can be confidential, scope every key as tightly as possible: pick which fields are readable, limit the rows, lock it to specific IP addresses, and set an expiry.",
     "No API keys yet. Click \"+ Create API Key\" to create the first one.": "Belum ada API key. Klik \"+ Buat API Key\" untuk membuat yang pertama.",
     "How to use": "Cara memakai",
     "Send the key in the Authorization header. All endpoints are read-only.": "Kirim key lewat header Authorization. Semua endpoint hanya bisa membaca.",
@@ -350,10 +326,6 @@
     "Key active": "Key aktif",
     "Include respondent identity (name, email, IP)": "Sertakan identitas responden (nama, email, IP)",
     "Leave off if the recipient only needs the answers themselves.": "Biarkan mati bila penerima data cukup butuh jawabannya saja.",
-    "Bila aplikasi berjalan di belakang reverse proxy, isi TRUSTED_PROXIES di server dengan alamat proxy tersebut — tanpa itu semua permintaan terlihat berasal dari IP proxy dan pembatasan ini tidak berpengaruh.":
-      "If the app runs behind a reverse proxy, set TRUSTED_PROXIES on the server to that proxy's address — without it every request appears to come from the proxy's IP and this restriction has no effect.",
-    "Salin sekarang — key ini tidak akan ditampilkan lagi. Kalau hilang, buat key baru atau rotasi key ini. Perlakukan seperti password: jangan kirim lewat chat atau email biasa.":
-      "Copy it now — this key will not be shown again. If you lose it, create a new key or rotate this one. Treat it like a password: don't send it over chat or plain email.",
     "I've copied it": "Sudah disalin",
     "Copy": "Salin",
     "API key copied": "API key disalin",
@@ -414,8 +386,6 @@
     "Share form": "Bagikan kuesioner",
     "Label (optional, e.g. 'Field User')": "Label (opsional, mis. 'User Lapangan')",
     "Accepting responses": "Terima jawaban",
-    "Izinkan multi-respons (satu akun bisa kirim lebih dari satu jawaban)":
-      "Allow multiple responses (one account can submit more than one response)",
     "Public (anyone can fill it out)": "Publik (siapa saja bisa mengisi)",
     "Restricted (registered accounts only)": "Terbatas (hanya akun terdaftar)",
     "Accounts allowed to respond": "Akun yang diizinkan mengisi",
@@ -428,11 +398,7 @@
     // ---- admin dashboard: viewer/editor access dialog ----
     "Viewer Access": "Akses Viewer",
     "Viewer Access · ": "Akses Viewer · ",
-    "Pilih viewer yang boleh melihat jawaban kuesioner ini dan konfigurasi batasan aksesnya.":
-      "Choose which viewers may see this form's responses and configure their access limits.",
     "Viewer Accounts": "Akun Viewer",
-    "Viewer login memakai akun Google — masukkan email Google-nya. Username otomatis menggunakan email.":
-      "Viewers log in with a Google account — enter their Google email. Username automatically uses the email.",
     "Add Viewer to This Form": "Tambah Viewer ke Kuesioner Ini",
     "— select viewer —": "— pilih viewer —",
     "Respondent access": "Akses responden",
@@ -441,35 +407,23 @@
     "+ Add User": "+ Tambah User",
     "Add User": "Tambah User",
     "Add": "Tambah",
-    "Viewer bisa melihat jawaban kuesioner ini, editor bisa mengelola & mengedit jawabannya. Akun dibuat otomatis saat ditambahkan bila belum terdaftar.":
-      "Viewers can see this form's responses, editors can manage & edit them. Accounts are created automatically when added if not yet registered.",
     "This Form's User List": "Daftar User Kuesioner Ini",
     "The account will be created automatically if the email isn't registered yet.": "Akun akan dibuat otomatis bila emailnya belum terdaftar.",
     "No users added yet.": "Belum ada user yang ditambahkan.",
     "Selected respondents only": "Responden tertentu saja",
     "Visible Field Filter": "Filter Variabel yang Dapat Dilihat",
-    "Centang variabel yang boleh dilihat. Jika semua dicentang, semua variabel terlihat.":
-      "Check the fields that may be viewed. If all are checked, all fields are visible.",
     "Field Value Restriction": "Batasan Filter Variabel",
     "Field Value Restriction (optional)": "Batasan Filter Variabel (opsional)",
-    "Hanya tampilkan data yang nilai variabelnya sesuai nilai yang ditentukan.":
-      "Only show data whose field value matches the specified value.",
     "— field —": "— variabel —",
     "Access Configuration · ": "Konfigurasi Akses · ",
     "Allowed respondents": "Responden yang diizinkan",
     "Add from respondents who have already responded:": "Tambah dari responden yang sudah mengisi:",
     "— select respondent —": "— pilih responden —",
     "Visible Fields": "Variabel yang Dapat Dilihat",
-    "Centang variabel yang boleh dilihat viewer. Jika semua dicentang, semua variabel terlihat.":
-      "Check the fields the viewer may see. If all are checked, all fields are visible.",
     "Editor Access": "Akses Editor",
     "Editor Access · ": "Akses Editor · ",
     "Switch to Editor": "Ubah jadi Editor",
     "Switch to Viewer": "Ubah jadi Viewer",
-    "Ubah akses ini menjadi Editor? Akses viewer yang lama akan dihapus dan digantikan akses editor baru dengan pengaturan yang sama.":
-      "Switch this access to Editor? The old viewer access will be removed and replaced with a new editor access carrying the same settings.",
-    "Ubah akses ini menjadi Viewer? Akses editor yang lama akan dihapus dan digantikan akses viewer baru dengan pengaturan yang sama.":
-      "Switch this access to Viewer? The old editor access will be removed and replaced with a new viewer access carrying the same settings.",
     "Access switched to editor": "Akses diubah menjadi editor",
     "Access switched to viewer": "Akses diubah menjadi viewer",
     "Email is required": "Email wajib diisi",
@@ -479,8 +433,6 @@
     "Add Editor to This Form": "Tambah Editor ke Kuesioner Ini",
     "— select editor —": "— pilih editor —",
     "Editor Configuration · ": "Konfigurasi Editor · ",
-    "Batasi data yang dapat dilihat dan diedit editor ini hanya pada data yang nilai variabelnya sesuai.":
-      "Restrict what this editor can view and edit to only data whose field value matches.",
 
     // ---- text that had no translation before the switch to English ----
     "(no label)": "(tanpa label)",
@@ -664,8 +616,6 @@
     "Select a field and enter a value": "Pilih variabel dan masukkan nilai",
 
     // ---- dynamic messages (preview & import) ----
-    "Preview selesai. Ini hanya tampilan — data tidak disimpan.":
-      "Preview finished. This is a view only — no data was saved.",
   };
 
   // Fragments for alert()/confirm() messages that contain interpolation (numbers,

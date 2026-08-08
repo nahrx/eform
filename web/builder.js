@@ -462,7 +462,7 @@ function renderInspector(){
   const pane=document.getElementById("paneProps");
   if(selectedSet.size>1){
     pane.innerHTML=`<div style="padding:16px 12px">
-      <div style="font-weight:600;font-size:13px;margin-bottom:8px">${selectedSet.size} item dipilih</div>
+      <div style="font-weight:600;font-size:13px;margin-bottom:8px">${selectedSet.size} items selected</div>
       <div class="help" style="margin-left:0;margin-bottom:14px">
         <b>Ctrl/Shift+Klik</b> to add/remove options.<br>
         <b>Seret</b> any one item to move them all.<br>

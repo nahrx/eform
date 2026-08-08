@@ -16,7 +16,7 @@ help: ## List the available targets
 tidy: ## go mod tidy
 	go mod tidy
 
-build: ## Compile ke bin/
+build: ## Compile to bin/
 	@mkdir -p bin
 	go build -o $(BIN) .
 	@echo "→ $(BIN)"
@@ -45,7 +45,7 @@ db-drop: ## Drop the local database ($(DB_NAME)) — DESTRUCTIVE
 seed: ## Load the region data from data/wilayah_indonesia.csv into the database
 	go run ./cmd/seeder -file data/wilayah_indonesia.csv
 
-db-backup: ## Backup database ke backups/eform-YYYYmmdd-HHMMSS.dump (format custom, terkompresi)
+db-backup: ## Back up the database to backups/eform-YYYYmmdd-HHMMSS.dump (custom format, compressed)
 	@mkdir -p backups
 	@set -a; [ -f .env ] && . ./.env; set +a; 	 f=backups/eform-$$(date +%Y%m%d-%H%M%S).dump; 	 PGPASSWORD="$$POSTGRES_PASSWORD" pg_dump 	   -h "$${POSTGRES_HOST:-localhost}" -p "$${POSTGRES_PORT:-5432}" 	   -U "$${POSTGRES_USER:-postgres}" -d "$${POSTGRES_DB:-eform}" 	   --format=custom --no-owner --no-privileges -f "$$f"; 	 echo "-> $$f ($$(du -h "$$f" | cut -f1))"
 

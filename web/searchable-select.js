@@ -104,7 +104,7 @@
     const foot = wrap.querySelector(".ss-foot");
     if (!foot) return;
     const n = selectedValues(wrap.querySelector("select")).filter(Boolean).length;
-    foot.querySelector(".ss-foot-count").textContent = n ? n + " dipilih" : "Nothing selected yet";
+    foot.querySelector(".ss-foot-count").textContent = n ? n + " selected" : "Nothing selected yet";
     foot.querySelector(".ss-clear").disabled = n === 0;
   }
   function moveActive(list, dir) {
@@ -127,7 +127,7 @@
       let txt;
       if (!chosen.length) txt = "— select —";
       else if (chosen.length <= 2) txt = chosen.map((o) => o.textContent).join(", ");
-      else txt = chosen.length + " dipilih";
+      else txt = chosen.length + " selected";
       label.textContent = txt;
       label.classList.toggle("ss-placeholder", chosen.length === 0);
       ctrl.disabled = select.disabled;
