@@ -265,15 +265,92 @@ function renderPages(){
 function reorderPage(dragId,targetId){const a=state.pages;const from=a.findIndex(p=>p.uid===dragId),to=a.findIndex(p=>p.uid===targetId);if(from<0||to<0)return;const [m]=a.splice(from,1);a.splice(to,0,m);}
 function openPage(id){view={type:"page",uid:id};}
 
+/* ===================== UNDO / REDO ===================== */
+/* Snapshots of the whole instrument rather than a log of edits.
+
+   The builder mutates `state` from dozens of places — drag and drop, the inspector,
+   paste, bulk actions, the roster editor. Recording an inverse operation at each of
+   those sites would mean finding all of them and getting every one right, and any that
+   was missed would corrupt the history silently. Comparing serialised snapshots after
+   the fact cannot miss a mutation, because every one of those paths ends in render()
+   or softUpdate().
+
+   The cost is a JSON round-trip per change. On an instrument the size of SE2026 that
+   is well under a millisecond, and it only runs after the debounce settles. */
+const History=(function(){
+  const LIMIT=80;                 // ~80 steps back; beyond that the oldest is dropped
+  const QUIET_MS=400;             // typing a label is one undo step, not one per letter
+  let past=[],future=[],current=null,applying=false,timer=null;
+
+  const snap=()=>JSON.stringify(state);
+
+  function commit(){
+    timer=null;
+    const s=snap();
+    if(s===current)return;
+    if(current!==null){past.push(current);if(past.length>LIMIT)past.shift();}
+    current=s;
+    future.length=0;              // a fresh edit abandons the redo branch
+    paint();
+  }
+  // Called from render()/softUpdate(), so it runs after every mutation path.
+  function record(){
+    if(applying)return;           // replaying a snapshot must not record itself
+    clearTimeout(timer);
+    timer=setTimeout(commit,QUIET_MS);
+  }
+  function flush(){if(timer){clearTimeout(timer);commit();}}
+
+  function apply(s){
+    applying=true;
+    try{
+      state=JSON.parse(s);
+      // The selection and the open page may name nodes this snapshot never had.
+      if(selected&&!findNode(selected)){selected=null;}
+      selectedSet=new Set([...selectedSet].filter(uid=>findNode(uid)));
+      if(view.type==="page"&&!state.pages.find(p=>p.uid===view.uid))view={type:"page",uid:state.pages[0].uid};
+      if(view.type==="roster"&&!findNode(view.uid))view={type:"page",uid:state.pages[0].uid};
+      render();
+    }finally{applying=false;}
+    paint();
+  }
+
+  function undo(){
+    flush();                      // an edit still inside the debounce window counts
+    if(!past.length)return;
+    future.push(current);
+    current=past.pop();
+    apply(current);
+  }
+  function redo(){
+    flush();
+    if(!future.length)return;
+    past.push(current);
+    current=future.pop();
+    apply(current);
+  }
+  function reset(){flush();past=[];future=[];current=snap();paint();}
+
+  function paint(){
+    const u=document.getElementById("btnUndo"),r=document.getElementById("btnRedo");
+    if(u){u.disabled=!past.length;u.title=past.length?`Undo (${past.length})`:"Nothing to undo";}
+    if(r){r.disabled=!future.length;r.title=future.length?`Redo (${future.length})`:"Nothing to redo";}
+  }
+
+  return {record,undo,redo,reset,flush,
+    get depth(){return {past:past.length,future:future.length};}};
+})();
+
 /* ===================== CANVAS ===================== */
 function render(){
   if(!state.pages.find(p=>p.uid===view.uid) && view.type==="page") view={type:"page",uid:state.pages[0].uid};
   if(view.type==="roster" && !findNode(view.uid)) view={type:"page",uid:state.pages[0].uid};
   document.getElementById("instTitle").value=state.title||"";
   renderPages(); renderCanvas(); renderInspector(); runValidation(); applyCols();
+  History.record();
 }
 function refreshCard(node){const el=document.querySelector(`#stage [data-uid="${node.uid}"]`);if(el)el.replaceWith(renderNode(node));}
-function softUpdate(){renderPages();runValidation();const n=selected&&findNode(selected);if(n)refreshCard(n);}
+function softUpdate(){renderPages();runValidation();const n=selected&&findNode(selected);if(n)refreshCard(n);History.record();}
 function renderCanvas(){
   const head=document.getElementById("cvHead"), stage=document.getElementById("stage"); stage.innerHTML="";
   if(view.type==="roster"){
@@ -461,17 +538,44 @@ function select(id,multi=false){
 function renderInspector(){
   const pane=document.getElementById("paneProps");
   if(selectedSet.size>1){
+    // Bulk property edits only make sense for fields; a selection may also hold pages,
+    // blocks, sections and rosters, and those are simply left out of the count.
+    const picked=[...selectedSet].map(findNode).filter(Boolean);
+    const fields=picked.filter(n=>n.kind==="field");
+    const BULK=[["required","Required"],["readOnly","Read-only"],["allowRemark","Allow remarks"]];
+    const bulkRows=fields.length?BULK.map(([k,label])=>{
+      const on=fields.filter(f=>!!f[k]).length;
+      const stateTxt=on===0?"none":(on===fields.length?"all":`${on} of ${fields.length}`);
+      return `<div class="bulk-row">
+        <span class="bulk-lab">${label}</span>
+        <span class="bulk-state">${stateTxt}</span>
+        <button class="btn ghost bulk-b" data-bulk="${k}" data-on="1"${on===fields.length?" disabled":""}>On</button>
+        <button class="btn ghost bulk-b" data-bulk="${k}" data-on="0"${on===0?" disabled":""}>Off</button>
+      </div>`;
+    }).join(""):`<div class="help" style="margin-left:0">No fields in this selection.</div>`;
+
     pane.innerHTML=`<div style="padding:16px 12px">
-      <div style="font-weight:600;font-size:13px;margin-bottom:8px">${selectedSet.size} items selected</div>
+      <div style="font-weight:600;font-size:13px;margin-bottom:8px">${selectedSet.size} items selected${fields.length&&fields.length!==picked.length?` · ${fields.length} field${fields.length>1?"s":""}`:""}</div>
       <div class="help" style="margin-left:0;margin-bottom:14px">
-        <b>Ctrl/Shift+Klik</b> to add/remove options.<br>
-        <b>Seret</b> any one item to move them all.<br>
+        <b>Ctrl/Shift+click</b> to add or remove items.<br>
+        <b>Drag</b> any one of them to move them all.<br>
         <b>Delete</b> to remove them all.
       </div>
+      <div class="gh" style="margin-bottom:6px">Set on all selected fields</div>
+      <div style="margin-bottom:14px">${bulkRows}</div>
       <button class="btn" id="dupAllBtn" style="width:100%;margin-bottom:8px">⧉ Duplicate all (${selectedSet.size})</button>
       <button class="btn danger" id="delAllBtn" style="width:100%;margin-bottom:8px">🗑 Delete all (${selectedSet.size})</button>
       <button class="btn ghost" id="clearSelBtn" style="width:100%">Cancel selection</button>
     </div>`;
+    pane.querySelectorAll(".bulk-b").forEach(b=>b.addEventListener("click",()=>{
+      const k=b.dataset.bulk,on=b.dataset.on==="1";
+      fields.forEach(f=>{if(on)f[k]=true;else delete f[k];});
+      render();          // re-render so the counts and the cards both catch up
+      // Committed straight away rather than left to the debounce. Coalescing is right
+      // for typing, but two deliberate clicks are two things the user will expect to
+      // undo separately.
+      History.flush();
+    }));
     pane.querySelector("#dupAllBtn").addEventListener("click",()=>duplicateSelected());
     pane.querySelector("#delAllBtn").addEventListener("click",()=>{if(confirm(`Delete the ${selectedSet.size} selected items?`)){[...selectedSet].forEach(uid=>removeNode(uid));selected=null;selectedSet=new Set();render();}});
     pane.querySelector("#clearSelBtn").addEventListener("click",()=>{selected=null;selectedSet=new Set();render();});
@@ -496,7 +600,7 @@ function instrumentForm(){const nv=state.settings.navigation;const off=state.set
   <div class="group"><div class="gh">Offline Mode (PWA)</div>
     <label class="check"><input type="checkbox" data-i="offline.enabled" ${off.enabled?"checked":""}> Enable offline mode</label>
     <div class="help" style="margin-left:0;margin-top:6px">The form can be installed like a native app on a phone and filled in offline — responses are stored on the device and sent automatically once back online. <b>Only applies</b> to share links set as <b>multi-response</b>.</div></div>
-  <div class="group"><div class="gh">Lookup source / Reference data (JSON)</div><textarea class="ctrl mono" data-i="referenceData" rows="6" placeholder='{ "kabupaten": { "items":[ {"code":"6472","label":"Samarinda"} ] } }'>${esc(jsonOrEmpty(state.referenceData))}</textarea><div class="help" style="margin-left:0;margin-top:6px">Each table can be <b>inline</b> (using <code>items</code>) or <b>API</b>:<br><code>"kec": { "source":"api", "url":"https://.../kec?prov={parent}", "valueField":"kode", "labelField":"nama", "parentParam":"prov", "path":"data" }</code><br>API: <code>valueField</code>/<code>labelField</code>=key in the response; <code>{parent}</code> or <code>parentParam</code> for cascading; <code>path</code> if it's a nested array. Reference it from a field using <b>optionsRef</b>.</div></div>`;}
+  <div class="group"><div class="gh">Lookup source / Reference data (JSON)</div><textarea class="ctrl mono" data-i="referenceData" rows="6" placeholder='{ "kabupaten": { "items":[ {"code":"6472","label":"Samarinda"} ] } }'>${esc(jsonOrEmpty(state.referenceData))}</textarea><div class="help" style="margin-left:0;margin-top:6px">Each table lists its options inline under <code>items</code>, every entry a <code>code</code> and a <code>label</code>. Add <code>parent</code> to an entry to make the table cascade from another field. Reference a table from a field using <b>optionsRef</b>. To pull options from an external service instead, set the field's choice source to <b>API</b>.</div></div>`;}
 function wireInstrument(pane){pane.querySelectorAll("[data-i]").forEach(inp=>inp.addEventListener("input",()=>{const k=inp.dataset.i,v=inp.type==="checkbox"?inp.checked:inp.value;if(k.startsWith("nav."))state.settings.navigation[k.slice(4)]=v;else if(k.startsWith("offline."))state.settings.offline[k.slice(8)]=v;else if(k==="locales")state.locales=v.split(",").map(s=>s.trim()).filter(Boolean);else if(k==="referenceData"){try{state.referenceData=v.trim()?JSON.parse(v):{};inp.style.borderColor="";}catch(_){inp.style.borderColor="var(--bad)";}}else state[k]=v;runValidation();}));}
 
 function navForm(n,kind){
@@ -576,7 +680,10 @@ function optionsBlock(c){
     const rows=(c.options||[]).map((o,i)=>`<div class="mini" data-oi="${i}"><div class="mr"><input class="ctrl" data-of="value" placeholder="value" value="${esc(o.value??"")}"><input class="ctrl" data-of="label" placeholder="label" value="${esc(typeof o.label==="object"?(o.label.id||""):(o.label||""))}"><button class="x" data-orm>×</button></div><input class="ctrl mono" data-of="skipTo" placeholder="skipTo (optional)" value="${esc(o.skipTo||"")}" style="margin-top:6px"></div>`).join("");
     body=`<div id="optRows">${rows}</div><button class="add-row" id="addOpt">+ Add option</button>`;
   } else if(mode==="ref"){
-    const tables=Object.entries(state.referenceData||{}).filter(([k,v])=>!(v&&v.source==="api")).map(([k])=>k);
+    // Only tables that can actually yield options. A table with no items — a leftover
+    // "source":"api" one, or simply a malformed entry — would be selectable and then
+    // silently produce an empty dropdown; lint() reports those separately.
+    const tables=Object.entries(state.referenceData||{}).filter(([,v])=>v&&Array.isArray(v.items)&&v.items.length).map(([k])=>k);
     body = tables.length
       ? `<div class="field"><label>Source table (field)</label><select class="ctrl" data-k="optionsRef"><option value="">— select a table —</option>${tables.map(k=>`<option value="${esc(k)}"${c.optionsRef===k?" selected":""}>${esc(k)}</option>`).join("")}</select></div>`
       : `<div class="help" style="margin-left:0">No inline tables yet. Define one in instrument settings → Reference data first, then pick it here.</div>`;
@@ -670,7 +777,7 @@ function num(v){const n=Number(v);return Number.isFinite(n)?n:v;}
 function coerce(v){if(v==="true")return true;if(v==="false")return false;if(v!==""&&!isNaN(Number(v)))return Number(v);return v;}
 
 /* ===================== VALIDATION ===================== */
-function runValidation(){const issues=lint();const errs=issues.filter(i=>i.sev==="error");const h=document.getElementById("health"),t=document.getElementById("healthTxt"),tn=document.getElementById("tabN");if(errs.length){h.className="health bad";t.textContent=`${errs.length} masalah`;tn.hidden=false;tn.textContent=errs.length;}else{h.className="health ok";t.textContent="Valid";tn.hidden=true;}renderJson(issues);}
+function runValidation(){const issues=lint();const errs=issues.filter(i=>i.sev==="error");const h=document.getElementById("health"),t=document.getElementById("healthTxt"),tn=document.getElementById("tabN");if(errs.length){h.className="health bad";t.textContent=`${errs.length} issue${errs.length>1?"s":""}`;tn.hidden=false;tn.textContent=errs.length;}else{h.className="health ok";t.textContent="Valid";tn.hidden=true;}renderJson(issues);}
 function lint(){
   const issues=[],add=(sev,path,msg)=>issues.push({sev,path,msg});
   const names={},fields=new Set(),containers=new Set(),exprs=[],refs=[];
@@ -684,6 +791,15 @@ function lint(){
   const tables=new Set(Object.keys(state.referenceData||{}));const nav=new Set([...fields,...containers,"__end","__next","__prev"]);
   refs.forEach(r=>{if(r.kind==="table"&&!tables.has(r.val))add("error",r.path,`optionsRef '${r.val}' does not exist in referenceData`);if(r.kind==="field"&&!fields.has(r.val))add("error",r.path,`'${r.val}' is not an existing field`);if(r.kind==="nav"&&!nav.has(r.val))add("error",r.path,`skip target '${r.val}' not found`);});
   exprs.forEach(({path,expr})=>{try{Expr.parse(expr);}catch(e){add("error",path,"invalid expression: "+e.message);}for(const m of String(expr).matchAll(/\$\{([^}]*)\}/g)){const full=m[1].trim();const b=full.split(/[.\[]/)[0];if(!b||b.startsWith("__"))continue;if(fields.has(full)||containers.has(full))continue;if(!fields.has(b)&&!containers.has(b))add("error",path,`expression references '${b}', which does not exist`);}});
+  // A reference table with no items yields an empty dropdown and says nothing about
+  // why. The common cause is a leftover "source":"api" table, a form this no longer
+  // supports — so it is named here rather than left to be discovered in the field.
+  Object.entries(state.referenceData||{}).forEach(([k,v])=>{
+    if(v&&Array.isArray(v.items)&&v.items.length)return;
+    add("warning",`referenceData.${k}`,v&&v.source==="api"
+      ? `table '${k}' is an API lookup, which is no longer supported — give it inline items, or move the field to the API choice source`
+      : `table '${k}' has no items, so any field using it shows an empty list`);
+  });
   const locs=new Set(state.locales||[]);if(state.defaultLocale&&locs.size&&!locs.has(state.defaultLocale))add("warning","defaultLocale",`default locale '${state.defaultLocale}' is missing from locales`);
   return issues;
 }
@@ -706,7 +822,10 @@ function importJSON(obj){try{
   const pages = obj.pages || (obj.sections? obj.sections.map(s=>({kind:"page",name:s.name,title:s.title,visibleWhen:s.visibleWhen,components:s.components})) : []);
   pages.forEach(p=>st.pages.push(impNode(p,"page")));
   if(!st.pages.length)st.pages.push(blankState().pages[0]);
-  state=st;selected=null;view={type:"page",uid:state.pages[0].uid};render();
+  state=st;selected=null;selectedSet=new Set();view={type:"page",uid:state.pages[0].uid};render();
+  // Loading a different instrument starts a new history: undoing back past the load
+  // into the previous instrument would be nonsense.
+  History.reset();
 }catch(e){alert("Import failed: "+e.message);}}
 function impNode(n,forceKind){
   const kind=forceKind||n.kind||"field";
@@ -722,6 +841,281 @@ function impNode(n,forceKind){
   return f;
 }
 function textOf(v){if(v==null)return "";if(typeof v==="string")return v;if(typeof v==="object")return v[state?.defaultLocale]||v.id||Object.values(v)[0]||"";return String(v);}
+
+/* ===================== BUILDER TOOLS (find / expression / flow) =====================
+   Three review tools that all need more room than the 330px inspector, so each opens
+   as an overlay. They share one modal shell and one stylesheet, injected here rather
+   than added to builder.css so the whole feature stays in one place. */
+(function(){
+  const style=document.createElement("style");
+  style.textContent=`
+.bt-bg{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:120;display:flex;
+  align-items:flex-start;justify-content:center;padding:60px 20px;backdrop-filter:blur(2px)}
+.bt-box{background:#fff;border-radius:14px;width:100%;max-width:780px;max-height:calc(100vh - 120px);
+  display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(15,23,42,.28);overflow:hidden}
+.bt-box.wide{max-width:960px}
+.bt-head{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid #e6eaf0}
+.bt-head h3{margin:0;font-size:15px;font-weight:700}
+.bt-head .bt-x{margin-left:auto;border:none;background:transparent;font-size:19px;cursor:pointer;
+  color:#64748b;line-height:1;padding:4px 8px;border-radius:6px}
+.bt-head .bt-x:hover{background:#f1f5f9;color:#0f172a}
+.bt-body{padding:16px 18px;overflow:auto}
+.bt-in{width:100%;padding:9px 11px;border:1.5px solid #dfe4ea;border-radius:8px;font-size:13.5px;
+  font-family:inherit;box-sizing:border-box}
+.bt-in:focus{outline:none;border-color:#0e7490;box-shadow:0 0 0 3px rgba(14,116,144,.13)}
+.bt-in.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px}
+.bt-hint{font-size:11.5px;color:#64748b;margin:6px 0 0}
+.bt-empty{color:#64748b;font-style:italic;font-size:13px;padding:14px 2px}
+
+/* find */
+.bt-hit{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;cursor:pointer;border:1px solid transparent}
+.bt-hit:hover,.bt-hit.on{background:#f0f9ff;border-color:#bae6fd}
+.bt-hit .k{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;font-weight:700;color:#0f172a}
+.bt-hit .l{font-size:12.5px;color:#475569;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-hit .t{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:#0e7490;
+  background:#ecfeff;border:1px solid #a5f3fc;border-radius:999px;padding:2px 8px;white-space:nowrap}
+.bt-hit .p{font-size:11px;color:#94a3b8;white-space:nowrap}
+
+/* expression tester */
+.bt-row{display:grid;grid-template-columns:minmax(120px,1fr) 1fr;gap:8px;margin-bottom:7px;align-items:center}
+.bt-row .nm{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:#334155;overflow:hidden;text-overflow:ellipsis}
+.bt-res{margin-top:14px;padding:12px 14px;border-radius:9px;font-size:13px;border:1px solid #bbf7d0;background:#f0fdf4}
+.bt-res.err{border-color:#fecaca;background:#fef2f2}
+.bt-res .lab{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:4px}
+.bt-res .val{font-family:ui-monospace,Menlo,monospace;font-size:13.5px;font-weight:700;word-break:break-word}
+
+/* flow */
+.bt-pg{border:1px solid #e6eaf0;border-radius:10px;padding:11px 13px;margin-bottom:9px}
+.bt-pg.unreach{border-color:#fcd34d;background:#fffbeb}
+.bt-pg .ttl{font-weight:700;font-size:13.5px;display:flex;align-items:center;gap:8px}
+.bt-pg .num{font-family:ui-monospace,Menlo,monospace;font-size:11px;color:#94a3b8}
+.bt-jump{font-size:12px;color:#475569;margin-top:6px;padding-left:2px}
+.bt-jump code{font-family:ui-monospace,Menlo,monospace;background:#f1f5f9;padding:1px 5px;border-radius:4px}
+.bt-jump .to{font-weight:700;color:#0f172a}
+.bt-jump.back .to{color:#b45309}
+.bt-jump.bad .to{color:#b91c1c}
+.bt-warn{border:1px solid #fde68a;background:#fffbeb;border-radius:9px;padding:11px 14px;margin-bottom:14px;font-size:12.5px;color:#78350f}
+.bt-warn ul{margin:6px 0 0;padding-left:18px}
+.bt-warn li{margin:3px 0}
+`;
+  document.head.appendChild(style);
+
+  let openBox=null;
+  function close(){if(openBox){openBox.remove();openBox=null;}}
+  function modal(title,wide){
+    close();
+    const bg=document.createElement("div");bg.className="bt-bg";
+    bg.innerHTML=`<div class="bt-box${wide?" wide":""}">
+      <div class="bt-head"><h3>${esc(title)}</h3><button class="bt-x" aria-label="Close">✕</button></div>
+      <div class="bt-body"></div></div>`;
+    bg.addEventListener("click",e=>{if(e.target===bg)close();});
+    bg.querySelector(".bt-x").addEventListener("click",close);
+    document.body.appendChild(bg);openBox=bg;
+    return bg.querySelector(".bt-body");
+  }
+  document.addEventListener("keydown",e=>{if(e.key==="Escape"&&openBox){close();e.stopPropagation();}},true);
+
+  /* ---------- where does this node live ---------- */
+  function pageIndexOf(uid){
+    const pg=pageOf(uid);
+    return pg?state.pages.findIndex(p=>p.uid===pg.uid):-1;
+  }
+  function trail(uid){
+    const pg=pageOf(uid);
+    return pg?(pg.title||pg.name):"";
+  }
+
+  /* ================= 1. FIND A FIELD ================= */
+  function openFind(){
+    const body=modal("Find a field");
+    body.innerHTML=`<input class="bt-in" id="btFindIn" placeholder="Search by dataKey, label, or type…" autocomplete="off">
+      <p class="bt-hint">Enter opens the first result. Matching is case-insensitive.</p>
+      <div id="btFindOut" style="margin-top:10px"></div>`;
+    const input=body.querySelector("#btFindIn"),out=body.querySelector("#btFindOut");
+
+    function search(q){
+      q=q.trim().toLowerCase();
+      if(!q)return [];
+      const hits=[];
+      for(const n of allNodes()){
+        if(n.kind==="page")continue;               // pages have their own list already
+        const name=String(n.name||""),label=textOf(n.label||n.title||"");
+        const type=n.kind==="field"?n.type:n.kind;
+        const hay=`${name} ${label} ${type}`.toLowerCase();
+        if(hay.includes(q))hits.push({n,name,label,type,page:trail(n.uid)});
+        if(hits.length>=80)break;                  // a long list stops being a shortcut
+      }
+      // an exact dataKey match is almost always the one wanted
+      hits.sort((a,b)=>(b.name.toLowerCase()===q)-(a.name.toLowerCase()===q));
+      return hits;
+    }
+    function paint(){
+      const hits=search(input.value);
+      if(!input.value.trim()){out.innerHTML=`<div class="bt-empty">Type to search across every page.</div>`;return;}
+      if(!hits.length){out.innerHTML=`<div class="bt-empty">Nothing matches “${esc(input.value.trim())}”.</div>`;return;}
+      out.innerHTML=hits.map((h,i)=>`<div class="bt-hit${i===0?" on":""}" data-uid="${h.n.uid}">
+        <span class="k">${esc(h.name)}</span>
+        <span class="l">${esc(h.label||"")}</span>
+        <span class="t">${esc(h.type)}</span>
+        <span class="p">${esc(h.page)}</span></div>`).join("");
+      out.querySelectorAll(".bt-hit").forEach(el=>el.addEventListener("click",()=>go(el.dataset.uid)));
+    }
+    function go(uid){
+      const pg=pageOf(uid);
+      if(pg)view={type:"page",uid:pg.uid};
+      selected=uid;selectedSet=new Set([uid]);
+      close();render();
+      const card=document.querySelector(`#stage [data-uid="${uid}"]`);
+      if(card)card.scrollIntoView({block:"center",behavior:"smooth"});
+    }
+    input.addEventListener("input",paint);
+    input.addEventListener("keydown",e=>{
+      if(e.key==="Enter"){const first=out.querySelector(".bt-hit");if(first)go(first.dataset.uid);}
+    });
+    paint();input.focus();
+  }
+
+  /* ================= 2. EXPRESSION TESTER ================= */
+  function openExpr(){
+    const body=modal("Test an expression");
+    const sel=selected&&findNode(selected);
+    const seed=sel?(sel.visibleWhen||sel.calculate||sel.enableWhen||sel.requiredWhen||""):"";
+    body.innerHTML=`<textarea class="bt-in mono" id="btExprIn" rows="3"
+        placeholder="\${age} >= 17 and \${status} == 'married'">${esc(seed)}</textarea>
+      <p class="bt-hint">The same evaluator the form and the preview use. Fill in test values below; blank means the field was left empty.</p>
+      <div id="btExprVals" style="margin-top:12px"></div>
+      <div id="btExprRes"></div>`;
+    const input=body.querySelector("#btExprIn"),vals=body.querySelector("#btExprVals"),res=body.querySelector("#btExprRes");
+    const store=Object.create(null);
+
+    const known=new Set(allNodes().filter(n=>n.kind==="field").map(n=>n.name));
+    function refsOf(src){
+      const out=[];
+      for(const m of String(src||"").matchAll(/\$\{([^}]*)\}/g)){
+        const r=m[1].trim();
+        if(r&&!out.includes(r))out.push(r);
+      }
+      return out;
+    }
+    // Numbers must arrive as numbers or every comparison silently becomes a string one.
+    function coerce(v){
+      if(v==null||v==="")return undefined;
+      if(/^-?\d+(\.\d+)?$/.test(v.trim()))return Number(v);
+      if(v==="true")return true;
+      if(v==="false")return false;
+      return v;
+    }
+    function paint(){
+      const refs=refsOf(input.value);
+      vals.innerHTML=refs.length
+        ? refs.map(r=>`<div class="bt-row">
+            <span class="nm" title="${esc(r)}">\${${esc(r)}}${known.has(r)?"":' <span style="color:#b91c1c">✕</span>'}</span>
+            <input class="bt-in mono" data-ref="${esc(r)}" value="${esc(store[r]??"")}" placeholder="(empty)">
+          </div>`).join("")
+        : `<div class="bt-empty">No \${field} references yet.</div>`;
+      vals.querySelectorAll("input[data-ref]").forEach(el=>{
+        el.addEventListener("input",()=>{store[el.dataset.ref]=el.value;run();});
+      });
+      run();
+    }
+    function run(){
+      const src=input.value.trim();
+      if(!src){res.innerHTML="";return;}
+      try{Expr.parse(src);}
+      catch(e){
+        res.innerHTML=`<div class="bt-res err"><div class="lab">Cannot be parsed</div><div class="val">${esc(e.message)}</div></div>`;
+        return;
+      }
+      const missing=refsOf(src).filter(r=>!known.has(r));
+      const v=Expr.evalSrc(src,name=>coerce(store[String(name).trim()]));
+      const shown=v===undefined?"undefined":(typeof v==="string"?JSON.stringify(v):String(v));
+      const asCond=v===undefined?"treated as true when used as a condition":`as a condition: ${!!v}`;
+      res.innerHTML=`<div class="bt-res${v===undefined?" err":""}">
+        <div class="lab">Result</div><div class="val">${esc(shown)}</div>
+        <div class="bt-hint">${esc(asCond)}</div>
+        ${missing.length?`<div class="bt-hint" style="color:#b91c1c">Not a field in this instrument: ${esc(missing.join(", "))}</div>`:""}
+      </div>`;
+    }
+    input.addEventListener("input",paint);
+    paint();input.focus();
+  }
+
+  /* ================= 3. FLOW MAP ================= */
+  function openFlow(){
+    const body=modal("Flow map",true);
+    const pages=state.pages;
+    const idxByName={},nameOfPage={};
+    pages.forEach((p,i)=>{idxByName[p.name]=i;nameOfPage[p.uid]=p.name;});
+
+    // Every skip in the instrument, resolved to the page it lands on.
+    const jumps=[];
+    for(const n of allNodes()){
+      if(!n.skips||!n.skips.length)continue;
+      const from=pageIndexOf(n.uid);
+      if(from<0)continue;
+      for(const s of n.skips){
+        const to=String(s.to||"").trim();
+        if(!to)continue;
+        let target=-1,kind="page";
+        if(to==="__end"){kind="end";}
+        else if(to==="__next"||to==="__prev"){kind="rel";}
+        else if(idxByName[to]!==undefined){target=idxByName[to];}
+        else{
+          // a skip may also name a field or container: resolve it to its page
+          const node=allNodes().find(x=>x.name===to);
+          if(node){target=pageIndexOf(node.uid);kind="into";}
+          else kind="missing";
+        }
+        jumps.push({from,to,target,kind,field:n.name,when:s.when||""});
+      }
+    }
+
+    // Which pages a jump can vault over. Pages only ever reached by falling through
+    // are fine; the interesting ones are those a jump can skip past entirely.
+    const bypassable=new Set();
+    jumps.forEach(j=>{if(j.target>j.from+1)for(let i=j.from+1;i<j.target;i++)bypassable.add(i);});
+    const backward=jumps.filter(j=>j.target>=0&&j.target<=j.from);
+    const missing=jumps.filter(j=>j.kind==="missing");
+
+    const warn=[];
+    if(missing.length)warn.push(missing.length===1
+      ? `1 skip names a target that does not exist: ${esc(missing[0].to)}`
+      : `${missing.length} skips name targets that do not exist: ${esc([...new Set(missing.map(m=>m.to))].join(", "))}`);
+    if(backward.length)warn.push(backward.length===1
+      ? `1 skip jumps backwards or onto its own page — check it cannot loop.`
+      : `${backward.length} skips jump backwards or onto their own page — check they cannot loop.`);
+    if(!jumps.length)warn.push("No skips are defined, so the instrument runs straight through in page order.");
+
+    const arrow=j=>{
+      const cls=j.kind==="missing"?"bad":(j.target>=0&&j.target<=j.from?"back":"");
+      const dest=j.kind==="end"?"end of form":(j.kind==="rel"?j.to:(j.target>=0?`${j.target+1}. ${pages[j.target].title||pages[j.target].name}`:j.to));
+      return `<div class="bt-jump ${cls}"><code>${esc(j.field)}</code> → <span class="to">${esc(dest)}</span>${j.when?` <span style="color:#94a3b8">when ${esc(j.when)}</span>`:""}</div>`;
+    };
+
+    body.innerHTML=`
+      ${warn.length?`<div class="bt-warn"><strong>What to look at</strong><ul>${warn.map(w=>`<li>${w}</li>`).join("")}</ul></div>`:""}
+      ${pages.map((p,i)=>{
+        const out=jumps.filter(j=>j.from===i);
+        return `<div class="bt-pg${bypassable.has(i)?" unreach":""}">
+          <div class="ttl"><span class="num">${i+1}</span> ${esc(p.title||p.name)}
+            ${bypassable.has(i)?`<span class="t" style="font-size:10px;background:#fef3c7;border-color:#fcd34d;color:#92400e">can be skipped past</span>`:""}</div>
+          ${out.length?out.map(arrow).join(""):`<div class="bt-jump" style="color:#94a3b8">falls through to the next page</div>`}
+        </div>`;
+      }).join("")}
+      <p class="bt-hint">Static reading of the skips only. Whether a condition can actually be true depends on the answers, which this map does not evaluate — use the preview for that.</p>`;
+  }
+
+  document.getElementById("btnFind").addEventListener("click",openFind);
+  document.getElementById("btnExpr").addEventListener("click",openExpr);
+  document.getElementById("btnFlow").addEventListener("click",openFlow);
+  document.getElementById("btnUndo").addEventListener("click",()=>History.undo());
+  document.getElementById("btnRedo").addEventListener("click",()=>History.redo());
+  document.addEventListener("keydown",e=>{
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="f"&&document.getElementById("preview").hidden){
+      e.preventDefault();openFind();
+    }
+  });
+})();
 
 /* ===================== TABS / COLLAPSE / TOP ACTIONS ===================== */
 function switchTab(name){document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("on",t.dataset.tab===name));document.getElementById("paneProps").hidden=name!=="props";document.getElementById("paneJson").hidden=name!=="json";}
@@ -756,6 +1150,11 @@ document.addEventListener("keydown",e=>{
   }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="c"&&selected){const n=findNode(selected);if(n){copyNode(n);render();e.preventDefault();}}
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="v"&&clipboard){pasteNode();e.preventDefault();}
+  // Deliberately below the INPUT/TEXTAREA guard above: while the caret is in a text
+  // box, Ctrl+Z belongs to that box. Click out and it undoes the instrument instead;
+  // the toolbar buttons work regardless of where focus is.
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="z"){e.preventDefault();e.shiftKey?History.redo():History.undo();return;}
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="y"){e.preventDefault();History.redo();return;}
 });
 document.querySelector(".canvas").addEventListener("click",e=>{if(e.target.classList.contains("canvas")||e.target.closest(".cv-head")&&!e.target.closest("button")){selected=null;selectedSet=new Set();render();}});
 
@@ -832,7 +1231,8 @@ function resolveOptions(c,rp){
   const mode=c.optionSource||(c.optionsApi&&c.optionsApi.url?"api":(c.optionsRef?"ref":"manual"));
   if(mode==="api"){
     const cfg=c.optionsApi||{};if(!cfg.url)return {state:"ok",opts:[]};
-    // Dependency: placeholder {key} di URL (selain {parent}) + dataKey trigger eksplisit (depKeys)
+    // Dependencies: {key} placeholders in the URL (other than {parent}), plus any
+    // dataKeys named explicitly in depKeys.
     const urlDeps=(cfg.url.match(/\{([^}]+)\}/g)||[]).map(m=>m.slice(1,-1)).filter(k=>k!=="parent");
     const explicitDeps=(cfg.depKeys||"").split(",").map(s=>s.trim()).filter(Boolean);
     const deps=[...new Set([...urlDeps,...explicitDeps])];
@@ -841,7 +1241,11 @@ function resolveOptions(c,rp){
     const parentVal=c.optionsFilterBy?refResolve(c.optionsFilterBy,rp):null;
     const e=apiFetch(cfg,parentVal,rp);return {state:e.state==="done"?"ok":e.state,opts:e.opts||[],error:e.error};
   }
-  if(mode==="ref"&&c.optionsRef){const tbl=state.referenceData&&state.referenceData[c.optionsRef];if(!tbl)return {state:"ok",opts:[]};const parentVal=c.optionsFilterBy?refResolve(c.optionsFilterBy,rp):null;if(tbl.source==="api"){const e=apiFetch(tbl,parentVal,rp);return {state:e.state==="done"?"ok":e.state,opts:e.opts||[],error:e.error};}return {state:"ok",opts:refLabels(c.optionsRef,parentVal,c.optionsFilterBy)};}
+  // Reference tables are inline only. They used to accept a "source":"api" form as
+  // well, but the form-filling page never implemented it: such a table previewed fine
+  // here and then yielded no options at all in the field. Removed rather than
+  // completed — a field that needs a live service already has its own API source.
+  if(mode==="ref"&&c.optionsRef){const tbl=state.referenceData&&state.referenceData[c.optionsRef];if(!tbl)return {state:"ok",opts:[]};const parentVal=c.optionsFilterBy?refResolve(c.optionsFilterBy,rp):null;return {state:"ok",opts:refLabels(c.optionsRef,parentVal,c.optionsFilterBy)};}
   return {state:"ok",opts:(c.options||[]).map(o=>({value:o.value,label:textOf(o.label)||String(o.value)}))};
 }
 function optWrap(ro,fn,key){

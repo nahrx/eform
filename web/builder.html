@@ -13,6 +13,12 @@
     <input id="instTitle" class="ttl" placeholder="Instrument title…" aria-label="Instrument title">
     <div id="health" class="health ok"><span class="dot"></span><span id="healthTxt">Valid</span></div>
     <div class="actions">
+      <button class="btn icon" id="btnUndo" title="Nothing to undo" aria-label="Undo" disabled>↶</button>
+      <button class="btn icon" id="btnRedo" title="Nothing to redo" aria-label="Redo" disabled>↷</button>
+      <button class="btn ghost tool" id="btnFind" title="Find a field (Ctrl+F)"><span class="gly">⌕</span><span class="lbl">Find</span></button>
+      <button class="btn ghost tool" id="btnExpr" title="Test an expression"><span class="gly">ƒx</span><span class="lbl">Expression</span></button>
+      <button class="btn ghost tool" id="btnFlow" title="Flow map"><span class="gly">⇄</span><span class="lbl">Flow</span></button>
+      <div class="topbar-sep"></div>
       <button class="btn ghost" id="btnImport">Import JSON</button>
       <button class="btn" id="btnPreview">Preview Form</button>
       <button class="btn ghost" id="btnExport">Export JSON</button>
@@ -48,7 +54,7 @@
   </header>
 
   <div class="cols" id="cols">
-    <!-- SIDEBAR 1 — komponen/builder -->
+    <!-- SIDEBAR 1 — components palette -->
     <aside class="sb" id="sb1">
       <div class="full">
         <div class="sb-head"><span class="t">Builder · Components</span><button class="collapse" id="col1" title="Close">‹</button></div>

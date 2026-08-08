@@ -119,26 +119,16 @@ function fieldFilterKind(c) {
       return { kind: multi ? "multiapi" : "api", url: c.optionsApi.url, ...base };
     }
 
-    // Sumber: referenceData via optionsRef
+    // Source: a referenceData table named by optionsRef. Inline items only — the
+    // "source":"api" table form was removed, since the form-filling page never
+    // implemented it and no answer can have been recorded through one.
     if (c.optionsRef) {
       const tbl = (SCHEMA.referenceData || {})[c.optionsRef];
-      if (tbl) {
-        if (tbl.items)
-          return { kind: multi ? "multiselect" : "select", opts: tbl.items.map(it => ({ value: String(it.code), label: txt(it.label) })) };
-        if (tbl.source === "api" && tbl.url) {
-          const deps = [...tbl.url.matchAll(/\{([^}]+)\}/g)].map(m => m[1]);
-          const base = {
-            valueField: tbl.valueField || "code",
-            labelField: tbl.labelField || "label",
-            path: tbl.path || null,
-          };
-          if (deps.length) return { kind: multi ? "multicascade" : "cascade", urlTpl: tbl.url, deps, ...base };
-          return { kind: multi ? "multiapi" : "api", url: tbl.url, ...base };
-        }
-      }
+      if (tbl && tbl.items)
+        return { kind: multi ? "multiselect" : "select", opts: tbl.items.map(it => ({ value: String(it.code), label: txt(it.label) })) };
     }
 
-    // Sumber: opsi inline di field
+    // Source: options listed inline on the field
     if (c.options && c.options.length)
       return { kind: multi ? "multiselect" : "select", opts: c.options.map(o => ({ value: String(o.value), label: txt(o.label) || String(o.value) })) };
   }
