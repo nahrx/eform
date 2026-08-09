@@ -231,6 +231,15 @@ func (s *Server) Routes() http.Handler {
 func (s *Server) page(name string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		path := filepath.Join(s.cfg.WebDir, name)
+		// These files carry no version in their URL, and until now they went out with
+		// only a Last-Modified header. That lets a browser apply heuristic freshness
+		// and keep serving an old builder.js for hours after a deploy, with nothing to
+		// suggest the editor is running last week's code.
+		//
+		// "no-cache" does not forbid caching — it requires revalidation before use. The
+		// handlers below still answer 304 from Last-Modified when nothing changed, so
+		// the usual cost is one conditional request rather than a fresh download.
+		w.Header().Set("Cache-Control", "no-cache")
 		// HTML files go through serveHTML so the organisation placeholders get
 		// filled in; other assets (CSS/JS) contain no placeholders at all.
 		if strings.HasSuffix(name, ".html") {

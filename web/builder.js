@@ -887,11 +887,30 @@ function runValidation(){const issues=lint();const errs=issues.filter(i=>i.sev==
    defects that break nothing in the builder and everything in the field. The costliest
    is required + read-only, which leaves an enumerator unable to fill a question they
    cannot proceed without — that one is an error, not a warning. */
-const DATAKEY_RE=/^[A-Za-z_][A-Za-z0-9_]*$/;
+/* Leading digits are allowed: questionnaire dataKeys are routinely the question
+   numbers themselves — 301, 302a, 4_umur — and nothing in the stack objects. A
+   reference is lifted verbatim out of ${...} rather than tokenised as an identifier,
+   and every consumer downstream treats the name as a plain string key.
+
+   What is still rejected is what actually breaks:
+     .  refResolve() splits on the first dot to address roster rows, so a dot in a
+        dataKey would be read as "roster.field" and resolve to the wrong thing
+     space and punctuation, which make fragile column headers and expressions
+   Kept to ASCII on purpose — these names end up as export headers. */
+/* Letters, digits and underscores, with dots allowed between them so questionnaire
+   numbering ("3.12") can be used verbatim. Leading, trailing and doubled dots are not:
+   they name nothing and would only confuse the roster.field reading. */
+const DATAKEY_RE=/^\w+(\.\w+)*$/;
+const DATAKEY_MAX=64;   // matches isSafeIdentifier() in internal/store/store.go
 function fieldLint(c,p,add){
   const name=String(c.name||"");
   if(name&&!DATAKEY_RE.test(name))
-    add("warning",p,`dataKey '${name}' is not a plain identifier — use letters, digits and underscores, starting with a letter. It becomes a column header and can be referenced in expressions.`);
+    add("warning",p,`dataKey '${name}' should be letters, digits and underscores, with dots only between them (like 3.12). It becomes a column header and can be referenced in expressions.`);
+  // The server drops any filter whose field name fails isSafeIdentifier, without
+  // complaining — so an over-long dataKey quietly makes that column unfilterable on
+  // the responses dashboard.
+  else if(name.length>DATAKEY_MAX)
+    add("warning",p,`dataKey '${name.slice(0,20)}…' is ${name.length} characters; over ${DATAKEY_MAX} the responses dashboard silently refuses to filter on it`);
 
   if(c.required&&c.readOnly)
     add("error",p,"the field is both required and read-only, so it can never be filled in and the response can never be completed");
@@ -920,23 +939,42 @@ function fieldLint(c,p,add){
 
 function lint(){
   const issues=[],add=(sev,path,msg)=>issues.push({sev,path,msg});
-  const names={},fields=new Set(),containers=new Set(),exprs=[],refs=[],byName={},counts=[];
+  const names={},fields=new Set(),containers=new Set(),exprs=[],refs=[],byName={},counts=[],rosterNames=new Set();
   const EK=["visibleWhen","enableWhen","requiredWhen","calculate"];const see=(n,p)=>{(names[n]=names[n]||[]).push(p);};
   function walk(n,base){const p=`${base}/${n.name||n.kind}`;
     if(n.kind==="field"){if(n.name){fields.add(n.name);see(n.name,p);byName[n.name]=n;}fieldLint(n,p,add);EK.forEach(k=>{if(clean(n[k]))exprs.push({path:`${p}.${k}`,expr:n[k]});});if(clean(n.optionsRef))refs.push({path:`${p}.optionsRef`,kind:"table",val:n.optionsRef});if(clean(n.optionsFilterBy))refs.push({path:`${p}.optionsFilterBy`,kind:"field",val:n.optionsFilterBy});(n.validations||[]).forEach((v,j)=>{if(clean(v.test))exprs.push({path:`${p}.val[${j}]`,expr:v.test});});(n.options||[]).forEach((o,j)=>{if(clean(o.skipTo))refs.push({path:`${p}.opsi[${j}]`,kind:"nav",val:o.skipTo});});(n.skips||[]).forEach((s,j)=>{if(clean(s.to))refs.push({path:`${p}.skip[${j}]`,kind:"nav",val:s.to});if(clean(s.when))exprs.push({path:`${p}.skip[${j}]`,expr:s.when});});}
-    else{if(n.name){containers.add(n.name);see(n.name,p);}if(n.kind==="roster"&&clean(n.countFrom)){refs.push({path:`${p}.countFrom`,kind:"field",val:n.countFrom});counts.push({path:`${p}.countFrom`,val:n.countFrom});}if(clean(n.visibleWhen))exprs.push({path:`${p}.visibleWhen`,expr:n.visibleWhen});(n.components||[]).forEach(c=>walk(c,p));}
+    else{if(n.name){containers.add(n.name);see(n.name,p);if(n.kind==="roster")rosterNames.add(n.name);}if(n.kind==="roster"&&clean(n.countFrom)){refs.push({path:`${p}.countFrom`,kind:"field",val:n.countFrom});counts.push({path:`${p}.countFrom`,val:n.countFrom,max:n.max});}if(clean(n.visibleWhen))exprs.push({path:`${p}.visibleWhen`,expr:n.visibleWhen});(n.components||[]).forEach(c=>walk(c,p));}
   }
   state.pages.forEach(p=>walk(p,""));
   Object.entries(names).forEach(([n,ps])=>{if(ps.length>1)add("error",n,`Name '${n}' is used ${ps.length}×`);});
   const tables=new Set(Object.keys(state.referenceData||{}));const nav=new Set([...fields,...containers,"__end","__next","__prev"]);
   refs.forEach(r=>{if(r.kind==="table"&&!tables.has(r.val))add("error",r.path,`optionsRef '${r.val}' does not exist in referenceData`);if(r.kind==="field"&&!fields.has(r.val))add("error",r.path,`'${r.val}' is not an existing field`);if(r.kind==="nav"&&!nav.has(r.val))add("error",r.path,`skip target '${r.val}' not found`);});
   exprs.forEach(({path,expr})=>{try{Expr.parse(expr);}catch(e){add("error",path,"invalid expression: "+e.message);}for(const m of String(expr).matchAll(/\$\{([^}]*)\}/g)){const full=m[1].trim();const b=full.split(/[.\[]/)[0];if(!b||b.startsWith("__"))continue;if(fields.has(full)||containers.has(full))continue;if(!fields.has(b)&&!containers.has(b))add("error",path,`expression references '${b}', which does not exist`);}});
+  /* Now that a dataKey may contain a dot, "3.12" can mean two things at once: the field
+     of that name, or field 12 of roster 3. refResolve gives the declared field
+     precedence, which is the safe way round — but the roster reading is then
+     unreachable, and that is worth saying out loud rather than leaving to be
+     discovered. */
+  fields.forEach(fname=>{
+    const dot=fname.indexOf(".");
+    if(dot<0)return;
+    const head=fname.slice(0,dot);
+    if(rosterNames.has(head))
+      add("warning",fname,`'${fname}' is both a field name and reads as roster '${head}' field '${fname.slice(dot+1)}' — expressions will use the field, and the roster form of the reference cannot be written`);
+  });
+
   // A roster sized from another field needs that field to hold a number. Checked here
   // rather than in fieldLint because it depends on a node found elsewhere in the tree.
-  counts.forEach(({path,val})=>{
+  counts.forEach(({path,val,max})=>{
     const t=byName[val];
     if(t&&!NUMERIC.has(t.type))
       add("warning",path,`row count comes from '${val}', which is a ${t.type} field rather than a number`);
+    // Without a Max, the row count is whatever number is in that field. Pointing it at
+    // a code field by mistake is easy — a village code reads 6472010 — and the form
+    // then tries to build that many rows. Capped at runtime, but the instrument should
+    // say what it actually expects.
+    else if(t&&!clean(max))
+      add("warning",path,`row count comes from '${val}' with no Max set — set one, or a mistyped answer silently asks for that many rows`);
   });
 
   // A reference table with no items yields an empty dropdown and says nothing about
@@ -1257,7 +1295,16 @@ function textOf(v){if(v==null)return "";if(typeof v==="string")return v;if(typeo
     }
     const names=new Set();
     srcs.forEach(s=>{for(const m of String(s).matchAll(/\$\{([^}]*)\}/g)){
-      const b=m[1].trim().split(/[.\[]/)[0];if(b&&!b.startsWith("__"))names.add(b);}});
+      const full=m[1].trim();
+      if(!full||full.startsWith("__"))continue;
+      /* A dataKey may contain a dot itself ("3.12"), so the whole reference is kept
+         when it names a real field. Splitting first would set an answer for "3" and
+         leave ${3.12} unsatisfiable — which showed up as the page being reported
+         unreachable. Only when no such field exists is the name read as roster.field
+         and reduced to the part in front. */
+      const name=allNodes().some(x=>x.kind==="field"&&x.name===full)?full:full.split(/[.\[]/)[0];
+      if(name)names.add(name);
+    }});
     return {names:[...names],srcs};
   }
   function candidatesFor(name,srcs){
@@ -1537,7 +1584,23 @@ function resolveScopedValue(name,rowPrefix){
 }
 function refResolve(name,rowPrefix){
   name=String(name).trim();
-  if(name.includes(".")){const dot=name.indexOf(".");const rn=name.slice(0,dot),fn=name.slice(dot+1);const r=allNodes().find(x=>x.kind==="roster"&&x.name===rn);if(r){const cnt=rosterCount(r);const arr=[];for(let i=0;i<cnt;i++)arr.push(coerceVal(pv.values[`${rn}#${i}#${fn}`]));return arr;}if(rowPrefix){const v=resolveScopedValue(name,rowPrefix);if(v!==undefined)return v;}return name in pv.values?coerceVal(pv.values[name]):undefined;}
+  if(name.includes(".")){
+    /* A dataKey may legitimately contain a dot — questionnaire numbering runs "3.12".
+       A field declared under that exact name therefore wins over reading the text as
+       roster.field, so that naming a roster "3" later cannot silently steal every
+       ${3.12} reference and turn it into an empty array.
+
+       Decided from the schema rather than from the answers on purpose: keying off
+       pv.values would make the same expression resolve differently before and after
+       the respondent fills the field in. lint() reports the collision separately. */
+    if(!allNodes().some(x=>x.kind==="field"&&x.name===name)){
+      const dot=name.indexOf(".");const rn=name.slice(0,dot),fn=name.slice(dot+1);
+      const r=allNodes().find(x=>x.kind==="roster"&&x.name===rn);
+      if(r){const cnt=rosterCount(r);const arr=[];for(let i=0;i<cnt;i++)arr.push(coerceVal(pv.values[`${rn}#${i}#${fn}`]));return arr;}
+    }
+    if(rowPrefix){const v=resolveScopedValue(name,rowPrefix);if(v!==undefined)return v;}
+    return name in pv.values?coerceVal(pv.values[name]):undefined;
+  }
   const rn=allNodes().find(x=>x.kind==="roster"&&x.name===name);
   if(rn){const cnt=rosterCount(rn);return Array.from({length:cnt},(_,i)=>i);}
   if(rowPrefix){const v=resolveScopedValue(name,rowPrefix);if(v!==undefined)return v;}
@@ -1546,6 +1609,15 @@ function refResolve(name,rowPrefix){
 function evalExprSrc(src,rowPrefix){return Expr.evalSrc(src,name=>refResolve(name,rowPrefix||""));}
 function evalVisible(src,rowPrefix){if(!src)return true;const v=evalExprSrc(src,rowPrefix||"");return v===undefined?true:!!v;}
 function pvEmpty(v){return v==null||v===""||(Array.isArray(v)&&v.length===0);}
+/* A formula over answers that have not been given yet evaluates to NaN — ${a} + ${b}
+   with both blank is undefined + undefined — and a division by zero gives Infinity.
+   Neither is an answer, and neither may be written into the response: an autofill field
+   only recomputes while it is empty, so storing "NaN" once left it stuck there for
+   good, even after the operands were filled in correctly. */
+function calcUsable(r){return r!==undefined&&r!==""&&!(typeof r==="number"&&!Number.isFinite(r));}
+/* Values only this code could have written, from before the guard above existed.
+   Treated as "not filled in yet" so an in-progress form repairs itself. */
+function calcPoisoned(v){return v==="NaN"||v==="Infinity"||v==="-Infinity"||(typeof v==="number"&&!Number.isFinite(v));}
 function refLabels(ref,parentVal,filterField){const tbl=state.referenceData&&state.referenceData[ref];if(!tbl||!tbl.items)return [];return tbl.items.filter(it=>{if(filterField&&parentVal!=null&&parentVal!=="")return String(it.parent)===String(parentVal);return true;}).map(it=>({value:it.code,label:textOf(it.label)}));}
 function pvOptions(c,rowPrefix){if(c.optionsRef){const pVal=c.optionsFilterBy?refResolve(c.optionsFilterBy,rowPrefix):null;return refLabels(c.optionsRef,pVal,c.optionsFilterBy);}return (c.options||[]).map(o=>({value:o.value,label:textOf(o.label)||String(o.value)}));}
 function getPath(obj,path){return String(path).split(".").reduce((o,k)=>(o==null?o:o[k]),obj);}
@@ -1802,7 +1874,12 @@ function pvNode(c,row){
   if(c.kind==="roster"){if(!evalVisible(c.visibleWhen,rp))return "";return pvRoster(c,row);}
   return pvField(c,row);
 }
-function rosterCount(r,rowPrefix){
+/* An absolute ceiling on rows, whatever the answers say — Max on the roster is
+   optional, so without this a countFrom pointing at a code field by mistake asked the
+   browser to build millions of rows. Mirrors ROSTER_MAX_ROWS in public.html. */
+const ROSTER_MAX_ROWS=500;
+function rosterCount(r,rowPrefix){return Math.min(rosterCountRaw(r,rowPrefix),ROSTER_MAX_ROWS);}
+function rosterCountRaw(r,rowPrefix){
   const from=String(r.countFrom||"").trim();
   if(from){
     let raw=refResolve(from,rowPrefix||"");
@@ -1857,7 +1934,8 @@ function ensureRosterDefaultValues(r,count){
     if(def) pv.values[key]=def;
   }
 }
-function openAddRowModal(r){
+function openAddRowModal(r,hostRp){
+  const scope=rosterScopePrefix(r,hostRp||"");   // "" or "art#0#" + name + "#"
   const title=r.rowTitle||"row";
   const promptFields=flatFields(r.components).filter(f=>f.promptOnAdd);
   const bg=document.createElement("div");bg.className="pv-modal-bg";
@@ -1871,7 +1949,7 @@ function openAddRowModal(r){
   bg.querySelector("#addRowCancel").addEventListener("click",close);
   bg.addEventListener("click",e=>{if(e.target===bg)close();});
   const confirmAdd=()=>{
-    const key=`${r.name}#count`;
+    const key=`${scope}count`;
     const cur=Number(pv.values[key])||0;
     if(r.max!==""&&r.max!=null){
       const mx=Number(r.max);
@@ -1880,21 +1958,27 @@ function openAddRowModal(r){
         return;
       }
     }
+    if(cur>=ROSTER_MAX_ROWS){alert(`This form allows at most ${ROSTER_MAX_ROWS} rows here.`);return;}
     const idx=cur;
-    pv.values[`${r.name}#count`]=idx+1;
+    pv.values[key]=idx+1;
     if(promptFields.length){
-      bg.querySelectorAll("[data-pf]").forEach(el=>{const v=el.value.trim();if(v)pv.values[`${r.name}#${idx}#${el.dataset.pf}`]=v;});
+      bg.querySelectorAll("[data-pf]").forEach(el=>{const v=el.value.trim();if(v)pv.values[`${scope}${idx}#${el.dataset.pf}`]=v;});
     }else{
       const val=bg.querySelector("#addRowInput")?.value.trim();
-      if(val){const pf=primaryRowField(r);if(pf)pv.values[`${r.name}#${idx}#${pf}`]=val;}
+      if(val){const pf=primaryRowField(r);if(pf)pv.values[`${scope}${idx}#${pf}`]=val;}
     }
     close();renderPreview();
   };
   bg.querySelector("#addRowConfirm").addEventListener("click",confirmAdd);
   bg.querySelectorAll("input").forEach(inp=>inp.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();confirmAdd();}if(e.key==="Escape")close();}));
 }
-function delRow(rname,idx){
-  const key=`${rname}#count`;const count=pv.values[key]||1;const prefix=`${rname}#`;const nv={};
+/* hostRp is the prefix of the row this roster sits in — "" at the top level, or
+   "art#0#" for a nested one, so a nested roster deletes its own rows rather than
+   nothing at all. Mirrors deleteRow() in public.html. */
+function delRow(rname,hostRp,idx){
+  const r=allNodes().find(x=>x.kind==="roster"&&x.name===rname);if(!r)return;
+  const prefix=rosterScopePrefix(r,hostRp||"");
+  const key=prefix+"count";const count=pv.values[key]||1;const nv={};
   Object.keys(pv.values).forEach(k=>{
     if(k===key)return;
     if(k.startsWith(prefix)){const m=k.slice(prefix.length).match(/^(\d+)#(.*)$/);if(m){let ri=+m[1];const fn=m[2];if(ri===idx)return;if(ri>idx)ri--;nv[`${prefix}${ri}#${fn}`]=pv.values[k];return;}}
@@ -1953,6 +2037,11 @@ function pvRoster(r,row){
   const from=String(r.countFrom||"").trim();
   const titleTxt=rowInterp(r.title||r.name,row);
   const count=rosterCount(r,rp);const manual=!r.countFrom;
+  /* Carries the prefix of the row this roster sits in. A roster nested inside another
+     (Roster → Section → Roster) stores under "art#0#usaha#…", so the bare name made
+     every nested roster's buttons identical across the outer rows and the delete
+     matched nothing. Mirrors rosterHtml() in public.html. */
+  const hostRp=esc(rp||"");
   const canAdd=manual&&!(r.max!==""&&r.max!=null&&count>=Number(r.max));
   ensureRosterDefaultValues(r,count);
   if(r.rosterType==="separate"){
@@ -1961,16 +2050,17 @@ function pvRoster(r,row){
     else if(count<=0){h+=`<div class="pv-rowempty">No rows yet.</div>`;}
     else{h+=`<div class="pv-rowlist">`;
       for(let i=0;i<count;i++){const sum=rowSummary(r,i);
-        h+=`<div class="pv-rowitem"><div class="pv-rowinfo"><b>${rowLabel(r,i,row)}</b><span>${sum||"<i>not filled in</i>"}</span></div>${manual?`<button class="pv-rowdel" data-delrow="${esc(r.name)}" data-i="${i}">remove</button>`:""}<button class="pv-rowopen" data-openrow="${r.uid}" data-i="${i}">${isRowFilled(r,i)?"Edit":"Fill"} →</button></div>`;}
+        h+=`<div class="pv-rowitem"><div class="pv-rowinfo"><b>${rowLabel(r,i,row)}</b><span>${sum||"<i>not filled in</i>"}</span></div>${manual?`<button class="pv-rowdel" data-delrow="${esc(r.name)}" data-rp="${hostRp}" data-i="${i}">remove</button>`:""}<button class="pv-rowopen" data-openrow="${r.uid}" data-i="${i}">${isRowFilled(r,i)?"Edit":"Fill"} →</button></div>`;}
       h+=`</div>`;}
-    if(canAdd)h+=`<button class="pv-add" data-addrow="${esc(r.uid)}">${addRowLabel(r)}</button>`;
+    if(canAdd)h+=`<button class="pv-add" data-addrow="${esc(r.uid)}" data-rp="${hostRp}">${addRowLabel(r)}</button>`;
     return h+`</div>`;
   }
   // inline
   let h=`<div class="pv-roster" id="pvroster_${esc(r.name)}"><div class="pv-rh">${esc(titleTxt)}</div>`;
   if(from&&count<=0)h+=`<div class="pv-rowempty">Fill in “${esc(labelOfField(from))}” first to determine the number of rows.</div>`;
-  for(let i=0;i<count;i++){const childRp=rosterRowPrefix(r,i,rp);const rowKey=childRp.slice(0,-1);const rs=computeRosterRowSkipState(r,i);ROW_SKIP_HIDDEN.set(rowKey,rs);rs.forEach(n=>{delete pv.values[`${childRp}${n}`];});h+=`<div class="pv-row"><div class="pv-rownum"><span>${rowLabel(r,i,row)}</span>${manual?`<button class="pv-del" data-delrow="${esc(r.name)}" data-i="${i}">remove</button>`:""}</div>`;r.components.forEach(f=>h+=pvNode(f,{r:r.name,i,parents:parentPrefixes}));h+=`</div>`;}
-  if(canAdd)h+=`<button class="pv-add" data-addrow="${esc(r.uid)}">${addRowLabel(r)}</button>`;
+  {const raw=rosterCountRaw(r,rp);if(raw>ROSTER_MAX_ROWS)h+=`<div class="pv-rowempty" style="border-left:3px solid #f59e0b;background:#fffbeb;color:#78350f">Showing the first ${ROSTER_MAX_ROWS} of ${raw} rows. Check the answer that sets the row count — a number this large is usually a typo.</div>`;}
+  for(let i=0;i<count;i++){const childRp=rosterRowPrefix(r,i,rp);const rowKey=childRp.slice(0,-1);const rs=computeRosterRowSkipState(r,i);ROW_SKIP_HIDDEN.set(rowKey,rs);rs.forEach(n=>{delete pv.values[`${childRp}${n}`];});h+=`<div class="pv-row"><div class="pv-rownum"><span>${rowLabel(r,i,row)}</span>${manual?`<button class="pv-del" data-delrow="${esc(r.name)}" data-rp="${hostRp}" data-i="${i}">remove</button>`:""}</div>`;r.components.forEach(f=>h+=pvNode(f,{r:r.name,i,parents:parentPrefixes}));h+=`</div>`;}
+  if(canAdd)h+=`<button class="pv-add" data-addrow="${esc(r.uid)}" data-rp="${hostRp}">${addRowLabel(r)}</button>`;
   return h+`</div>`;
 }
 function renderRosterRowPage(){
@@ -2007,14 +2097,18 @@ function pvField(c,row){
   const key=row?`${rp}${c.name}`:c.name;
   if(c.type==="calculated"){
     if(c.autofill){
-      if(pvEmpty(pv.values[key])){const r=evalExprSrc(c.calculate,rp);if(r!==undefined&&r!=="")pv.values[key]=String(r);}
+      if(pvEmpty(pv.values[key])||calcPoisoned(pv.values[key])){
+        const r=evalExprSrc(c.calculate,rp);
+        if(calcUsable(r))pv.values[key]=String(r);
+        else delete pv.values[key];   // stay empty rather than record a non-number
+      }
       const val=pv.values[key]??"";const isReq=!!c.required||!!(c.requiredWhen&&evalVisible(c.requiredWhen,rp));const en=evalVisible(c.enableWhen,rp);
       const lab=`<label class="pv-lab">${esc(rowInterp(c.label||c.name,row))}${isReq?' <span class="pv-req">*</span>':''}</label>`;const hint=c.hint?`<div class="pv-hint">${esc(rowInterp(c.hint,row))}</div>`:"";
       return `<div class="pv-field" data-fieldkey="${esc(key)}">${lab}${hint}<div><input data-k="${esc(key)}" class="pv-in" value="${esc(val)}"${en?"":" disabled"}></div></div>`;
     }
-    const r=evalExprSrc(c.calculate,rp);pv.values[key]=(r===undefined?"":r);
+    const r=evalExprSrc(c.calculate,rp);const ok=calcUsable(r);pv.values[key]=ok?r:"";
     const lab=`<label class="pv-lab">${esc(rowInterp(c.label||c.name,row))}</label>`;const hint=c.hint?`<div class="pv-hint">${esc(rowInterp(c.hint,row))}</div>`:"";
-    return `<div class="pv-field" data-fieldkey="${esc(key)}">${lab}${hint}<div><input class="pv-in" value="${esc(r===undefined||r===""?"—":String(r))}" disabled></div></div>`;
+    return `<div class="pv-field" data-fieldkey="${esc(key)}">${lab}${hint}<div><input class="pv-in" value="${esc(ok?String(r):"—")}" disabled></div></div>`;
   }
   if(pvEmpty(pv.values[key])&&clean(c.defaultValue))pv.values[key]=c.defaultValue;
   const val=pv.values[key]??"";
@@ -2078,8 +2172,8 @@ function bindPreview(body){
   });
   body.querySelectorAll("[data-kr]").forEach(inp=>inp.addEventListener("change",e=>{pv.values[inp.getAttribute("data-kr")]=inp.value;const f=e.target.closest(".pv-field"),fkey=f?.dataset?.fieldkey,top0=fkey?f.getBoundingClientRect().top:null;renderPreview();snapScroll(fkey,top0);}));
   body.querySelectorAll("[data-kc]").forEach(inp=>inp.addEventListener("change",e=>{const key=inp.getAttribute("data-kc");const arr=Array.isArray(pv.values[key])?pv.values[key]:[];const v=inp.value;if(inp.checked){if(!arr.includes(v))arr.push(v);}else{const idx=arr.indexOf(v);if(idx>=0)arr.splice(idx,1);}pv.values[key]=arr;const f=e.target.closest(".pv-field"),fkey=f?.dataset?.fieldkey,top0=fkey?f.getBoundingClientRect().top:null;renderPreview();snapScroll(fkey,top0);}));
-  body.querySelectorAll("[data-addrow]").forEach(b=>b.addEventListener("click",()=>{const r=findNode(b.getAttribute("data-addrow"));if(r)openAddRowModal(r);}));
-  body.querySelectorAll("[data-delrow]").forEach(b=>b.addEventListener("click",()=>{delRow(b.getAttribute("data-delrow"),+b.getAttribute("data-i"));renderPreview();}));
+  body.querySelectorAll("[data-addrow]").forEach(b=>b.addEventListener("click",()=>{const r=findNode(b.getAttribute("data-addrow"));if(r)openAddRowModal(r,b.getAttribute("data-rp")||"");}));
+  body.querySelectorAll("[data-delrow]").forEach(b=>b.addEventListener("click",()=>{delRow(b.getAttribute("data-delrow"),b.getAttribute("data-rp")||"",+b.getAttribute("data-i"));renderPreview();}));
   body.querySelectorAll("[data-openrow]").forEach(b=>b.addEventListener("click",()=>{pv.row={uid:b.getAttribute("data-openrow"),index:+b.getAttribute("data-i")};document.getElementById("pvBody").scrollTop=0;renderPreview();}));
   body.querySelectorAll(".pv-sigpad").forEach(canvas=>wireSignaturePad(canvas));
   body.querySelectorAll(".pv-geobtn").forEach(btn=>wireGeoButton(btn));

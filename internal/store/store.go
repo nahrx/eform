@@ -1,4 +1,4 @@
-﻿package store
+package store
 
 import (
 	"context"
@@ -10,21 +10,21 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nahrx/eform/internal/models"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nahrx/eform/internal/models"
 )
 
 // ResponseFilter carries the filter and sort parameters for the admin response list.
 type ResponseFilter struct {
-	Status            string              // 'submitted'|'draft'|'' (empty = all)
-	ShareID           string              // uuid string or '' (empty = all)
-	Search            string              // partial search over meta.name / meta.email
-	SortBy            string              // 'time'|'status'|'share'|'who'|schema field name
-	SortDir           string              // 'asc'|'desc'
-	FieldFilters      map[string]string   // fieldName → text value (ILIKE, for free-text fields)
-	FieldExactFilters map[string]string   // fieldName → exact value (=, for dropdown/radio/date)
-	FieldAnyFilters   map[string][]string // fieldName → list of values (array contains any of them, for checkbox/multiselect)
+	Status            string               // 'submitted'|'draft'|'' (empty = all)
+	ShareID           string               // uuid string or '' (empty = all)
+	Search            string               // partial search over meta.name / meta.email
+	SortBy            string               // 'time'|'status'|'share'|'who'|schema field name
+	SortDir           string               // 'asc'|'desc'
+	FieldFilters      map[string]string    // fieldName → text value (ILIKE, for free-text fields)
+	FieldExactFilters map[string]string    // fieldName → exact value (=, for dropdown/radio/date)
+	FieldAnyFilters   map[string][]string  // fieldName → list of values (array contains any of them, for checkbox/multiselect)
 	FieldRangeFilters map[string][2]string // fieldName → [min,max] (numeric range; either bound may be empty)
 }
 
@@ -94,13 +94,29 @@ func (sc ResponseScope) source() string {
 }
 
 // isSafeIdentifier validates a schema field name so it is safe to interpolate into SQL.
-// Only letters, digits, and underscores are allowed.
+// Letters, digits, underscores and dots are allowed — dots because questionnaire
+// dataKeys are numbered after their questions ("3.12"), and a name this rejects is
+// silently dropped from the WHERE clause, leaving that column unfilterable.
+//
+// The set stays deliberately narrow: none of these characters can close the
+// single-quoted literal the name is placed inside, or begin a comment. A leading or
+// doubled dot is refused too — it names nothing, so accepting it would only widen the
+// input for no gain.
 func isSafeIdentifier(s string) bool {
-	if s == "" || len(s) > 64 {
+	if s == "" || len(s) > 64 || s[0] == '.' || s[len(s)-1] == '.' {
 		return false
 	}
+	prevDot := false
 	for _, c := range s {
-		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_') {
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '_':
+			prevDot = false
+		case c == '.':
+			if prevDot {
+				return false // ".." names nothing
+			}
+			prevDot = true
+		default:
 			return false
 		}
 	}
@@ -1971,7 +1987,6 @@ func (s *Store) GetEditorPermissionByID(ctx context.Context, permID string) (*mo
 	}
 	return p, err
 }
-
 
 // ListFormEditorPermissions returns every editor with access to one form.
 func (s *Store) ListFormEditorPermissions(ctx context.Context, formID string) ([]models.EditorFormPermission, error) {

@@ -138,15 +138,33 @@ func TestAPIKeyScopeNeverIncludesDrafts(t *testing.T) {
 	}
 }
 
+// isSafeIdentifier is the only thing between a schema field name and the SQL string
+// literal it is interpolated into, so the rejected list matters more than the accepted
+// one. Note that a name it rejects is dropped from the WHERE clause silently, which
+// leaves that column unfilterable rather than raising anything.
+//
+// Dots used to be rejected here. They are accepted now because questionnaire dataKeys
+// are numbered after their questions ("3.12"), and a dot cannot close the quoted
+// literal or open a comment — the property this function actually has to guarantee.
 func TestIsSafeIdentifier(t *testing.T) {
-	safe := []string{"name", "kabupaten_kota", "f1", "A_9"}
+	safe := []string{
+		"name", "kabupaten_kota", "f1", "A_9",
+		"3.12", "3.12.4", "q1.2a", "301", // question numbering
+		strings.Repeat("a", 64), // exactly at the limit
+	}
 	for _, s := range safe {
 		if !isSafeIdentifier(s) {
 			t.Errorf("%q should be considered safe", s)
 		}
 	}
-	bahaya := []string{"", "a b", "a'b", "a;b", "a-b", "a.b", "a#b", strings.Repeat("a", 65)}
-	for _, s := range bahaya {
+	unsafe := []string{
+		"", "a b", "a-b", "a#b",
+		"a'b", `a"b`, `a\b`, "a;b", "a--b", "a/*b", // could break out of the literal
+		".12", "3.", "3..12", // dots that name nothing
+		"é",                     // non-ASCII
+		strings.Repeat("a", 65), // one over the limit
+	}
+	for _, s := range unsafe {
 		if isSafeIdentifier(s) {
 			t.Errorf("%q should be rejected", s)
 		}

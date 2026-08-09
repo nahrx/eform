@@ -810,10 +810,16 @@ function resolveScopedAnswer(name,rowPrefix){
 function refResolve(name,rowPrefix){
   name=String(name).trim();
   if(name.includes(".")){
-    const dot=name.indexOf(".");const rn=name.slice(0,dot),fn=name.slice(dot+1);
-    const r=findRoster(rn);
-    if(r){const cnt=rosterCount(r);const arr=[];for(let i=0;i<cnt;i++)arr.push(coerceVal(answers[`${rn}#${i}#${fn}`]));return arr;}
-    // Not roster.field notation — an ordinary field name that happens to contain a dot
+    /* A field declared under this exact name wins over reading the text as
+       roster.field: questionnaire dataKeys are numbered "3.12", and naming a roster
+       "3" must not silently turn every ${3.12} into an empty array. Decided from the
+       schema, not from the answers, so resolution cannot change once the respondent
+       starts filling the form in. Mirrors refResolve() in builder.js. */
+    if(!findFieldNamed(name)){
+      const dot=name.indexOf(".");const rn=name.slice(0,dot),fn=name.slice(dot+1);
+      const r=findRoster(rn);
+      if(r){const cnt=rosterCount(r);const arr=[];for(let i=0;i<cnt;i++)arr.push(coerceVal(answers[`${rn}#${i}#${fn}`]));return arr;}
+    }
     if(rowPrefix){const v=resolveScopedAnswer(name,rowPrefix);if(v!==undefined)return v;}
     return name in answers?coerceVal(answers[name]):undefined;
   }
@@ -1626,6 +1632,17 @@ const DT_INPUT_TYPE={date:"date",time:"time",datetime:"datetime-local"};
 let pending=[];
 
 function pvEmpty(v){return v==null||v===""||(Array.isArray(v)&&v.length===0);}
+/* A formula over answers that have not been given yet evaluates to NaN — ${a} + ${b}
+   with both blank is undefined + undefined — and a division by zero gives Infinity.
+   Neither is an answer, and neither may be recorded: an autofill field only recomputes
+   while it is empty, so storing "NaN" once left it stuck there for the rest of the
+   interview, and that string was submitted as the respondent's answer.
+   Mirrors the same pair in builder.js. */
+function calcUsable(r){return r!==undefined&&r!==""&&!(typeof r==="number"&&!Number.isFinite(r));}
+/* Values only this code could have written, from before the guard above existed.
+   Treated as "not answered yet" so a half-finished form repairs itself on the next
+   render instead of carrying the bad value through to submission. */
+function calcPoisoned(v){return v==="NaN"||v==="Infinity"||v==="-Infinity"||(typeof v==="number"&&!Number.isFinite(v));}
 // Parse a geopoint value "lat, lng" (the format stored by the "Get Location" button) into {lat,lng} or null.
 function parseGeoPoint(val){
   if(val==null||val==="")return null;
@@ -1668,13 +1685,18 @@ function fieldHtml(c,rp,scopes){
   if(c.defaultValue&&pvEmpty(answers[key]))answers[key]=c.defaultValue;
   if(c.type==="calculated"){
     if(c.autofill){
-      if(pvEmpty(answers[key])){const r=evalExprSrc(c.calculate,rp);if(r!==undefined&&r!=="")answers[key]=String(r);}
+      if(pvEmpty(answers[key])||calcPoisoned(answers[key])){
+        const r=evalExprSrc(c.calculate,rp);
+        if(calcUsable(r))answers[key]=String(r);
+        else delete answers[key];   // leave it unanswered rather than record a non-number
+      }
       const autoVal=answers[key]??"";
       return`<div class="pv-field" data-fieldkey="${ke}">${lab}${hint}<div><input type="text" data-k="${ke}" class="pv-in" value="${esc(autoVal)}"${dis}></div></div>`;
     }
     const r=evalExprSrc(c.calculate,rp);
-    answers[key]=(r===undefined?"":r);
-    return`<div class="pv-field" data-fieldkey="${ke}">${lab}${hint}<div><input class="pv-in" value="${esc(r===undefined||r===""?"—":String(r))}" disabled></div></div>`;
+    const ok=calcUsable(r);
+    answers[key]=ok?r:"";
+    return`<div class="pv-field" data-fieldkey="${ke}">${lab}${hint}<div><input class="pv-in" value="${esc(ok?String(r):"—")}" disabled></div></div>`;
   }
   const val=answers[key];
   let ctrl="";
@@ -1744,7 +1766,15 @@ function nodeHtml(c,rp,scopes){
 }
 
 /* ---- roster ---- */
-function rosterCount(r,rowPrefix){
+/* An absolute ceiling on rows, whatever the answers say. Max on the roster is
+   optional, so without this the row count was whatever number happened to be in the
+   source field: pointing countFrom at a code field by mistake (a village code reads
+   6472010) asked the browser to build millions of rows. Measured on a desktop, 2,000
+   rows already cost 32,000 DOM nodes and half a second per render, and the render
+   repeats on every answer — on the phones enumerators actually carry, a slip like that
+   ends the interview. */
+const ROSTER_MAX_ROWS=500;
+function rosterCountRaw(r,rowPrefix){
   const from=String(r.countFrom||"").trim();
   if(from){
     let raw=refResolve(from,rowPrefix||"");
@@ -1760,6 +1790,14 @@ function rosterCount(r,rowPrefix){
   const stored=answers[rosterCountKey(r,rowPrefix)];
   if(stored!=null)return Math.max(0,Math.floor(Number(stored))||0);
   return Number(r.min)||0;
+}
+function rosterCount(r,rowPrefix){return Math.min(rosterCountRaw(r,rowPrefix),ROSTER_MAX_ROWS);}
+/* Clamping silently would leave the enumerator wondering where the rows went, so the
+   roster says so where it happened. */
+function rosterCapNotice(r,rowPrefix){
+  const raw=rosterCountRaw(r,rowPrefix);
+  if(raw<=ROSTER_MAX_ROWS)return "";
+  return `<div class="pv-rowempty" style="border-left:3px solid #f59e0b;background:#fffbeb;color:#78350f">Showing the first ${ROSTER_MAX_ROWS} of ${raw} rows. Check the answer that sets the row count — a number this large is usually a typo.</div>`;
 }
 function rosterScopePrefix(r,rowPrefix){return `${rowPrefix||""}${r.name}#`;}
 function rosterCountKey(r,rowPrefix){return `${rosterScopePrefix(r,rowPrefix)}count`;}
@@ -1832,6 +1870,12 @@ function rosterHtml(r,rp,scopes){
   const hostScopes=[rp,...normScopes(scopes)];
   const from=String(r.countFrom||"").trim();
   const count=rosterCount(r,rp),manual=!from,rn=esc(r.name);
+  /* The row buttons have to carry the prefix of the row this roster sits in, not just
+     its name: a roster nested inside another (Roster → Section → Roster, which the
+     builder allows) stores its answers under "art#0#usaha#…". Sending the bare name
+     made every nested roster's buttons identical across the outer rows, and the delete
+     matched no keys at all — it removed nothing and left an orphan "usaha#count". */
+  const hostRp=esc(rp);
   const canAdd=manual&&!rosterAtMax(r,rp);
   ensureRosterDefaultValues(r,count,rp);
   const title=esc(rowInterp(txt(r.title)||r.name,hostScopes));
@@ -1839,18 +1883,19 @@ function rosterHtml(r,rp,scopes){
     let h=`<div class="pv-roster" id="pvroster_${rn}"><div class="pv-rh">${title}<span class="pv-tag">subhalaman</span></div>`;
     if(from&&count<=0)h+=`<div class="pv-rowempty">Fill in the "${esc(from)}" field first to determine the number of rows.</div>`;
     else if(count<=0)h+=`<div class="pv-rowempty">No rows yet.</div>`;
-    else{h+=`<div class="pv-rowlist">`;for(let i=0;i<count;i++){const sum=rowSummary(r,i,rp),filled=hasRowData(r,i,rp);h+=`<div class="pv-rowitem"><div class="pv-rowinfo"><b>${rowLabel(r,i,hostScopes)}</b><span>${sum?esc(sum):"<i>not filled in</i>"}</span></div>${manual?`<button class="pv-rowdel" data-delrow="${rn}" data-i="${i}">remove</button>`:""}<button class="pv-rowopen" data-openrow="${rn}" data-i="${i}">${filled?"Edit":"Fill"} →</button></div>`;}h+=`</div>`;}
-    if(canAdd)h+=`<button class="pv-add" data-addrow="${rn}">${addRowLabel(r)}</button>`;
+    else{h+=`<div class="pv-rowlist">`;for(let i=0;i<count;i++){const sum=rowSummary(r,i,rp),filled=hasRowData(r,i,rp);h+=`<div class="pv-rowitem"><div class="pv-rowinfo"><b>${rowLabel(r,i,hostScopes)}</b><span>${sum?esc(sum):"<i>not filled in</i>"}</span></div>${manual?`<button class="pv-rowdel" data-delrow="${rn}" data-rp="${hostRp}" data-i="${i}">remove</button>`:""}<button class="pv-rowopen" data-openrow="${rn}" data-rp="${hostRp}" data-i="${i}">${filled?"Edit":"Fill"} →</button></div>`;}h+=`</div>`;}
+    if(canAdd)h+=`<button class="pv-add" data-addrow="${rn}" data-rp="${hostRp}">${addRowLabel(r)}</button>`;
     return h+`</div>`;
   }
   let h=`<div class="pv-roster" id="pvroster_${rn}"><div class="pv-rh">${title}</div>`;
   if(from&&count<=0)h+=`<div class="pv-rowempty">Fill in the "${esc(from)}" field first to determine the number of rows.</div>`;
-  for(let i=0;i<count;i++){const childRp=rosterRowPrefix(r,i,rp);const rowKey=childRp.slice(0,-1);const rowSkip=computeRosterRowSkipState(r,i);ROW_SKIP_HIDDEN.set(rowKey,rowSkip);rowSkip.forEach(n=>{delete answers[`${childRp}${n}`];});h+=`<div class="pv-row"><div class="pv-rownum"><span>${rowLabel(r,i,hostScopes)}</span>${manual?`<button class="pv-del" data-delrow="${rn}" data-i="${i}">remove</button>`:""}</div>`;(r.components||[]).forEach(f=>h+=nodeHtml(f,childRp,hostScopes));h+=`</div>`;}
-  if(canAdd)h+=`<button class="pv-add" data-addrow="${rn}">${addRowLabel(r)}</button>`;
+  h+=rosterCapNotice(r,rp);
+  for(let i=0;i<count;i++){const childRp=rosterRowPrefix(r,i,rp);const rowKey=childRp.slice(0,-1);const rowSkip=computeRosterRowSkipState(r,i);ROW_SKIP_HIDDEN.set(rowKey,rowSkip);rowSkip.forEach(n=>{delete answers[`${childRp}${n}`];});h+=`<div class="pv-row"><div class="pv-rownum"><span>${rowLabel(r,i,hostScopes)}</span>${manual?`<button class="pv-del" data-delrow="${rn}" data-rp="${hostRp}" data-i="${i}">remove</button>`:""}</div>`;(r.components||[]).forEach(f=>h+=nodeHtml(f,childRp,hostScopes));h+=`</div>`;}
+  if(canAdd)h+=`<button class="pv-add" data-addrow="${rn}" data-rp="${hostRp}">${addRowLabel(r)}</button>`;
   return h+`</div>`;
 }
 function primaryRowField(r){if(r.rowDisplay&&r.rowDisplay.length)return r.rowDisplay[0];const f=flatRosterFields(r)[0];return f?f.name:null;}
-function openAddRowModal(roster){
+function openAddRowModal(roster,hostRp){
   saveAnswers();
   const title=txt(roster.rowTitle)||"row";
   const promptFields=flatRosterFields(roster).filter(f=>f.promptOnAdd);
@@ -1865,20 +1910,27 @@ function openAddRowModal(roster){
   bg.querySelector("#addRowCancel").addEventListener("click",close);
   bg.addEventListener("click",e=>{if(e.target===bg)close();});
   const confirmAdd=()=>{
+    const scope=rosterScopePrefix(roster,hostRp||"");   // "" or "art#0#" + name + "#"
     const mx=rosterMax(roster);
-    const idx=rosterCount(roster);
+    const idx=rosterCount(roster,hostRp||"");
     if(mx!=null&&idx>=mx){
       alert(`Maximum ${mx} rows.`);
       close();
       renderCurrentPage();
       return;
     }
-    answers[`${roster.name}#count`]=idx+1;
+    if(idx>=ROSTER_MAX_ROWS){
+      alert(`This form allows at most ${ROSTER_MAX_ROWS} rows here.`);
+      close();
+      renderCurrentPage();
+      return;
+    }
+    answers[`${scope}count`]=idx+1;
     if(promptFields.length){
-      bg.querySelectorAll("[data-pf]").forEach(el=>{const v=el.value.trim();if(v)answers[`${roster.name}#${idx}#${el.dataset.pf}`]=v;});
+      bg.querySelectorAll("[data-pf]").forEach(el=>{const v=el.value.trim();if(v)answers[`${scope}${idx}#${el.dataset.pf}`]=v;});
     }else{
       const val=bg.querySelector("#addRowInput")?.value.trim();
-      if(val){const pf=primaryRowField(roster);if(pf)answers[`${roster.name}#${idx}#${pf}`]=val;}
+      if(val){const pf=primaryRowField(roster);if(pf)answers[`${scope}${idx}#${pf}`]=val;}
     }
     close();renderCurrentPage();
     setTimeout(()=>{const el=document.getElementById("pvroster_"+roster.name);if(el)el.scrollIntoView({behavior:"smooth",block:"nearest"});},20);
@@ -1887,14 +1939,34 @@ function openAddRowModal(roster){
   bg.querySelectorAll("input").forEach(inp=>inp.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();confirmAdd();}if(e.key==="Escape")close();}));
 }
 function findRoster(rname){function search(comps){for(const c of comps){if(c.kind==="roster"&&c.name===rname)return c;if(c.components){const f=search(c.components);if(f)return f;}}return null;}for(const p of PAGES){const f=search(p.components||[]);if(f)return f;}return null;}
-function deleteRow(rname,idx){
-  const roster=findRoster(rname),count=rosterCount(roster),prefix=rname+"#",nv={};
+/* Used by refResolve to tell a dotted dataKey ("3.12") apart from roster.field
+   notation. Answered from the schema, and memoised because refResolve runs for every
+   expression on every render. */
+const _fieldByName=new Map();
+function findFieldNamed(fname){
+  if(_fieldByName.has(fname))return _fieldByName.get(fname);
+  let hit=null;
+  (function search(comps){for(const c of comps){if(hit)return;
+    if(c.kind!=="roster"&&c.kind!=="page"&&c.kind!=="block"&&c.kind!=="section"&&c.name===fname){hit=c;return;}
+    if(c.components)search(c.components);}})(PAGES.flatMap(p=>p.components||[]));
+  _fieldByName.set(fname,hit);
+  return hit;
+}
+/* hostRp is the prefix of the row this roster sits in — "" at the top level, or
+   "art#0#" for a roster nested inside another. Everything below keys off the roster's
+   full scope, so a nested roster deletes its own rows rather than nothing at all. */
+function deleteRow(rname,hostRp,idx){
+  const roster=findRoster(rname);if(!roster)return;
+  const prefix=rosterScopePrefix(roster,hostRp||"");   // e.g. "art#0#usaha#"
+  const countKey=prefix+"count";
+  const count=rosterCount(roster,hostRp||"");
+  const nv={};
   Object.keys(answers).forEach(k=>{
-    if(k===rname+"#count")return;
+    if(k===countKey)return;
     if(k.startsWith(prefix)){const m=k.slice(prefix.length).match(/^(\d+)#(.*)$/);if(m){let ri=+m[1];const fn=m[2];if(ri===idx)return;if(ri>idx)ri--;nv[`${prefix}${ri}#${fn}`]=answers[k];return;}}
     nv[k]=answers[k];
   });
-  nv[rname+"#count"]=Math.max(0,count-1);answers=nv;
+  nv[countKey]=Math.max(0,count-1);answers=nv;
 }
 
 /* ---- page visibility & navigation ---- */
@@ -2422,10 +2494,10 @@ function bindPageEvents(){
   document.getElementById("pvUnsubmit")?.addEventListener("click",()=>{if(EXISTING_RESPONSE)unsubmitResponseAPI(EXISTING_RESPONSE.id);});
   document.querySelectorAll("[data-addrow]").forEach(btn=>btn.addEventListener("click",()=>{
     const rname=btn.dataset.addrow,roster=findRoster(rname);if(!roster)return;
-    openAddRowModal(roster);
+    openAddRowModal(roster,btn.dataset.rp||"");
   }));
   document.querySelectorAll("[data-delrow]").forEach(btn=>btn.addEventListener("click",()=>{
-    saveAnswers();deleteRow(btn.dataset.delrow,+btn.dataset.i);renderCurrentPage();
+    saveAnswers();deleteRow(btn.dataset.delrow,btn.dataset.rp||"",+btn.dataset.i);renderCurrentPage();
   }));
   document.querySelectorAll("[data-openrow]").forEach(btn=>btn.addEventListener("click",()=>{
     openRosterRow(btn.dataset.openrow,+btn.dataset.i);
