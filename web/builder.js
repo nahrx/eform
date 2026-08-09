@@ -341,16 +341,119 @@ const History=(function(){
     get depth(){return {past:past.length,future:future.length};}};
 })();
 
+/* ===================== UNSAVED WORK ===================== */
+/* Until now the builder held the instrument in memory and nowhere else. Closing the
+   tab, pressing Back, or letting the session expire threw the work away with no
+   warning and no copy. Undo/redo made that worse rather than better: longer editing
+   sessions mean more to lose in one wrong click.
+
+   Three layers, cheapest first:
+     1. a dirty marker, so the Save button says whether anything is outstanding
+     2. a beforeunload prompt, so leaving is a decision rather than an accident
+     3. a copy in localStorage, so even a crash or a killed tab is recoverable
+
+   The baseline is serialize() rather than `state`: that is what actually gets sent to
+   the server, and it leaves out the uids, which are regenerated on every load and
+   would otherwise make a freshly loaded instrument look modified. */
+const Draft=(function(){
+  const PREFIX="eform_builder_draft:";
+  const SAVE_MS=1500;                    // quiet period before a copy is written
+  let key=null,baseline=null,timer=null,ready=false;
+
+  function ser(){try{return JSON.stringify(serialize());}catch(_){return null;}}
+  function store(){try{
+    const s=ser();if(s===null)return;
+    localStorage.setItem(key,JSON.stringify({at:Date.now(),schema:s}));
+  }catch(_){/* quota or private mode — the other two layers still apply */}}
+  function clearStored(){try{localStorage.removeItem(key);}catch(_){}}
+
+  function isDirty(){if(!ready)return false;const s=ser();return s!==null&&s!==baseline;}
+
+  function paint(){
+    const btn=document.getElementById("btnSave");if(!btn)return;
+    const dirty=isDirty();
+    btn.classList.toggle("dirty",dirty);
+    btn.title=dirty?"There are unsaved changes":"Everything is saved";
+  }
+
+  // Called from render()/softUpdate(), so it sees every mutation path.
+  function touch(){
+    if(!ready)return;
+    paint();
+    clearTimeout(timer);
+    timer=setTimeout(()=>{if(isDirty())store();else clearStored();},SAVE_MS);
+  }
+
+  /* The instrument on screen now matches the server. An id is passed the first time a
+     brand-new instrument is saved: its copy was filed under "new", and that entry has
+     to go rather than linger to be offered back on the next blank builder. */
+  function markSaved(formId){
+    clearTimeout(timer);
+    clearStored();
+    if(formId)key=PREFIX+formId;
+    baseline=ser();
+    clearStored();
+    paint();
+  }
+
+  function offerRecovery(stored){
+    const bar=document.createElement("div");
+    bar.className="recover-bar";
+    const when=new Date(stored.at);
+    bar.innerHTML=`<span>An unsaved copy of this instrument was left in this browser on
+      <b>${esc(when.toLocaleString())}</b>. It has not been compared with the version on the server.</span>
+      <button class="btn" id="recYes">Restore it</button>
+      <button class="btn ghost" id="recNo">Discard</button>`;
+    document.querySelector(".canvas").prepend(bar);
+    bar.querySelector("#recYes").addEventListener("click",()=>{
+      try{
+        importJSON(JSON.parse(stored.schema));   // resets History for the new content
+        bar.remove();
+        // Deliberately left dirty: the restored copy does NOT match the server, and
+        // saying otherwise would invite the user to close the tab and lose it again.
+        paint();
+      }catch(e){alert("The stored copy could not be read: "+e.message);}
+    });
+    bar.querySelector("#recNo").addEventListener("click",()=>{clearStored();bar.remove();});
+  }
+
+  /* Called by the bridge once the instrument for this page is in place. */
+  function init(formId){
+    key=PREFIX+(formId||"new");
+    baseline=ser();
+    ready=true;
+    paint();
+    let stored=null;
+    try{stored=JSON.parse(localStorage.getItem(key)||"null");}catch(_){}
+    // Only worth offering when it differs from what is on screen.
+    if(stored&&stored.schema&&stored.schema!==baseline)offerRecovery(stored);
+    else if(stored)clearStored();
+  }
+
+  window.addEventListener("beforeunload",e=>{
+    if(!isDirty())return;
+    store();                 // last chance to keep a copy before the tab goes
+    e.preventDefault();
+    e.returnValue="";        // required for the browser to show its own prompt
+  });
+
+  const api={init,markSaved,touch,isDirty};
+  // `const` at script scope does not become a window property, and builder-bridge.js
+  // reaches for it as window.Draft — so it is published explicitly.
+  window.Draft=api;
+  return api;
+})();
+
 /* ===================== CANVAS ===================== */
 function render(){
   if(!state.pages.find(p=>p.uid===view.uid) && view.type==="page") view={type:"page",uid:state.pages[0].uid};
   if(view.type==="roster" && !findNode(view.uid)) view={type:"page",uid:state.pages[0].uid};
   document.getElementById("instTitle").value=state.title||"";
   renderPages(); renderCanvas(); renderInspector(); runValidation(); applyCols();
-  History.record();
+  History.record(); Draft.touch();
 }
 function refreshCard(node){const el=document.querySelector(`#stage [data-uid="${node.uid}"]`);if(el)el.replaceWith(renderNode(node));}
-function softUpdate(){renderPages();runValidation();const n=selected&&findNode(selected);if(n)refreshCard(n);History.record();}
+function softUpdate(){renderPages();runValidation();const n=selected&&findNode(selected);if(n)refreshCard(n);History.record();Draft.touch();}
 function renderCanvas(){
   const head=document.getElementById("cvHead"), stage=document.getElementById("stage"); stage.innerHTML="";
   if(view.type==="roster"){
@@ -778,19 +881,64 @@ function coerce(v){if(v==="true")return true;if(v==="false")return false;if(v!==
 
 /* ===================== VALIDATION ===================== */
 function runValidation(){const issues=lint();const errs=issues.filter(i=>i.sev==="error");const h=document.getElementById("health"),t=document.getElementById("healthTxt"),tn=document.getElementById("tabN");if(errs.length){h.className="health bad";t.textContent=`${errs.length} issue${errs.length>1?"s":""}`;tn.hidden=false;tn.textContent=errs.length;}else{h.className="health ok";t.textContent="Valid";tn.hidden=true;}renderJson(issues);}
+/* Per-field checks.
+
+   These are the mistakes that used to pass with the badge still reading "Valid":
+   defects that break nothing in the builder and everything in the field. The costliest
+   is required + read-only, which leaves an enumerator unable to fill a question they
+   cannot proceed without — that one is an error, not a warning. */
+const DATAKEY_RE=/^[A-Za-z_][A-Za-z0-9_]*$/;
+function fieldLint(c,p,add){
+  const name=String(c.name||"");
+  if(name&&!DATAKEY_RE.test(name))
+    add("warning",p,`dataKey '${name}' is not a plain identifier — use letters, digits and underscores, starting with a letter. It becomes a column header and can be referenced in expressions.`);
+
+  if(c.required&&c.readOnly)
+    add("error",p,"the field is both required and read-only, so it can never be filled in and the response can never be completed");
+
+  if(c.type==="calculated"&&clean(c.calculate)&&new RegExp("\\$\\{\\s*"+name.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"\\s*[}.\\[]").test(c.calculate))
+    add("error",`${p}.calculate`,`the formula refers to '${name}', its own field`);
+
+  if(c.type!=="note"&&c.type!=="markdown"&&!clean(textOf(c.label)))
+    add("warning",p,"the question has no label, so it shows up blank when filled in");
+
+  if(CHOICE.has(c.type)){
+    const mode=c.optionSource||(c.optionsApi&&c.optionsApi.url?"api":(c.optionsRef?"ref":"manual"));
+    if(mode==="manual"){
+      const opts=c.options||[];
+      if(!opts.length)add("error",p,"a choice field with no options at all — nothing can be picked");
+      const seen=new Map();
+      opts.forEach((o,i)=>{
+        const v=String(o.value??"");
+        if(!clean(v)){add("warning",`${p}.option[${i}]`,"the option has no value");return;}
+        if(seen.has(v))add("error",`${p}.option[${i}]`,`value '${v}' is already used by option ${seen.get(v)+1} — the answers cannot be told apart`);
+        else seen.set(v,i);
+      });
+    }
+  }
+}
+
 function lint(){
   const issues=[],add=(sev,path,msg)=>issues.push({sev,path,msg});
-  const names={},fields=new Set(),containers=new Set(),exprs=[],refs=[];
+  const names={},fields=new Set(),containers=new Set(),exprs=[],refs=[],byName={},counts=[];
   const EK=["visibleWhen","enableWhen","requiredWhen","calculate"];const see=(n,p)=>{(names[n]=names[n]||[]).push(p);};
   function walk(n,base){const p=`${base}/${n.name||n.kind}`;
-    if(n.kind==="field"){if(n.name){fields.add(n.name);see(n.name,p);}EK.forEach(k=>{if(clean(n[k]))exprs.push({path:`${p}.${k}`,expr:n[k]});});if(clean(n.optionsRef))refs.push({path:`${p}.optionsRef`,kind:"table",val:n.optionsRef});if(clean(n.optionsFilterBy))refs.push({path:`${p}.optionsFilterBy`,kind:"field",val:n.optionsFilterBy});(n.validations||[]).forEach((v,j)=>{if(clean(v.test))exprs.push({path:`${p}.val[${j}]`,expr:v.test});});(n.options||[]).forEach((o,j)=>{if(clean(o.skipTo))refs.push({path:`${p}.opsi[${j}]`,kind:"nav",val:o.skipTo});});(n.skips||[]).forEach((s,j)=>{if(clean(s.to))refs.push({path:`${p}.skip[${j}]`,kind:"nav",val:s.to});if(clean(s.when))exprs.push({path:`${p}.skip[${j}]`,expr:s.when});});}
-    else{if(n.name){containers.add(n.name);see(n.name,p);}if(n.kind==="roster"&&clean(n.countFrom))refs.push({path:`${p}.countFrom`,kind:"field",val:n.countFrom});if(clean(n.visibleWhen))exprs.push({path:`${p}.visibleWhen`,expr:n.visibleWhen});(n.components||[]).forEach(c=>walk(c,p));}
+    if(n.kind==="field"){if(n.name){fields.add(n.name);see(n.name,p);byName[n.name]=n;}fieldLint(n,p,add);EK.forEach(k=>{if(clean(n[k]))exprs.push({path:`${p}.${k}`,expr:n[k]});});if(clean(n.optionsRef))refs.push({path:`${p}.optionsRef`,kind:"table",val:n.optionsRef});if(clean(n.optionsFilterBy))refs.push({path:`${p}.optionsFilterBy`,kind:"field",val:n.optionsFilterBy});(n.validations||[]).forEach((v,j)=>{if(clean(v.test))exprs.push({path:`${p}.val[${j}]`,expr:v.test});});(n.options||[]).forEach((o,j)=>{if(clean(o.skipTo))refs.push({path:`${p}.opsi[${j}]`,kind:"nav",val:o.skipTo});});(n.skips||[]).forEach((s,j)=>{if(clean(s.to))refs.push({path:`${p}.skip[${j}]`,kind:"nav",val:s.to});if(clean(s.when))exprs.push({path:`${p}.skip[${j}]`,expr:s.when});});}
+    else{if(n.name){containers.add(n.name);see(n.name,p);}if(n.kind==="roster"&&clean(n.countFrom)){refs.push({path:`${p}.countFrom`,kind:"field",val:n.countFrom});counts.push({path:`${p}.countFrom`,val:n.countFrom});}if(clean(n.visibleWhen))exprs.push({path:`${p}.visibleWhen`,expr:n.visibleWhen});(n.components||[]).forEach(c=>walk(c,p));}
   }
   state.pages.forEach(p=>walk(p,""));
   Object.entries(names).forEach(([n,ps])=>{if(ps.length>1)add("error",n,`Name '${n}' is used ${ps.length}×`);});
   const tables=new Set(Object.keys(state.referenceData||{}));const nav=new Set([...fields,...containers,"__end","__next","__prev"]);
   refs.forEach(r=>{if(r.kind==="table"&&!tables.has(r.val))add("error",r.path,`optionsRef '${r.val}' does not exist in referenceData`);if(r.kind==="field"&&!fields.has(r.val))add("error",r.path,`'${r.val}' is not an existing field`);if(r.kind==="nav"&&!nav.has(r.val))add("error",r.path,`skip target '${r.val}' not found`);});
   exprs.forEach(({path,expr})=>{try{Expr.parse(expr);}catch(e){add("error",path,"invalid expression: "+e.message);}for(const m of String(expr).matchAll(/\$\{([^}]*)\}/g)){const full=m[1].trim();const b=full.split(/[.\[]/)[0];if(!b||b.startsWith("__"))continue;if(fields.has(full)||containers.has(full))continue;if(!fields.has(b)&&!containers.has(b))add("error",path,`expression references '${b}', which does not exist`);}});
+  // A roster sized from another field needs that field to hold a number. Checked here
+  // rather than in fieldLint because it depends on a node found elsewhere in the tree.
+  counts.forEach(({path,val})=>{
+    const t=byName[val];
+    if(t&&!NUMERIC.has(t.type))
+      add("warning",path,`row count comes from '${val}', which is a ${t.type} field rather than a number`);
+  });
+
   // A reference table with no items yields an empty dropdown and says nothing about
   // why. The common cause is a leftover "source":"api" table, a form this no longer
   // supports — so it is named here rather than left to be discovered in the field.
@@ -897,6 +1045,22 @@ function textOf(v){if(v==null)return "";if(typeof v==="string")return v;if(typeo
 .bt-warn{border:1px solid #fde68a;background:#fffbeb;border-radius:9px;padding:11px 14px;margin-bottom:14px;font-size:12.5px;color:#78350f}
 .bt-warn ul{margin:6px 0 0;padding-left:18px}
 .bt-warn li{margin:3px 0}
+
+/* simulation */
+.sim-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 18px}
+.sim-out{margin-top:12px;border:1px solid #e6eaf0;border-radius:10px;overflow:hidden}
+.sim-path{padding:4px 0}
+.sim-step{display:flex;align-items:center;gap:10px;padding:7px 14px;font-size:12.5px;position:relative}
+.sim-step+.sim-step::before{content:"";position:absolute;left:24px;top:-7px;height:7px;width:1px;background:#cbd5e1}
+.sim-n{flex:none;width:17px;height:17px;border-radius:50%;background:#0e7490;color:#fff;
+  font-size:10.5px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.sim-t{font-weight:600;color:#0f172a}
+.sim-h{font-size:11px;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:999px;padding:1px 8px}
+.sim-step.done .sim-n{display:none}
+.sim-step.done{padding-left:14px;color:#64748b}
+.sim-step.done .sim-t{font-weight:600;color:#64748b}
+.sim-skipped{border-top:1px solid #e6eaf0;background:#f8fafc;padding:9px 14px;font-size:11.5px;color:#64748b}
+@media(max-width:760px){.sim-grid{grid-template-columns:1fr}}
 `;
   document.head.appendChild(style);
 
@@ -981,8 +1145,8 @@ function textOf(v){if(v==null)return "";if(typeof v==="string")return v;if(typeo
     const sel=selected&&findNode(selected);
     const seed=sel?(sel.visibleWhen||sel.calculate||sel.enableWhen||sel.requiredWhen||""):"";
     body.innerHTML=`<textarea class="bt-in mono" id="btExprIn" rows="3"
-        placeholder="\${age} >= 17 and \${status} == 'married'">${esc(seed)}</textarea>
-      <p class="bt-hint">The same evaluator the form and the preview use. Fill in test values below; blank means the field was left empty.</p>
+        placeholder="\${age} >= 17 &amp;&amp; \${status} == 'married'">${esc(seed)}</textarea>
+      <p class="bt-hint">The same evaluator the form and the preview use. Combine with <code>&amp;&amp;</code>, <code>||</code> and <code>!</code> — the words <code>and</code>, <code>or</code> and <code>not</code> are not accepted. Fill in test values below; blank means the field was left empty.</p>
       <div id="btExprVals" style="margin-top:12px"></div>
       <div id="btExprRes"></div>`;
     const input=body.querySelector("#btExprIn"),vals=body.querySelector("#btExprVals"),res=body.querySelector("#btExprRes");
@@ -1040,9 +1204,96 @@ function textOf(v){if(v==null)return "";if(typeof v==="string")return v;if(typeo
     paint();input.focus();
   }
 
-  /* ================= 3. FLOW MAP ================= */
+  /* ================= 3. FLOW ================= */
+  /* The routing is not re-implemented here. visiblePages(), computePageSkipState() and
+     pageIndexOfTarget() are the very functions the preview navigates with, so a walk
+     built on them cannot disagree with the form — and a simulator that quietly
+     disagreed would be worse than no simulator at all.
+
+     They read answers from pv.values, so a run swaps that out and puts it back. */
+  function withValues(vals,fn){
+    const savedValues=pv.values,savedPage=pv.page;
+    pv.values=Object.assign(Object.create(null),vals);
+    try{return fn();}finally{pv.values=savedValues;pv.page=savedPage;}
+  }
+
+  const WALK_LIMIT=80;   // a loop in the skips must not hang the builder
+  function walkPath(vals){
+    return withValues(vals,()=>{
+      const pages=visiblePages();
+      const path=[],takenSkips=new Set();
+      let i=0,guard=0,looped=false;
+      while(i>=0&&i<pages.length){
+        if(guard++>=WALK_LIMIT){looped=true;break;}
+        pv.page=i;
+        const page=pages[i];
+        const st=computePageSkipState(page);
+        path.push({name:page.name,title:page.title||page.name,hidden:[...st.hidden]});
+        const t=st.crossPageTarget;
+        if(!t){i++;continue;}
+        takenSkips.add(page.name+" → "+t);
+        if(t==="__end")break;
+        const j=pageIndexOfTarget(t,pages);
+        if(j==null){i++;continue;}
+        i=j;
+      }
+      return {path,takenSkips,looped,reachedEnd:!looped};
+    });
+  }
+
+  /* Fields any condition depends on, and the values worth trying for each.
+     Candidates come from the comparisons themselves — the literal, and for numbers the
+     values either side of it, which is where a boundary written the wrong way shows up
+     — plus the field's own options and "unanswered". */
+  function conditionSources(){
+    const srcs=[];
+    state.pages.forEach(p=>{if(clean(p.visibleWhen))srcs.push(p.visibleWhen);});
+    for(const n of allNodes()){
+      ["visibleWhen","enableWhen","requiredWhen"].forEach(k=>{if(clean(n[k]))srcs.push(n[k]);});
+      (n.skips||[]).forEach(s=>{if(clean(s.when))srcs.push(s.when);});
+    }
+    const names=new Set();
+    srcs.forEach(s=>{for(const m of String(s).matchAll(/\$\{([^}]*)\}/g)){
+      const b=m[1].trim().split(/[.\[]/)[0];if(b&&!b.startsWith("__"))names.add(b);}});
+    return {names:[...names],srcs};
+  }
+  function candidatesFor(name,srcs){
+    const out=new Set([""]);
+    const esc2=name.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+    const re=new RegExp("\\$\\{\\s*"+esc2+"\\s*\\}\\s*(==|!=|>=|<=|>|<)\\s*('[^']*'|\"[^\"]*\"|-?\\d+(?:\\.\\d+)?)","g");
+    srcs.forEach(s=>{for(const m of String(s).matchAll(re)){
+      const lit=m[2];
+      if(/^['"]/.test(lit))out.add(lit.slice(1,-1));
+      else{const v=Number(lit);out.add(String(v));out.add(String(v-1));out.add(String(v+1));}
+    }});
+    const node=allNodes().find(x=>x.kind==="field"&&x.name===name);
+    if(node&&Array.isArray(node.options))node.options.forEach(o=>out.add(String(o.value)));
+    return [...out].slice(0,6);
+  }
+
+  const COMBO_CAP=3000;
+  function explore(){
+    const {names,srcs}=conditionSources();
+    const cands=names.map(n=>candidatesFor(n,srcs));
+    let total=1;cands.forEach(c=>{total*=Math.max(1,c.length);});
+    const visitedPages=new Set(),takenSkips=new Set();
+    let ran=0;
+    (function rec(i,vals){
+      if(ran>=COMBO_CAP)return;
+      if(i>=names.length){
+        ran++;
+        const r=walkPath(vals);
+        r.path.forEach(p=>visitedPages.add(p.name));
+        r.takenSkips.forEach(s=>takenSkips.add(s));
+        return;
+      }
+      for(const v of cands[i]){if(ran>=COMBO_CAP)return;rec(i+1,Object.assign({},vals,{[names[i]]:v}));}
+    })(0,{});
+    return {visitedPages,takenSkips,ran,capped:total>COMBO_CAP,total,names,cands};
+  }
+
   function openFlow(){
-    const body=modal("Flow map",true);
+    const body=modal("Flow — simulate a path, and check what can be reached",true);
     const pages=state.pages;
     const idxByName={},nameOfPage={};
     pages.forEach((p,i)=>{idxByName[p.name]=i;nameOfPage[p.uid]=p.name;});
@@ -1092,17 +1343,74 @@ function textOf(v){if(v==null)return "";if(typeof v==="string")return v;if(typeo
       return `<div class="bt-jump ${cls}"><code>${esc(j.field)}</code> → <span class="to">${esc(dest)}</span>${j.when?` <span style="color:#94a3b8">when ${esc(j.when)}</span>`:""}</div>`;
     };
 
+    /* ---- run the exploration up front: it answers the question the static map could
+       not, which is whether a page or a branch can ever actually happen ---- */
+    const ex=explore();
+    const neverVisited=pages.filter(p=>!ex.visitedPages.has(p.name));
+    const neverTaken=jumps.filter(j=>j.kind!=="missing"&&![...ex.takenSkips].some(k=>k.endsWith(" → "+j.to)));
+
+    if(ex.names.length===0)warn.push("Nothing in this instrument depends on an answer, so every page is always shown in order.");
+    if(neverVisited.length)warn.push(`${neverVisited.length} page${neverVisited.length>1?"s were":" was"} never reached in ${ex.ran} simulated run${ex.ran>1?"s":""}: ${esc(neverVisited.map(p=>p.title||p.name).join(", "))}`);
+    if(neverTaken.length)warn.push(`${neverTaken.length} skip${neverTaken.length>1?"s":""} never fired in any run — the condition may be impossible: ${esc(neverTaken.map(j=>j.field+" → "+j.to).join(", "))}`);
+
+    const simFields=ex.names;
+    const inputFor=n=>{
+      const node=allNodes().find(x=>x.kind==="field"&&x.name===n);
+      if(node&&CHOICE.has(node.type)&&Array.isArray(node.options)&&node.options.length)
+        return `<select class="bt-in mono" data-sim="${esc(n)}"><option value="">(unanswered)</option>${
+          node.options.map(o=>`<option value="${esc(o.value)}">${esc(String(o.value))} — ${esc(textOf(o.label)||"")}</option>`).join("")}</select>`;
+      return `<input class="bt-in mono" data-sim="${esc(n)}" placeholder="(unanswered)">`;
+    };
+
     body.innerHTML=`
       ${warn.length?`<div class="bt-warn"><strong>What to look at</strong><ul>${warn.map(w=>`<li>${w}</li>`).join("")}</ul></div>`:""}
+
+      <div class="gh" style="margin:2px 0 8px">Simulate a respondent</div>
+      ${simFields.length
+        ? `<div class="sim-grid">${simFields.map(n=>`<div class="bt-row"><span class="nm" title="${esc(n)}">${esc(n)}</span>${inputFor(n)}</div>`).join("")}</div>
+           <div id="simOut" class="sim-out"></div>`
+        : `<div class="bt-empty">No page or skip depends on an answer, so there is only one possible path.</div>`}
+
+      <div class="gh" style="margin:20px 0 8px">Every skip that is declared</div>
       ${pages.map((p,i)=>{
         const out=jumps.filter(j=>j.from===i);
-        return `<div class="bt-pg${bypassable.has(i)?" unreach":""}">
+        const unreached=!ex.visitedPages.has(p.name);
+        return `<div class="bt-pg${unreached?" unreach":""}">
           <div class="ttl"><span class="num">${i+1}</span> ${esc(p.title||p.name)}
-            ${bypassable.has(i)?`<span class="t" style="font-size:10px;background:#fef3c7;border-color:#fcd34d;color:#92400e">can be skipped past</span>`:""}</div>
+            ${unreached?`<span class="t" style="font-size:10px;background:#fef3c7;border-color:#fcd34d;color:#92400e">never reached</span>`:""}
+            ${bypassable.has(i)&&!unreached?`<span class="t" style="font-size:10px">can be skipped past</span>`:""}</div>
           ${out.length?out.map(arrow).join(""):`<div class="bt-jump" style="color:#94a3b8">falls through to the next page</div>`}
         </div>`;
       }).join("")}
-      <p class="bt-hint">Static reading of the skips only. Whether a condition can actually be true depends on the answers, which this map does not evaluate — use the preview for that.</p>`;
+
+      <p class="bt-hint">${ex.ran} run${ex.ran===1?"":"s"} simulated${ex.capped?` (capped — ${ex.total.toLocaleString()} combinations exist)`:""}, varying only the ${ex.names.length} field${ex.names.length===1?"":"s"} the conditions depend on, using values taken from those conditions. That is evidence, not proof: a page reported as never reached may still be reachable through a value this did not try.</p>`;
+
+    /* ---- live simulation ---- */
+    const out=body.querySelector("#simOut");
+    function runSim(){
+      const vals={};
+      body.querySelectorAll("[data-sim]").forEach(el=>{if(el.value!=="")vals[el.dataset.sim]=el.value;});
+      const r=walkPath(vals);
+      const visited=new Set(r.path.map(p=>p.name));
+      out.innerHTML=`
+        <div class="sim-path">${r.path.map((p,i)=>`
+          <div class="sim-step">
+            <span class="sim-n">${i+1}</span>
+            <span class="sim-t">${esc(p.title)}</span>
+            ${p.hidden.length?`<span class="sim-h">${p.hidden.length} field${p.hidden.length>1?"s":""} hidden by a skip</span>`:""}
+          </div>`).join("")}
+          <div class="sim-step done">${r.looped
+            ? `<span class="sim-t" style="color:#b91c1c">stopped after ${WALK_LIMIT} pages — the skips appear to loop</span>`
+            : `<span class="sim-t">end of form</span>`}</div>
+        </div>
+        ${pages.filter(p=>!visited.has(p.name)).length
+          ? `<div class="sim-skipped">Not shown on this path: ${esc(pages.filter(p=>!visited.has(p.name)).map(p=>p.title||p.name).join(", "))}</div>`
+          : `<div class="sim-skipped">Every page is shown on this path.</div>`}`;
+    }
+    body.querySelectorAll("[data-sim]").forEach(el=>{
+      el.addEventListener("input",runSim);el.addEventListener("change",runSim);
+    });
+    if(simFields.length)runSim();
   }
 
   document.getElementById("btnFind").addEventListener("click",openFind);

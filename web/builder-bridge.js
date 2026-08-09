@@ -11,7 +11,7 @@
     opts = opts || {};
     opts.headers = Object.assign({}, H, opts.headers || {});
     return fetch(path, opts).then(function (r) {
-      if (r.status === 401) { localStorage.removeItem("eform_token"); location.replace("/login"); throw new Error("sesi habis"); }
+      if (r.status === 401) { localStorage.removeItem("eform_token"); location.replace("/login"); throw new Error("session expired"); }
       var ct = r.headers.get("content-type") || "";
       var p = ct.indexOf("json") >= 0 ? r.json() : Promise.resolve(null);
       return p.then(function (data) {
@@ -43,7 +43,7 @@
   var _saving = false;
   function doSave() {
     if (_saving) return;
-    if (typeof serialize !== "function") { toast("fungsi builder tak ditemukan", true); return; }
+    if (typeof serialize !== "function") { toast("builder function not found", true); return; }
     var btn = document.getElementById("btnSave");
     var origText = btn ? btn.textContent : "";
     _saving = true;
@@ -61,6 +61,9 @@
     req.then(function (f) {
       currentId = f.id;
       history.replaceState(null, "", "/builder?id=" + f.id);
+      // What is on screen now matches the server: clear the dirty marker and drop the
+      // local copy, so the next visit is not offered a stale draft to restore.
+      if (window.Draft) Draft.markSaved(currentId);
       toast("Saved");
     }).catch(function (e) { toast(e.message, true); })
     .finally(function () {
@@ -92,11 +95,16 @@
       }
     } catch (_) {}
 
-    // Load the form when the URL carries an id
+    // Load the form when the URL carries an id. Draft.init runs only once the loaded
+    // instrument is in place — starting it earlier would take the blank instrument as
+    // the baseline and report the freshly loaded one as unsaved.
     if (currentId) {
       api("/api/forms/" + currentId).then(function (f) {
         if (f.schema && typeof importJSON === "function") importJSON(f.schema);
-      }).catch(function (e) { toast(e.message, true); });
+      }).catch(function (e) { toast(e.message, true); })
+      .finally(function () { if (window.Draft) Draft.init(currentId); });
+    } else if (window.Draft) {
+      Draft.init(null);
     }
 
     // Wire up the buttons

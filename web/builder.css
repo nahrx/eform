@@ -35,6 +35,18 @@
   .btn:hover{border-color:#c6cdd6;background:var(--panel-2)}
   .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
   .btn.primary:hover{background:var(--accent-ink);border-color:var(--accent-ink)}
+  /* A dot on Save while something is outstanding — quieter than a banner, but it
+     means "saved" is never something you have to remember for yourself. */
+  .btn.dirty{position:relative}
+  .btn.dirty::after{content:"";position:absolute;top:-3px;right:-3px;width:9px;height:9px;
+    border-radius:50%;background:#f59e0b;border:2px solid #fff}
+
+  /* Offered when a copy was left behind by a tab that closed before saving. */
+  .recover-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 14px;
+    padding:11px 15px;border:1px solid #fde68a;border-left:4px solid #f59e0b;border-radius:9px;
+    background:#fffbeb;color:#78350f;font-size:12.5px;line-height:1.5}
+  .recover-bar span{flex:1;min-width:220px}
+  .recover-bar .btn{padding:5px 12px;font-size:12px}
   .btn.ghost{border-color:transparent;background:transparent;color:var(--ink-soft)}
   .btn.ghost:hover{background:var(--panel-2)}
   /* square, glyph-only — undo/redo, where a word would crowd the toolbar */
