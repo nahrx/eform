@@ -1097,31 +1097,35 @@ function textOf(v){if(v==null)return "";if(typeof v==="string")return v;if(typeo
       <div id="btFindOut" style="margin-top:10px"></div>`;
     const input=body.querySelector("#btFindIn"),out=body.querySelector("#btFindOut");
 
+    const CAP=80;                                  // a longer list stops being a shortcut
     function search(q){
       q=q.trim().toLowerCase();
-      if(!q)return [];
-      const hits=[];
+      if(!q)return {hits:[],total:0};
+      const hits=[];let total=0;
       for(const n of allNodes()){
         if(n.kind==="page")continue;               // pages have their own list already
         const name=String(n.name||""),label=textOf(n.label||n.title||"");
         const type=n.kind==="field"?n.type:n.kind;
         const hay=`${name} ${label} ${type}`.toLowerCase();
-        if(hay.includes(q))hits.push({n,name,label,type,page:trail(n.uid)});
-        if(hits.length>=80)break;                  // a long list stops being a shortcut
+        if(!hay.includes(q))continue;
+        total++;                                   // counted past the cap, so the tally is honest
+        if(hits.length<CAP)hits.push({n,name,label,type,page:trail(n.uid)});
       }
       // an exact dataKey match is almost always the one wanted
       hits.sort((a,b)=>(b.name.toLowerCase()===q)-(a.name.toLowerCase()===q));
-      return hits;
+      return {hits,total};
     }
     function paint(){
-      const hits=search(input.value);
+      const {hits,total}=search(input.value);
       if(!input.value.trim()){out.innerHTML=`<div class="bt-empty">Type to search across every page.</div>`;return;}
       if(!hits.length){out.innerHTML=`<div class="bt-empty">Nothing matches “${esc(input.value.trim())}”.</div>`;return;}
       out.innerHTML=hits.map((h,i)=>`<div class="bt-hit${i===0?" on":""}" data-uid="${h.n.uid}">
         <span class="k">${esc(h.name)}</span>
         <span class="l">${esc(h.label||"")}</span>
         <span class="t">${esc(h.type)}</span>
-        <span class="p">${esc(h.page)}</span></div>`).join("");
+        <span class="p">${esc(h.page)}</span></div>`).join("")
+        // Silently cutting the list off would let someone conclude a field is missing.
+        +(total>hits.length?`<div class="bt-hint" style="padding:8px 10px 2px">Showing ${hits.length} of ${total} matches — narrow the search to see the rest.</div>`:"");
       out.querySelectorAll(".bt-hit").forEach(el=>el.addEventListener("click",()=>go(el.dataset.uid)));
     }
     function go(uid){
@@ -1161,14 +1165,13 @@ function textOf(v){if(v==null)return "";if(typeof v==="string")return v;if(typeo
       }
       return out;
     }
-    // Numbers must arrive as numbers or every comparison silently becomes a string one.
-    function coerce(v){
-      if(v==null||v==="")return undefined;
-      if(/^-?\d+(\.\d+)?$/.test(v.trim()))return Number(v);
-      if(v==="true")return true;
-      if(v==="false")return false;
-      return v;
-    }
+    // Delegates to the form's own coerceVal rather than repeating the rule. An earlier
+    // hand-rolled version disagreed with it on "1e5", ".5", "0x10" and "Infinity",
+    // which is the one thing a tester must never do: report a comparison as false that
+    // the real form treats as true.
+    // A blank box means unanswered, which reaches the evaluator as an absent key
+    // (undefined) rather than the empty string a filled-then-cleared field would give.
+    const coerce=v=>(v==null||v==="")?undefined:coerceVal(v);
     function paint(){
       const refs=refsOf(input.value);
       vals.innerHTML=refs.length
@@ -1272,23 +1275,48 @@ function textOf(v){if(v==null)return "";if(typeof v==="string")return v;if(typeo
   }
 
   const COMBO_CAP=3000;
+  // Deterministic, so the same instrument always gets the same verdict. A page that is
+  // flagged one time and not the next would be worse than no flag at all.
+  function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;
+    let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;
+    return ((t^t>>>14)>>>0)/4294967296;};}
+
   function explore(){
     const {names,srcs}=conditionSources();
     const cands=names.map(n=>candidatesFor(n,srcs));
     let total=1;cands.forEach(c=>{total*=Math.max(1,c.length);});
     const visitedPages=new Set(),takenSkips=new Set();
     let ran=0;
-    (function rec(i,vals){
-      if(ran>=COMBO_CAP)return;
-      if(i>=names.length){
-        ran++;
-        const r=walkPath(vals);
-        r.path.forEach(p=>visitedPages.add(p.name));
-        r.takenSkips.forEach(s=>takenSkips.add(s));
-        return;
+    const run=vals=>{
+      ran++;
+      const r=walkPath(vals);
+      r.path.forEach(p=>visitedPages.add(p.name));
+      r.takenSkips.forEach(s=>takenSkips.add(s));
+    };
+
+    /* Plain recursion down the candidate lists looks exhaustive but is not, once the
+       cap bites: it exhausts the last field while the first stays pinned to its first
+       candidate. On a 14-field instrument that left `${a0} == 7` never tried, and six
+       plainly reachable pages were reported unreachable. So the sweep comes first and
+       the enumeration second. */
+    run({});                                              // nobody answered anything
+    names.forEach((n,i)=>cands[i].forEach(v=>{if(v!=="")run({[n]:v});}));  // one field at a time
+
+    if(total<=COMBO_CAP){
+      (function rec(i,vals){
+        if(i>=names.length){run(vals);return;}
+        for(const v of cands[i])rec(i+1,Object.assign({},vals,{[names[i]]:v}));
+      })(0,{});
+    }else{
+      // Too many to enumerate: sample the space instead of marching through one corner
+      // of it, so combinations of conditions still get a fair chance.
+      const rand=rng(0x5E2026);
+      while(ran<COMBO_CAP){
+        const vals={};
+        names.forEach((n,i)=>{const c=cands[i],v=c[Math.floor(rand()*c.length)];if(v!=="")vals[n]=v;});
+        run(vals);
       }
-      for(const v of cands[i]){if(ran>=COMBO_CAP)return;rec(i+1,Object.assign({},vals,{[names[i]]:v}));}
-    })(0,{});
+    }
     return {visitedPages,takenSkips,ran,capped:total>COMBO_CAP,total,names,cands};
   }
 
@@ -1349,7 +1377,9 @@ function textOf(v){if(v==null)return "";if(typeof v==="string")return v;if(typeo
     const neverVisited=pages.filter(p=>!ex.visitedPages.has(p.name));
     const neverTaken=jumps.filter(j=>j.kind!=="missing"&&![...ex.takenSkips].some(k=>k.endsWith(" → "+j.to)));
 
-    if(ex.names.length===0)warn.push("Nothing in this instrument depends on an answer, so every page is always shown in order.");
+    // Careful not to claim the pages therefore run in order: an unconditional skip
+    // reorders them without depending on any answer at all.
+    if(ex.names.length===0)warn.push("No condition depends on an answer, so there is exactly one path through this instrument — shown below.");
     if(neverVisited.length)warn.push(`${neverVisited.length} page${neverVisited.length>1?"s were":" was"} never reached in ${ex.ran} simulated run${ex.ran>1?"s":""}: ${esc(neverVisited.map(p=>p.title||p.name).join(", "))}`);
     if(neverTaken.length)warn.push(`${neverTaken.length} skip${neverTaken.length>1?"s":""} never fired in any run — the condition may be impossible: ${esc(neverTaken.map(j=>j.field+" → "+j.to).join(", "))}`);
 
@@ -1367,9 +1397,9 @@ function textOf(v){if(v==null)return "";if(typeof v==="string")return v;if(typeo
 
       <div class="gh" style="margin:2px 0 8px">Simulate a respondent</div>
       ${simFields.length
-        ? `<div class="sim-grid">${simFields.map(n=>`<div class="bt-row"><span class="nm" title="${esc(n)}">${esc(n)}</span>${inputFor(n)}</div>`).join("")}</div>
-           <div id="simOut" class="sim-out"></div>`
-        : `<div class="bt-empty">No page or skip depends on an answer, so there is only one possible path.</div>`}
+        ? `<div class="sim-grid">${simFields.map(n=>`<div class="bt-row"><span class="nm" title="${esc(n)}">${esc(n)}</span>${inputFor(n)}</div>`).join("")}</div>`
+        : `<div class="bt-empty" style="padding:6px 2px 10px">Nothing here reads an answer, so there is only one path — and it is worth seeing, because an unconditional skip can still reorder or loop the pages.</div>`}
+      <div id="simOut" class="sim-out"></div>
 
       <div class="gh" style="margin:20px 0 8px">Every skip that is declared</div>
       ${pages.map((p,i)=>{
@@ -1410,7 +1440,10 @@ function textOf(v){if(v==null)return "";if(typeof v==="string")return v;if(typeo
     body.querySelectorAll("[data-sim]").forEach(el=>{
       el.addEventListener("input",runSim);el.addEventListener("change",runSim);
     });
-    if(simFields.length)runSim();
+    // Always, even with nothing to vary: that is exactly the case where the single
+    // path is worth showing, and where an unconditional skip loop would otherwise
+    // leave the panel blank.
+    runSim();
   }
 
   document.getElementById("btnFind").addEventListener("click",openFind);
