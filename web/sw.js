@@ -6,7 +6,9 @@
 importScripts("/offline-queue.js");
 
 const Q = self.EformOfflineQueue;
-const CACHE_NAME = "eform-v3";
+// Shared with the page through offline-queue.js rather than declared twice — see the
+// note on CACHE_NAME there.
+const CACHE_NAME = Q.CACHE_NAME;
 
 /* Assets the form page needs but which are not part of any API response. Without
    them an offline page still renders, but region dropdowns lose their search box,
@@ -87,6 +89,13 @@ self.addEventListener("sync", (event) => {
 });
 
 async function runFlush() {
+  // The page checks this before flushing; a background sync had no such guard, so it
+  // ran whenever the browser guessed connectivity was back — including when it was not.
+  //
+  // Written to skip only on an explicit false: if onLine were ever missing here, a
+  // plain !onLine would be true and the background flush would quietly stop running
+  // altogether, which is a worse failure than the one being guarded against.
+  if (self.navigator && self.navigator.onLine === false) return;
   let r;
   try {
     r = await Q.flush();

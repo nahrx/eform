@@ -10,10 +10,10 @@
 
    IndexedDB layout (version 2):
      "queue" — keyPath "id", autoIncrement
-       {id, url, method, headers, body, ts, attempts}
+       {id, url, method, headers, body, ts, attempts, unreachable}
        plus, once permanently rejected: {failed:true, status, error, failedAt}
      "files" — keyPath "id", autoIncrement
-       {id, url, headers, blob, name, fieldType, ts, attempts}
+       {id, url, headers, blob, name, fieldType, ts, attempts, unreachable}
        plus the same failure fields
 
    Version 1 had only "queue". The upgrade adds "files" and leaves existing queued
@@ -37,8 +37,22 @@
   const LOCAL_PREFIX = "eform-local://";
   const LOCAL_RE = /eform-local:\/\/(\d+)/g;
 
+  /* The name of the Cache Storage bucket, defined here because this file is the one
+     thing both the page and the service worker load — the page via a script tag, the
+     worker via importScripts. It used to be declared separately in each, with a comment
+     in public.html warning that they must match; they diverged anyway ("eform-v2" vs
+     "eform-v3"), and since the worker deletes every cache that is not its own on
+     activate, the page's warm-up was wiped on the very first visit — exactly the
+     blank-page-in-the-field case the warm-up exists to prevent. One declaration cannot
+     drift from itself. */
+  const CACHE_NAME = "eform-v3";
+
   // Give up after this many attempts, or once a record is this old. Giving up means
   // marking it failed and moving on — never discarding it.
+  //
+  // MAX_ATTEMPTS counts only tries the server actually answered and failed (5xx). Tries
+  // that never reached it are counted separately and do not expire anything; see
+  // noteUnreachable. The age limit is what eventually retires undeliverable data.
   const MAX_ATTEMPTS = 25;
   const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -132,7 +146,7 @@
   }
 
   function expired(rec) {
-    if ((rec.attempts || 0) >= MAX_ATTEMPTS) return "Giving up after too many attempts.";
+    if ((rec.attempts || 0) >= MAX_ATTEMPTS) return "The server kept refusing this.";
     if (Date.now() - (rec.ts || 0) > MAX_AGE_MS) return "Too old to send.";
     return "";
   }
@@ -141,8 +155,26 @@
     await put(db, store, { ...rec, failed: true, status, error, failedAt: Date.now() });
   }
 
+  /* Counts against MAX_ATTEMPTS, so only for answers the server itself keeps choking
+     on. That is what the limit is for: a record the server will never accept must not
+     sit at the head of the queue forever, because the flush stops at the first failure
+     and everything behind it would stall with it. */
   async function bumpAttempt(db, store, rec) {
     await put(db, store, { ...rec, attempts: (rec.attempts || 0) + 1 });
+  }
+
+  /* Not reaching the server says nothing about the data, so this deliberately does NOT
+     count against MAX_ATTEMPTS — it is recorded only so the device can show how long
+     something has been waiting.
+
+     It used to call bumpAttempt. navigator.onLine reports true whenever the phone is
+     attached to a network, including one with no route out — a tower with a dead
+     backhaul, which is the normal case in the field — so a perfectly good response
+     burned all 25 attempts without the server ever being contacted, and was then
+     declared failed. The 30-day age limit is the right backstop for data nobody could
+     deliver. */
+  async function noteUnreachable(db, store, rec) {
+    await put(db, store, { ...rec, unreachable: (rec.unreachable || 0) + 1, lastTryAt: Date.now() });
   }
 
   /* Phase 1: push the stored files up, oldest first, and build id → real URL.
@@ -176,8 +208,8 @@
       try {
         res = await fetch(f.url, { method: "POST", headers: f.headers || {}, body: fd });
       } catch (_e) {
-        await bumpAttempt(db, FILES, f);
-        return { map, stalled: true, uploaded, failed }; // still offline
+        await noteUnreachable(db, FILES, f);
+        return { map, stalled: true, uploaded, failed }; // no route out — try again later
       }
 
       if (res.ok) {
@@ -249,9 +281,14 @@
 
   /* Phase 2: send the queued answers, oldest first.
 
-     The distinction that matters is transient versus permanent:
-       - network error or 5xx → unreachable or broken. Stop; the whole queue is
-         retried on the next sync, order preserved.
+     The distinction that matters is transient versus permanent, and within transient,
+     whether the server was reached at all:
+       - network error → never reached it. Stop and retry on the next sync, order
+         preserved, and hold nothing against the record: not being able to deliver
+         something says nothing about whether it is good.
+       - 5xx → reached it and it failed. Same stop-and-retry, but this one counts
+         towards MAX_ATTEMPTS, because a record the server always chokes on sits at
+         the head of the queue and would stall everything behind it forever.
        - 4xx → the server understood and refused (validation, an expired respondent
          token, a revoked share). Retrying cannot help, so the record is marked and
          the queue MOVES ON. One such record used to block every later answer. */
@@ -300,8 +337,8 @@
           body: refs.body,
         });
       } catch (_e) {
-        await bumpAttempt(db, QUEUE, rec);
-        break; // still offline — the rest is retried when connectivity returns
+        await noteUnreachable(db, QUEUE, rec);
+        break; // no route out — the rest is retried when connectivity returns
       }
 
       if (res.ok) {
@@ -468,7 +505,7 @@
 
   global.EformOfflineQueue = {
     DB_NAME, DB_VERSION, QUEUE, FILES, LOCAL_PREFIX, LOCAL_RE,
-    MAX_ATTEMPTS, MAX_AGE_MS,
+    CACHE_NAME, MAX_ATTEMPTS, MAX_AGE_MS,
     openDB, runTx, getAll, add, put, del,
     storeFile, getFile, queueRequest, stats, resolveRefs, flush,
     listFailed, retryFailed, retryAllFailed, discardFailed, exportFailed,

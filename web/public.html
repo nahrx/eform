@@ -558,11 +558,13 @@ function downloadBlob(blob,name){
   a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),0);
 }
-// Must match CACHE_NAME in web/sw.js. If they diverge, the page fills a cache that
-// the service worker then deletes on activate.
-const OFFLINE_CACHE="eform-v2";
 // The queue itself lives in /offline-queue.js, shared with the service worker.
 const OQ=self.EformOfflineQueue;
+// Taken from the shared module, not repeated here. This used to be its own string with
+// a comment saying it must match sw.js; it stopped matching, and because the worker
+// deletes every cache but its own on activate, the warm-up below was thrown away on the
+// first visit — the one visit it exists for.
+const OFFLINE_CACHE=OQ.CACHE_NAME;
 function isNetworkError(e){return !navigator.onLine||e instanceof TypeError;}
 async function requestBackgroundSync(){
   try{
@@ -937,7 +939,17 @@ async function fetchForm(){
         renderAccessDenied(data);
         return;
       }
-    }catch(e){showErr("Failed to check access rights.");return;}
+    }catch(e){
+      // Being unable to ask is not the same as being refused. The session check just
+      // above already decided that an offline device keeps the sign-in it made when it
+      // last had a connection, and this has to follow it — otherwise offline mode is
+      // dead for every restricted share, which is most of them in the field.
+      //
+      // Nothing is granted by letting the form open: the queued submission carries the
+      // same token and the server checks access again before accepting it, so a
+      // revoked account still cannot get data in. The answers stay on the device.
+      if(!isNetworkError(e)){showErr("Failed to check access rights.");return;}
+    }
   }
 
   // Multi-response mode: ALWAYS show the list first
@@ -1028,9 +1040,9 @@ function renderAccessDenied(meta){
   setRoot(`<div class="gate-wrap"><div class="gate-card">
     <div class="gate-icon">🔒</div>
     <h2>${esc(title)}</h2>
-    <p class="gate-sub">Email Anda (<b>${esc(RESP_USER?.email||"")}</b>) is not on the access list for this form.</p>
+    <p class="gate-sub">Your email (<b>${esc(RESP_USER?.email||"")}</b>) is not on the access list for this form.</p>
     <p class="gate-sub muted">Contact an administrator to request access.</p>
-    <button class="btn" onclick="logout()">Keluar</button>
+    <button class="btn" onclick="logout()">Sign out</button>
   </div></div>`);
 }
 
@@ -1044,7 +1056,7 @@ function renderMyResponsesList(meta,responses){
     ${RESP_USER.picture?`<img class="pv-uavatar" src="${esc(RESP_USER.picture)}" referrerpolicy="no-referrer">`:`<div class="pv-uavatar"></div>`}
     <span style="flex:1">${esc(RESP_USER.name||RESP_USER.email)}</span>
     <span id="pvInstallWrap"></span>
-    <button class="btn" onclick="logout()">Keluar</button>
+    <button class="btn" onclick="logout()">Sign out</button>
   </div>`:"";
   const hasDraft=responses.some(r=>r.status==="draft");
   const rows=responses.map((r,i)=>{
@@ -2255,7 +2267,7 @@ function render(meta){
       ${RESP_USER.picture?`<img class="pv-uavatar" src="${esc(RESP_USER.picture)}" referrerpolicy="no-referrer">`:`<div class="pv-uavatar"></div>`}
       <span class="pv-uname">${esc(RESP_USER.name||RESP_USER.email)}</span>
       <span class="pv-uemail">${esc(RESP_USER.email)}</span>
-      <button class="pv-ulogout" onclick="logout()">Keluar</button>
+      <button class="pv-ulogout" onclick="logout()">Sign out</button>
     </div>`:"";
   const draftNote=DRAFT_RESTORED_AT?`<div class="pv-draft-note" id="draftNote">
       <span>📝 An unsubmitted draft was restored (saved ${formatDraftTime(DRAFT_RESTORED_AT)}).</span>
