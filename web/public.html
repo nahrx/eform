@@ -1831,6 +1831,29 @@ function rosterAtMax(r,rowPrefix){
   const mx=rosterMax(r);
   return mx!=null&&rosterCount(r,rowPrefix)>=mx;
 }
+/* Rules attached to the roster itself rather than to a field inside it, so the row
+   count can be checked against another answer: ${name} resolves to the roster's list of
+   rows, which makes len(${name}) the count.
+
+   Unlike a field these are evaluated even when nothing has been entered. A roster
+   always has a value — an empty one is a count of zero — and zero is usually the case
+   such a rule exists to catch. */
+function rosterFailedRules(r,rowPrefix,blockingOnly){
+  const out=[];
+  (r.validations||[]).forEach(v=>{
+    if(!v.test)return;
+    if(blockingOnly&&v.severity==="warning")return;
+    const res=evalExprSrc(v.test,rowPrefix||"");
+    if(res===undefined)return;   // unparseable or unknown reference — lint reports it
+    if(!res)out.push(v);
+  });
+  return out;
+}
+function rosterValidationMsgs(r,rowPrefix){
+  return rosterFailedRules(r,rowPrefix,false).map(v=>
+    `<div class="pv-vmsg ${v.severity==="warning"?"warning":"error"}">${esc(txt(v.message)||"The number of rows is not valid")}</div>`
+  ).join("");
+}
 // Interpolate other fields from the same roster row into label/hint/itemLabel text.
 // Supports two syntaxes: {{name}} and ${name} (both are used in various places).
 const INTERP_RE=/\{\{\s*([^}]+?)\s*\}\}|\$\{\s*([^}]+?)\s*\}/g;
@@ -1892,14 +1915,14 @@ function rosterHtml(r,rp,scopes){
   ensureRosterDefaultValues(r,count,rp);
   const title=esc(rowInterp(txt(r.title)||r.name,hostScopes));
   if(r.rosterType==="separate"){
-    let h=`<div class="pv-roster" id="pvroster_${rn}"><div class="pv-rh">${title}<span class="pv-tag">subhalaman</span></div>`;
+    let h=`<div class="pv-roster" id="pvroster_${rn}"><div class="pv-rh">${title}<span class="pv-tag">subhalaman</span></div>${rosterValidationMsgs(r,rp)}`;
     if(from&&count<=0)h+=`<div class="pv-rowempty">Fill in the "${esc(from)}" field first to determine the number of rows.</div>`;
     else if(count<=0)h+=`<div class="pv-rowempty">No rows yet.</div>`;
     else{h+=`<div class="pv-rowlist">`;for(let i=0;i<count;i++){const sum=rowSummary(r,i,rp),filled=hasRowData(r,i,rp);h+=`<div class="pv-rowitem"><div class="pv-rowinfo"><b>${rowLabel(r,i,hostScopes)}</b><span>${sum?esc(sum):"<i>not filled in</i>"}</span></div>${manual?`<button class="pv-rowdel" data-delrow="${rn}" data-rp="${hostRp}" data-i="${i}">remove</button>`:""}<button class="pv-rowopen" data-openrow="${rn}" data-rp="${hostRp}" data-i="${i}">${filled?"Edit":"Fill"} →</button></div>`;}h+=`</div>`;}
     if(canAdd)h+=`<button class="pv-add" data-addrow="${rn}" data-rp="${hostRp}">${addRowLabel(r)}</button>`;
     return h+`</div>`;
   }
-  let h=`<div class="pv-roster" id="pvroster_${rn}"><div class="pv-rh">${title}</div>`;
+  let h=`<div class="pv-roster" id="pvroster_${rn}"><div class="pv-rh">${title}</div>${rosterValidationMsgs(r,rp)}`;
   if(from&&count<=0)h+=`<div class="pv-rowempty">Fill in the "${esc(from)}" field first to determine the number of rows.</div>`;
   h+=rosterCapNotice(r,rp);
   for(let i=0;i<count;i++){const childRp=rosterRowPrefix(r,i,rp);const rowKey=childRp.slice(0,-1);const rowSkip=computeRosterRowSkipState(r,i);ROW_SKIP_HIDDEN.set(rowKey,rowSkip);rowSkip.forEach(n=>{delete answers[`${childRp}${n}`];});h+=`<div class="pv-row"><div class="pv-rownum"><span>${rowLabel(r,i,hostScopes)}</span>${manual?`<button class="pv-del" data-delrow="${rn}" data-rp="${hostRp}" data-i="${i}">remove</button>`:""}</div>`;(r.components||[]).forEach(f=>h+=nodeHtml(f,childRp,hostScopes));h+=`</div>`;}
@@ -2166,7 +2189,7 @@ function validateCurrentPage(){
     }
   }
   let rosterGate=null;
-  (function walkR(comps,pfx){if(rosterGate)return;(comps||[]).forEach(c=>{if(rosterGate||!evalVisible(c.visibleWhen,pfx))return;if(c.kind==="roster"){if(c.requiredRows&&rosterCount(c,pfx)===0)rosterGate={ok:false,key:"pvroster_"+c.name};}else if(c.kind!=="field"&&c.components)walkR(c.components,pfx);});})(PAGES[curPage].components||[],"");
+  (function walkR(comps,pfx){if(rosterGate)return;(comps||[]).forEach(c=>{if(rosterGate||!evalVisible(c.visibleWhen,pfx))return;if(c.kind==="roster"){if(c.requiredRows&&rosterCount(c,pfx)===0)rosterGate={ok:false,key:"pvroster_"+c.name};else if(rosterFailedRules(c,pfx,true).length)rosterGate={ok:false,key:"pvroster_"+c.name};}else if(c.kind!=="field"&&c.components)walkR(c.components,pfx);});})(PAGES[curPage].components||[],"");
   if(rosterGate)return rosterGate;
   return{ok:true,key:null};
 }
@@ -2203,7 +2226,7 @@ function collectAllErrors(){
         }
       }
     }
-    (function walkR(comps,pfx){(comps||[]).forEach(c=>{if(!evalVisible(c.visibleWhen,pfx))return;if(c.kind==="roster"){if(c.requiredRows&&rosterCount(c,pfx)===0)errors.push({pageIdx:pi,key:"pvroster_"+c.name,label:txt(c.title)||c.name,rp:"",msg:"No rows have been added yet"});}else if(c.kind!=="field"&&c.components)walkR(c.components,pfx);});})(page.components||[],"");
+    (function walkR(comps,pfx){(comps||[]).forEach(c=>{if(!evalVisible(c.visibleWhen,pfx))return;if(c.kind==="roster"){if(c.requiredRows&&rosterCount(c,pfx)===0)errors.push({pageIdx:pi,key:"pvroster_"+c.name,label:txt(c.title)||c.name,rp:"",msg:"No rows have been added yet"});rosterFailedRules(c,pfx,true).forEach(v=>errors.push({pageIdx:pi,key:"pvroster_"+c.name,label:txt(c.title)||c.name,rp:"",msg:txt(v.message)||"The number of rows is not valid"}));}else if(c.kind!=="field"&&c.components)walkR(c.components,pfx);});})(page.components||[],"");
   }
   return errors;
 }

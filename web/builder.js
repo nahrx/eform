@@ -153,7 +153,7 @@ function uniqueCopyName(base){const used=allUsedNames();let n=1,name=`${base}_co
 function newPage(){return {uid:uid(),kind:"page",name:autoName("page"),title:"",visibleWhen:"",components:[]};}
 function newBlock(){return {uid:uid(),kind:"block",name:autoName("block"),title:"",visibleWhen:"",components:[]};}
 function newSection(){return {uid:uid(),kind:"section",name:autoName("section"),title:"",visibleWhen:"",components:[]};}
-function newRoster(rt){return {uid:uid(),kind:"roster",name:autoName("roster"),title:"",rowTitle:"",rosterType:rt||"inline",min:"",max:"",countFrom:"",requiredRows:false,itemLabel:"",rowDefaults:"",rowDisplay:[],visibleWhen:"",components:[]};}
+function newRoster(rt){return {uid:uid(),kind:"roster",name:autoName("roster"),title:"",rowTitle:"",rosterType:rt||"inline",min:"",max:"",countFrom:"",requiredRows:false,itemLabel:"",rowDefaults:"",rowDisplay:[],visibleWhen:"",validations:[],components:[]};}
 function newField(type){const f={uid:uid(),kind:"field",type,name:autoName(type),label:"",hint:"",required:false,readOnly:false,promptOnAdd:false,visibleWhen:"",enableWhen:"",requiredWhen:"",allowRemark:false,defaultValue:""};
   if(CHOICE.has(type)){f.options=[{value:"1",label:"Option 1"}];f.optionSource="manual";f.optionsRef="";f.optionsFilterBy="";f.optionsApi={};}
   if(NUMERIC.has(type)){f.min="";f.max="";f.step="";f.unit="";}
@@ -741,6 +741,7 @@ function rosterForm(n){
   ${rowDefaultEditor}
   ${dispBlock}
   <div class="field"><label>Visible when</label><textarea class="ctrl" data-k="visibleWhen">${esc(n.visibleWhen||"")}</textarea></div>
+  ${validationsBlock(n,`Rules for the roster as a whole. <code>\${${esc(n.name)}}</code> is the list of its rows, so <code>len(\${${esc(n.name)}})</code> is how many there are — compare it with another answer, e.g. <code>len(\${${esc(n.name)}}) == \${jml_art}</code>.`)}
   ${n.rosterType==="separate"?`<button class="add-row" id="openRoster">Open the roster template editor →</button>`:""}`;
 }
 function fieldForm(c){const t=c.type;let html=headBar(t,c.name);
@@ -803,7 +804,7 @@ function optionsBlock(c){
   return `<div class="group"><div class="gh">Choices · source</div>${seg}${body}</div>`;
 }
 function skipsBlock(c){let rows=(c.skips||[]).map((s,i)=>`<div class="mini" data-si="${i}"><input class="ctrl mono" data-sf="when" placeholder="when (expression)" value="${esc(s.when||"")}"><div class="mr" style="grid-template-columns:1fr auto;margin-top:6px"><input class="ctrl mono" data-sf="to" placeholder="jump to / __end" value="${esc(s.to||"")}"><button class="x" data-srm>×</button></div></div>`).join("");return `<div style="margin-top:6px"><div class="gh" style="margin-bottom:6px">Skips</div><div id="skipRows">${rows}</div><button class="add-row" id="addSkip">+ Add skip</button></div>`;}
-function validationsBlock(c){let rows=(c.validations||[]).map((v,i)=>`<div class="mini" data-vi="${i}"><input class="ctrl mono" data-vf="test" placeholder="test (TRUE=pass)" value="${esc(v.test||"")}"><div class="mr" style="grid-template-columns:1fr auto;margin-top:6px"><input class="ctrl" data-vf="message" placeholder="message" value="${esc(typeof v.message==="object"?(v.message.id||""):(v.message||""))}"><button class="x" data-vrm>×</button></div><select class="ctrl" data-vf="severity" style="margin-top:6px">${opt("error","error — blocks",v.severity||"error")}${opt("warning","warning — can continue",v.severity||"error")}</select></div>`).join("");return `<div class="group"><div class="gh">Validation</div><div id="valRows">${rows}</div><button class="add-row" id="addVal">+ Add rule</button></div>`;}
+function validationsBlock(c,help){let rows=(c.validations||[]).map((v,i)=>`<div class="mini" data-vi="${i}"><input class="ctrl mono" data-vf="test" placeholder="test (TRUE=pass)" value="${esc(v.test||"")}"><div class="mr" style="grid-template-columns:1fr auto;margin-top:6px"><input class="ctrl" data-vf="message" placeholder="message" value="${esc(typeof v.message==="object"?(v.message.id||""):(v.message||""))}"><button class="x" data-vrm>×</button></div><select class="ctrl" data-vf="severity" style="margin-top:6px">${opt("error","error — blocks",v.severity||"error")}${opt("warning","warning — can continue",v.severity||"error")}</select></div>`).join("");return `<div class="group"><div class="gh">Validation</div>${help?`<div class="help" style="margin-left:0;margin-bottom:8px">${help}</div>`:""}<div id="valRows">${rows}</div><button class="add-row" id="addVal">+ Add rule</button></div>`;}
 
 function wireForm(pane,node){
   pane.querySelectorAll("[data-k]").forEach(inp=>{const h=()=>{node[inp.dataset.k]=inp.type==="checkbox"?inp.checked:inp.value;if(node.kind==="roster"&&inp.dataset.k==="min"){render();return;}if(inp.dataset.k==="autoCompress"){render();return;}softUpdate();};inp.addEventListener("input",h);inp.addEventListener("change",h);});
@@ -848,7 +849,7 @@ function serNode(n){
   if(n.kind==="page"){const o={kind:"page",name:n.name};if(clean(n.title))o.title=loc(n.title);if(clean(n.visibleWhen))o.visibleWhen=n.visibleWhen;o.components=n.components.map(serNode);return o;}
   if(n.kind==="block"){const o={kind:"block",name:n.name,layout:"card"};if(clean(n.title))o.title=loc(n.title);if(clean(n.visibleWhen))o.visibleWhen=n.visibleWhen;o.components=n.components.map(serNode);return o;}
   if(n.kind==="section"){const o={kind:"section",name:n.name,layout:"bordered"};if(clean(n.title))o.title=loc(n.title);if(clean(n.visibleWhen))o.visibleWhen=n.visibleWhen;o.components=n.components.map(serNode);return o;}
-  if(n.kind==="roster"){const o={kind:"roster",name:n.name,rosterType:n.rosterType};if(clean(n.title))o.title=loc(n.title);if(clean(n.rowTitle))o.rowTitle=n.rowTitle;["min","max"].forEach(k=>{if(clean(n[k]))o[k]=num(n[k]);});if(clean(n.countFrom))o.countFrom=n.countFrom;if(n.requiredRows)o.requiredRows=true;if(clean(n.itemLabel))o.itemLabel=loc(n.itemLabel);if(clean(n.rowDefaults))o.rowDefaults=loc(n.rowDefaults);if(n.rowDisplay&&n.rowDisplay.length)o.rowDisplay=n.rowDisplay;if(clean(n.visibleWhen))o.visibleWhen=n.visibleWhen;o.components=n.components.map(serNode);return o;}
+  if(n.kind==="roster"){const o={kind:"roster",name:n.name,rosterType:n.rosterType};if(clean(n.title))o.title=loc(n.title);if(clean(n.rowTitle))o.rowTitle=n.rowTitle;["min","max"].forEach(k=>{if(clean(n[k]))o[k]=num(n[k]);});if(clean(n.countFrom))o.countFrom=n.countFrom;if(n.requiredRows)o.requiredRows=true;if(clean(n.itemLabel))o.itemLabel=loc(n.itemLabel);if(clean(n.rowDefaults))o.rowDefaults=loc(n.rowDefaults);if(n.rowDisplay&&n.rowDisplay.length)o.rowDisplay=n.rowDisplay;if(clean(n.visibleWhen))o.visibleWhen=n.visibleWhen;if(n.validations&&n.validations.length){const v=n.validations.filter(x=>clean(x.test));if(v.length)o.validations=v.map(x=>({test:x.test,message:loc(x.message||""),severity:x.severity||"error"}));}o.components=n.components.map(serNode);return o;}
   const c=n,o={kind:"field",name:c.name,type:c.type};
   if(c.type!=="note"&&clean(c.label))o.label=loc(c.label);
   if(clean(c.hint))o.hint=loc(c.hint);
@@ -943,7 +944,7 @@ function lint(){
   const EK=["visibleWhen","enableWhen","requiredWhen","calculate"];const see=(n,p)=>{(names[n]=names[n]||[]).push(p);};
   function walk(n,base){const p=`${base}/${n.name||n.kind}`;
     if(n.kind==="field"){if(n.name){fields.add(n.name);see(n.name,p);byName[n.name]=n;}fieldLint(n,p,add);EK.forEach(k=>{if(clean(n[k]))exprs.push({path:`${p}.${k}`,expr:n[k]});});if(clean(n.optionsRef))refs.push({path:`${p}.optionsRef`,kind:"table",val:n.optionsRef});if(clean(n.optionsFilterBy))refs.push({path:`${p}.optionsFilterBy`,kind:"field",val:n.optionsFilterBy});(n.validations||[]).forEach((v,j)=>{if(clean(v.test))exprs.push({path:`${p}.val[${j}]`,expr:v.test});});(n.options||[]).forEach((o,j)=>{if(clean(o.skipTo))refs.push({path:`${p}.opsi[${j}]`,kind:"nav",val:o.skipTo});});(n.skips||[]).forEach((s,j)=>{if(clean(s.to))refs.push({path:`${p}.skip[${j}]`,kind:"nav",val:s.to});if(clean(s.when))exprs.push({path:`${p}.skip[${j}]`,expr:s.when});});}
-    else{if(n.name){containers.add(n.name);see(n.name,p);if(n.kind==="roster")rosterNames.add(n.name);}if(n.kind==="roster"&&clean(n.countFrom)){refs.push({path:`${p}.countFrom`,kind:"field",val:n.countFrom});counts.push({path:`${p}.countFrom`,val:n.countFrom,max:n.max});}if(clean(n.visibleWhen))exprs.push({path:`${p}.visibleWhen`,expr:n.visibleWhen});(n.components||[]).forEach(c=>walk(c,p));}
+    else{if(n.name){containers.add(n.name);see(n.name,p);if(n.kind==="roster")rosterNames.add(n.name);}(n.validations||[]).forEach((v,j)=>{if(clean(v.test))exprs.push({path:`${p}.val[${j}]`,expr:v.test});});if(n.kind==="roster"&&clean(n.countFrom)){refs.push({path:`${p}.countFrom`,kind:"field",val:n.countFrom});counts.push({path:`${p}.countFrom`,val:n.countFrom,max:n.max});}if(clean(n.visibleWhen))exprs.push({path:`${p}.visibleWhen`,expr:n.visibleWhen});(n.components||[]).forEach(c=>walk(c,p));}
   }
   state.pages.forEach(p=>walk(p,""));
   Object.entries(names).forEach(([n,ps])=>{if(ps.length>1)add("error",n,`Name '${n}' is used ${ps.length}×`);});
@@ -1016,7 +1017,7 @@ function importJSON(obj){try{
 function impNode(n,forceKind){
   const kind=forceKind||n.kind||"field";
   if(kind==="page"||kind==="block"||kind==="section"){return {uid:uid(),kind,name:n.name||autoName(kind),title:textOf(n.title),visibleWhen:n.visibleWhen||"",components:(n.components||[]).map(c=>impNode(c))};}
-  if(kind==="roster"){return {uid:uid(),kind:"roster",name:n.name||autoName("roster"),title:textOf(n.title),rowTitle:n.rowTitle||"",rosterType:n.rosterType||"inline",min:n.min??"",max:n.max??"",countFrom:n.countFrom||"",requiredRows:!!n.requiredRows,itemLabel:textOf(n.itemLabel),rowDefaults:textOf(n.rowDefaults),rowDisplay:n.rowDisplay||[],visibleWhen:n.visibleWhen||"",components:(n.components||[]).map(c=>impNode(c))};}
+  if(kind==="roster"){return {uid:uid(),kind:"roster",name:n.name||autoName("roster"),title:textOf(n.title),rowTitle:n.rowTitle||"",rosterType:n.rosterType||"inline",min:n.min??"",max:n.max??"",countFrom:n.countFrom||"",requiredRows:!!n.requiredRows,itemLabel:textOf(n.itemLabel),rowDefaults:textOf(n.rowDefaults),rowDisplay:n.rowDisplay||[],visibleWhen:n.visibleWhen||"",validations:(n.validations||[]).map(v=>({test:v.test||"",message:textOf(v.message),severity:v.severity||"error"})),components:(n.components||[]).map(c=>impNode(c))};}
   const f=newField(n.type||"text");f.uid=uid();f.name=n.name||f.name;f.label=textOf(n.label);f.hint=textOf(n.hint);f.html=textOf(n.html);f.markdown=textOf(n.markdown);f.calculate=n.calculate||"";f.autofill=!!n.autofill;
   ["required","readOnly","allowRemark","promptOnAdd","visibleWhen","enableWhen","requiredWhen","unit","pattern","optionsRef","optionsFilterBy","min","max","step","maxLength","maxPhotoKB","autoCompress","defaultValue"].forEach(k=>{if(n[k]!=null)f[k]=n[k];});
   f.placeholder=textOf(n.placeholder);
@@ -1800,6 +1801,27 @@ function pageValidationTargets(page){
   });})(page,"");
   return out;
 }
+/* Rules attached to the roster itself rather than to a field inside it: ${name}
+   resolves to the roster's list of rows, so len(${name}) is the count and can be
+   compared with another answer. Evaluated even when nothing has been entered — a
+   roster always has a value, and an empty one is a count of zero.
+   Mirrors rosterFailedRules() in public.html. */
+function rosterFailedRules(r,rowPrefix,blockingOnly){
+  const out=[];
+  (r.validations||[]).forEach(v=>{
+    if(!v.test)return;
+    if(blockingOnly&&v.severity==="warning")return;
+    const res=evalExprSrc(v.test,rowPrefix||"");
+    if(res===undefined)return;   // unparseable or unknown reference — lint reports it
+    if(!res)out.push(v);
+  });
+  return out;
+}
+function rosterValidationMsgs(r,rowPrefix){
+  return rosterFailedRules(r,rowPrefix,false).map(v=>
+    `<div class="pv-vmsg ${v.severity==="warning"?"warning":"error"}">${esc(textOf(v.message)||"The number of rows is not valid")}</div>`
+  ).join("");
+}
 function validateCurrentPage(page){
   const targets=pageValidationTargets(page);
   for(const {c,rp} of targets){
@@ -1817,6 +1839,15 @@ function validateCurrentPage(page){
       }
     }
   }
+  // Roster-level rules. The preview has to enforce them too, or the designer cannot
+  // tell whether the rule they just wrote actually works.
+  let gate=null;
+  (function walkR(comps,pfx){if(gate)return;(comps||[]).forEach(c=>{
+    if(gate||!evalVisible(c.visibleWhen,pfx))return;
+    if(c.kind==="roster"){if(rosterFailedRules(c,pfx,true).length)gate={ok:false,key:"pvroster_"+c.name};}
+    else if(c.kind!=="field"&&c.components)walkR(c.components,pfx);
+  });})(page.components||[],"");
+  if(gate)return gate;
   return{ok:true,key:null};
 }
 function focusPvField(key){
@@ -2045,7 +2076,7 @@ function pvRoster(r,row){
   const canAdd=manual&&!(r.max!==""&&r.max!=null&&count>=Number(r.max));
   ensureRosterDefaultValues(r,count);
   if(r.rosterType==="separate"){
-    let h=`<div class="pv-roster" id="pvroster_${esc(r.name)}"><div class="pv-rh">${esc(titleTxt)}<span class="pv-tag">subhalaman</span></div>`;
+    let h=`<div class="pv-roster" id="pvroster_${esc(r.name)}"><div class="pv-rh">${esc(titleTxt)}<span class="pv-tag">subhalaman</span></div>${rosterValidationMsgs(r,rp)}`;
     if(from&&count<=0){h+=`<div class="pv-rowempty">Fill in “${esc(labelOfField(from))}” first to determine the number of rows.</div>`;}
     else if(count<=0){h+=`<div class="pv-rowempty">No rows yet.</div>`;}
     else{h+=`<div class="pv-rowlist">`;
@@ -2056,7 +2087,7 @@ function pvRoster(r,row){
     return h+`</div>`;
   }
   // inline
-  let h=`<div class="pv-roster" id="pvroster_${esc(r.name)}"><div class="pv-rh">${esc(titleTxt)}</div>`;
+  let h=`<div class="pv-roster" id="pvroster_${esc(r.name)}"><div class="pv-rh">${esc(titleTxt)}</div>${rosterValidationMsgs(r,rp)}`;
   if(from&&count<=0)h+=`<div class="pv-rowempty">Fill in “${esc(labelOfField(from))}” first to determine the number of rows.</div>`;
   {const raw=rosterCountRaw(r,rp);if(raw>ROSTER_MAX_ROWS)h+=`<div class="pv-rowempty" style="border-left:3px solid #f59e0b;background:#fffbeb;color:#78350f">Showing the first ${ROSTER_MAX_ROWS} of ${raw} rows. Check the answer that sets the row count — a number this large is usually a typo.</div>`;}
   for(let i=0;i<count;i++){const childRp=rosterRowPrefix(r,i,rp);const rowKey=childRp.slice(0,-1);const rs=computeRosterRowSkipState(r,i);ROW_SKIP_HIDDEN.set(rowKey,rs);rs.forEach(n=>{delete pv.values[`${childRp}${n}`];});h+=`<div class="pv-row"><div class="pv-rownum"><span>${rowLabel(r,i,row)}</span>${manual?`<button class="pv-del" data-delrow="${esc(r.name)}" data-rp="${hostRp}" data-i="${i}">remove</button>`:""}</div>`;r.components.forEach(f=>h+=pvNode(f,{r:r.name,i,parents:parentPrefixes}));h+=`</div>`;}
