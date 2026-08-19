@@ -14,7 +14,7 @@ type User struct {
 	Role              string    `json:"role"`
 	IsActive          bool      `json:"isActive"`
 	TokenVersion      int       `json:"-"`                 // bumped to revoke existing sessions
-	PreferredLanguage string    `json:"preferredLanguage"` // 'id' | 'en' — bahasa UI builder/dashboard
+	PreferredLanguage string    `json:"preferredLanguage"` // 'id' | 'en' — UI language for the builder/dashboard
 	CreatedAt         time.Time `json:"createdAt"`
 	UpdatedAt         time.Time `json:"updatedAt"`
 }
@@ -109,8 +109,11 @@ type ViewerFormPermission struct {
 	CreatedAt        time.Time         `json:"createdAt"`
 	// filled during listing (join)
 	ViewerUsername string `json:"viewerUsername,omitempty"`
-	FormTitle      string `json:"formTitle,omitempty"`
-	AllowedCount   int    `json:"allowedCount,omitempty"`
+	// The note on the user account, carried through so the form's user list can show
+	// who someone is without the admin having to open the account itself.
+	ViewerNote   string `json:"viewerNote,omitempty"`
+	FormTitle    string `json:"formTitle,omitempty"`
+	AllowedCount int    `json:"allowedCount,omitempty"`
 }
 
 // ViewerAllowedRespondent is a single respondent allowed under 'selected' mode.
@@ -133,6 +136,7 @@ type EditorFormPermission struct {
 	CreatedBy        *string           `json:"createdBy,omitempty"`
 	CreatedAt        time.Time         `json:"createdAt"`
 	EditorName       string            `json:"editorName,omitempty"`
+	EditorNote       string            `json:"editorNote,omitempty"` // note on the user account — see ViewerNote
 	FormTitle        string            `json:"formTitle,omitempty"`
 	AllowedCount     int               `json:"allowedCount,omitempty"`
 }

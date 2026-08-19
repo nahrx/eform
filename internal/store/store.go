@@ -1453,8 +1453,9 @@ func (s *Store) GetViewerAllowedRespondentByID(ctx context.Context, id string) (
 // ListFormViewerPermissions returns every viewer permission for one form (joined with the username).
 func (s *Store) ListFormViewerPermissions(ctx context.Context, formID string) ([]models.ViewerFormPermission, error) {
 	rows, err := s.pool.Query(ctx,
+		// users.note is nullable; COALESCE keeps the scan a plain string.
 		`SELECT p.id, p.viewer_id, p.form_id, p.respondent_access, p.visible_fields,
-		        p.created_by, p.created_at, u.username,
+		        p.created_by, p.created_at, u.username, COALESCE(u.note,''),
 		        (SELECT count(*) FROM viewer_allowed_respondents WHERE permission_id=p.id),
 		        p.field_filters
 		 FROM viewer_form_permissions p
@@ -1470,7 +1471,7 @@ func (s *Store) ListFormViewerPermissions(ctx context.Context, formID string) ([
 		p := models.ViewerFormPermission{}
 		var ffRaw json.RawMessage
 		if err := rows.Scan(&p.ID, &p.ViewerID, &p.FormID, &p.RespondentAccess, &p.VisibleFields,
-			&p.CreatedBy, &p.CreatedAt, &p.ViewerUsername, &p.AllowedCount, &ffRaw); err != nil {
+			&p.CreatedBy, &p.CreatedAt, &p.ViewerUsername, &p.ViewerNote, &p.AllowedCount, &ffRaw); err != nil {
 			return nil, err
 		}
 		if len(ffRaw) > 0 {
@@ -1991,7 +1992,9 @@ func (s *Store) GetEditorPermissionByID(ctx context.Context, permID string) (*mo
 // ListFormEditorPermissions returns every editor with access to one form.
 func (s *Store) ListFormEditorPermissions(ctx context.Context, formID string) ([]models.EditorFormPermission, error) {
 	rows, err := s.pool.Query(ctx,
+		// users.note is nullable; COALESCE keeps the scan a plain string.
 		`SELECT p.id, p.editor_id, p.form_id, p.respondent_access, p.created_by, p.created_at, u.username,
+		        COALESCE(u.note,''),
 		        (SELECT count(*) FROM editor_allowed_respondents WHERE permission_id=p.id),
 		        p.field_filters
 		 FROM editor_form_permissions p
@@ -2007,7 +2010,7 @@ func (s *Store) ListFormEditorPermissions(ctx context.Context, formID string) ([
 		p := models.EditorFormPermission{}
 		var ffRaw json.RawMessage
 		if err := rows.Scan(&p.ID, &p.EditorID, &p.FormID, &p.RespondentAccess, &p.CreatedBy, &p.CreatedAt,
-			&p.EditorName, &p.AllowedCount, &ffRaw); err != nil {
+			&p.EditorName, &p.EditorNote, &p.AllowedCount, &ffRaw); err != nil {
 			return nil, err
 		}
 		if len(ffRaw) > 0 {

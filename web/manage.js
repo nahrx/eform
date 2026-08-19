@@ -588,7 +588,7 @@ async function initUserSection(){
 
 async function refreshUserPermList(){
   const el=document.getElementById("userPermList");
-  el.innerHTML='<tr><td colspan="5" class="empty">Loading…</td></tr>';
+  el.innerHTML='<tr><td colspan="6" class="empty">Loading…</td></tr>';
   try{
     const [vRes,eRes]=await Promise.all([
       api("/api/forms/"+FORM_ID+"/viewer-permissions"),
@@ -598,7 +598,7 @@ async function refreshUserPermList(){
     _epPermCache=eRes.permissions||[];
     renderUserPermTable();
   }catch(e){
-    el.innerHTML=`<tr><td colspan="5" class="empty">${esc(e.message)}</td></tr>`;
+    el.innerHTML=`<tr><td colspan="6" class="empty">${esc(e.message)}</td></tr>`;
   }
 }
 
@@ -609,18 +609,22 @@ function renderUserPermTable(){
     ..._epPermCache.map(p=>({...p,role:"editor"})),
   ];
   if(!rows.length){
-    el.innerHTML='<tr><td colspan="5" class="empty">No users added yet.</td></tr>';
+    el.innerHTML='<tr><td colspan="6" class="empty">No users added yet.</td></tr>';
     return;
   }
   el.innerHTML=rows.map(p=>{
     const isViewer=p.role==="viewer";
     const email=isViewer?p.viewerUsername:(p.editorName||"(editor)");
+    // The note recorded on the account when it was created — usually who the person is
+    // or which office they belong to, which the email alone rarely says.
+    const note=(isViewer?p.viewerNote:p.editorNote)||"";
     const respAccess=p.respondentAccess==="all"?"All respondents":`${p.allowedCount} respondents selected`;
-    const varAccess=isViewer?(p.visibleFields&&p.visibleFields.length?p.visibleFields.length+" variabel":"All fields"):"-";
+    const varAccess=isViewer?(p.visibleFields&&p.visibleFields.length?p.visibleFields.length+" fields":"All fields"):"-";
     const detailFn=isViewer?"openVpDetail":"openEpDetail";
     const removeFn=isViewer?"removeViewerPerm":"removeEditorPerm";
     return`<tr>
       <td>${esc(email)}</td>
+      <td class="muted"${note?` title="${esc(note)}"`:""}>${note?esc(note):"—"}</td>
       <td><span class="tag${isViewer?"":" archived"}">${isViewer?"Viewer":"Editor"}</span></td>
       <td class="muted">${respAccess}</td>
       <td class="muted">${varAccess}</td>
