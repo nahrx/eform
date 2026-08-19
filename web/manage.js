@@ -467,6 +467,9 @@ async function openEpDetail(permId,editorName){
   _epdPermId=permId;
   _epdFilters={};
   document.getElementById("epdEditorName").textContent=editorName;
+  // From the row on screen — see openVpDetail.
+  document.getElementById("epdNote").value=
+    (_epPermCache.find(p=>p.id===permId)||{}).editorNote||"";
   try{
     const [perm,allowedData,respondentsData]=await Promise.all([
       api("/api/editor-permissions/"+permId),
@@ -550,8 +553,9 @@ async function removeAllowedEditorRespondent(id){
 async function saveEpDetail(){
   const respondentAccess=document.querySelector("input[name='epdRA']:checked")?.value||"all";
   try{
+    const note=(document.getElementById("epdNote").value||"").trim();
     await api("/api/editor-permissions/"+_epdPermId,{
-      method:"PUT",body:JSON.stringify({respondentAccess,fieldFilters:_epdFilters})
+      method:"PUT",body:JSON.stringify({respondentAccess,fieldFilters:_epdFilters,note})
     });
     epDetailDlg.close();
     await refreshUserPermList();
@@ -770,6 +774,10 @@ let _vpdPermId=null;
 async function openVpDetail(permId,viewerName){
   _vpdPermId=permId;
   document.getElementById("vpdViewerName").textContent=viewerName;
+  // Taken from the row already on screen: the detail endpoint reads only the
+  // permission, while the note belongs to the account and arrives with the list.
+  document.getElementById("vpdNote").value=
+    (_vpPermCache.find(p=>p.id===permId)||{}).viewerNote||"";
 
   try{
     const [curPerm,allowedData,respondentsData]=await Promise.all([
@@ -885,8 +893,9 @@ async function savePermDetail(){
   const total=document.querySelectorAll("#vpdFieldList input").length;
   const visibleFields=checked.length===total?[]:checked;
   try{
+    const note=(document.getElementById("vpdNote").value||"").trim();
     await api("/api/viewer-permissions/"+_vpdPermId,{
-      method:"PUT",body:JSON.stringify({respondentAccess,visibleFields,fieldFilters:_vpdFilters})
+      method:"PUT",body:JSON.stringify({respondentAccess,visibleFields,fieldFilters:_vpdFilters,note})
     });
     vpDetailDlg.close();
     await refreshUserPermList();
@@ -953,7 +962,7 @@ async function refreshApiKeys(){
       const st=akStatus(k);
       const badges=[];
       badges.push(`<span class="tag">${k.respondentAccess==="all"?"All respondents":`${k.allowedCount||0} respondents`}</span>`);
-      badges.push(`<span class="tag">${k.visibleFields&&k.visibleFields.length?`${k.visibleFields.length} variabel`:"All fields"}</span>`);
+      badges.push(`<span class="tag">${k.visibleFields&&k.visibleFields.length?`${k.visibleFields.length} fields`:"All fields"}</span>`);
       if(!k.includeRespondent) badges.push('<span class="tag">No identity</span>');
       if(k.allowedIps&&k.allowedIps.length) badges.push(`<span class="tag">${k.allowedIps.length} IP</span>`);
       if(k.fieldFilters&&Object.keys(k.fieldFilters).length) badges.push(`<span class="tag">${Object.keys(k.fieldFilters).length} filter</span>`);

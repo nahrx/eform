@@ -124,6 +124,8 @@ func (s *Server) updateEditorPermission(w http.ResponseWriter, r *http.Request) 
 	var in struct {
 		RespondentAccess string            `json:"respondentAccess"`
 		FieldFilters     map[string]string `json:"fieldFilters"`
+		// Pointer: omitted means unchanged, not cleared. See updateViewerPermission.
+		Note *string `json:"note"`
 	}
 	if err := decodeJSON(r, &in); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid request format")
@@ -131,6 +133,14 @@ func (s *Server) updateEditorPermission(w http.ResponseWriter, r *http.Request) 
 	}
 	if in.RespondentAccess != "all" && in.RespondentAccess != "selected" {
 		in.RespondentAccess = "all"
+	}
+	// The note is on the account, so it is shared across forms — see the same block in
+	// updateViewerPermission for why that is the intended behaviour.
+	if in.Note != nil {
+		if err := s.st.UpdateUserNote(r.Context(), perm.EditorID, strings.TrimSpace(*in.Note)); err != nil {
+			writeErr(w, http.StatusInternalServerError, "failed to save the note")
+			return
+		}
 	}
 	p, err := s.st.UpdateEditorPermission(r.Context(), r.PathValue("permId"), in.RespondentAccess, in.FieldFilters)
 	if err != nil {
@@ -298,9 +308,18 @@ func (s *Server) bulkAssignEditorPermissions(w http.ResponseWriter, r *http.Requ
 			continue
 		} else if u.Role == "superadmin" || u.Role == "admin" {
 			res["status"] = "error"
-			res["error"] = "email terdaftar sebagai akun admin"
+			res["error"] = "the email is registered as an admin account"
 			results[i] = res
 			continue
+		} else if n := strings.TrimSpace(item.Note); n != "" {
+			// Existing account, so CreateUser did not run — see the same block in
+			// handlers_viewers.go. Only a non-empty note is written.
+			if nerr := s.st.UpdateUserNote(r.Context(), u.ID, n); nerr != nil {
+				res["status"] = "error"
+				res["error"] = "failed to save the note"
+				results[i] = res
+				continue
+			}
 		}
 		res["editorId"] = u.ID
 		respondentAccess := item.RespondentAccess

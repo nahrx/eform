@@ -125,6 +125,10 @@ func (s *Server) updateViewerPermission(w http.ResponseWriter, r *http.Request) 
 		RespondentAccess string            `json:"respondentAccess"`
 		VisibleFields    []string          `json:"visibleFields"`
 		FieldFilters     map[string]string `json:"fieldFilters"`
+		// A pointer so that leaving the field out means "unchanged" rather than
+		// "clear it" — the note belongs to the account, and another caller updating
+		// only the access rules must not wipe it as a side effect.
+		Note *string `json:"note"`
 	}
 	if err := decodeJSON(r, &in); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid request format")
@@ -132,6 +136,15 @@ func (s *Server) updateViewerPermission(w http.ResponseWriter, r *http.Request) 
 	}
 	if in.RespondentAccess != "all" && in.RespondentAccess != "selected" {
 		in.RespondentAccess = "all"
+	}
+	// The note lives on the user account, so this changes what every form shows for
+	// them — which is what it is for: it says who the person is, not what they may see
+	// here. Access to the form is what authorises the edit (ensureFormAccess above).
+	if in.Note != nil {
+		if err := s.st.UpdateUserNote(r.Context(), perm.ViewerID, strings.TrimSpace(*in.Note)); err != nil {
+			writeErr(w, http.StatusInternalServerError, "failed to save the note")
+			return
+		}
 	}
 	p, err := s.st.UpdateViewerPermission(r.Context(), r.PathValue("permId"), in.RespondentAccess, in.VisibleFields, in.FieldFilters)
 	if err != nil {
@@ -288,9 +301,20 @@ func (s *Server) bulkAssignViewerPermissions(w http.ResponseWriter, r *http.Requ
 			continue
 		} else if u.Role == "superadmin" || u.Role == "admin" {
 			res["status"] = "error"
-			res["error"] = "email terdaftar sebagai akun admin"
+			res["error"] = "the email is registered as an admin account"
 			results[i] = res
 			continue
+		} else if n := strings.TrimSpace(item.Note); n != "" {
+			// The account already existed, so CreateUser above did not run and the note
+			// typed in the dialog would otherwise be dropped. Only a non-empty note is
+			// written: adding someone again without filling the box must not erase what
+			// is already recorded about them.
+			if nerr := s.st.UpdateUserNote(r.Context(), u.ID, n); nerr != nil {
+				res["status"] = "error"
+				res["error"] = "failed to save the note"
+				results[i] = res
+				continue
+			}
 		}
 		res["viewerId"] = u.ID
 		respondentAccess := item.RespondentAccess
