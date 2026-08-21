@@ -5,19 +5,59 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// envInt reads a positive integer from the environment, falling back to def.
+func envInt(key string, def int32) int32 {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n <= 0 {
+		log.Printf("[db] %s=%q is not a positive number — using %d", key, v, def)
+		return def
+	}
+	return int32(n)
+}
+
 // Connect opens the pool and waits for the database to become ready (retrying a few times).
 func Connect(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
-	pool, err := pgxpool.New(ctx, dsn)
+	cfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		return nil, fmt.Errorf("pool configuration: %w", err)
 	}
+
+	/* Left unset, pgx allows max(4, NumCPU) connections. On a small VPS that is four:
+	   every request that touches the database queues behind three others, so a handful
+	   of simultaneous users is enough to turn a 100 ms query into a multi-second wait,
+	   with nothing in the logs to show for it.
+
+	   Raise this together with PostgreSQL's own max_connections (default 100), and
+	   divide it by the number of application instances pointing at the same database —
+	   the limit is shared. */
+	cfg.MaxConns = envInt("DB_MAX_CONNS", 25)
+	// A few connections kept ready, so the first requests after an idle period do not
+	// each pay for a TCP handshake and authentication.
+	cfg.MinConns = envInt("DB_MIN_CONNS", 2)
+	// Recycled periodically: a long-lived connection holds server-side memory and
+	// survives failovers it should not.
+	cfg.MaxConnLifetime = time.Hour
+	cfg.MaxConnIdleTime = 30 * time.Minute
+	cfg.HealthCheckPeriod = time.Minute
+
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("pool configuration: %w", err)
+	}
+	log.Printf("[db] connection pool: max=%d min=%d", cfg.MaxConns, cfg.MinConns)
 	var lastErr error
 	for i := 0; i < 10; i++ {
 		ctxPing, cancel := context.WithTimeout(ctx, 3*time.Second)
