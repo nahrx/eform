@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>eForm - Builder</title>
 <link rel="stylesheet" href="/builder.css">
+<!-- Same stale-session gate as admin.html: an expired token still renders the page, so
+     without this the builder flashes up before the 401 sends it to /login. -->
+<style>html.auth-checking body{visibility:hidden}html.auth-checking{background:#f1f5f9}</style>
+<script>
+document.documentElement.classList.add("auth-checking");
+setTimeout(function(){document.documentElement.classList.remove("auth-checking");},8000);
+</script>
 </head>
 <body>
 <div class="app">

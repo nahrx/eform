@@ -6,6 +6,13 @@
 <title id="mgFormTitle">Manage Form · eForm {{ORG_NICK}}</title>
 <link rel="stylesheet" href="/admin.css">
 <link rel="stylesheet" href="/manage.css">
+<!-- Same stale-session gate as admin.html: an expired token still renders the page, so
+     without this the management screen flashes up before the 401 sends it to /login. -->
+<style>html.auth-checking body{visibility:hidden}html.auth-checking{background:#f1f5f9}</style>
+<script>
+document.documentElement.classList.add("auth-checking");
+setTimeout(function(){document.documentElement.classList.remove("auth-checking");},8000);
+</script>
 </head>
 <body>
 <header>

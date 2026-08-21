@@ -50,9 +50,16 @@ let ACTIVE_NAV="forms";
     const dn=$("#uddName");if(dn)dn.textContent=uname;
     const dr=$("#uddRole");if(dr)dr.textContent=urole;
     setupAdminMenu();
-  }catch(e){}
+  }catch(e){
+    // A 401 has already redirected inside api(), so the shell stays hidden and the
+    // stale dashboard is never shown. Anything else — the server down, no network —
+    // must not leave a blank page, so fall through and reveal it.
+  }
+  revealAdminShell();
   load();
 })();
+/* Undoes the pre-paint gate in admin.html. Safe to call more than once. */
+function revealAdminShell(){document.documentElement.classList.remove("auth-checking");}
 
 (function(){
   const userBtn=document.getElementById("userBtn");

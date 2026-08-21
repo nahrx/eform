@@ -87,8 +87,12 @@ async function loadForm(){
     document.getElementById("mgSidebarTitle").textContent=f.title;
     renderOverview(f);
   }catch(e){
+    // A 401 has already redirected inside api(), leaving the shell hidden. Any other
+    // failure has to reveal it, or the toast below would sit on a blank page.
     adminToast("Failed to load form: "+e.message,true);
   }
+  // Undoes the pre-paint gate in manage.html.
+  document.documentElement.classList.remove("auth-checking");
 }
 
 async function renderOverview(f){

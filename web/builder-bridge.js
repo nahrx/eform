@@ -98,13 +98,21 @@
     // Load the form when the URL carries an id. Draft.init runs only once the loaded
     // instrument is in place — starting it earlier would take the blank instrument as
     // the baseline and report the freshly loaded one as unsaved.
+    // Undoes the pre-paint gate in builder.html. A 401 has already redirected inside
+    // api(), so the shell stays hidden and the stale builder is never shown; anything
+    // else has to reveal it rather than leave a blank page.
+    var reveal = function () { document.documentElement.classList.remove("auth-checking"); };
     if (currentId) {
       api("/api/forms/" + currentId).then(function (f) {
         if (f.schema && typeof importJSON === "function") importJSON(f.schema);
       }).catch(function (e) { toast(e.message, true); })
-      .finally(function () { if (window.Draft) Draft.init(currentId); });
-    } else if (window.Draft) {
-      Draft.init(null);
+      .finally(function () { if (window.Draft) Draft.init(currentId); reveal(); });
+    } else {
+      // A new instrument loads nothing, so nothing would have discovered an expired
+      // session until Save — after the editor had already built something. One cheap
+      // check turns that into a redirect before any work is done.
+      api("/api/auth/me").catch(function () {})
+        .finally(function () { if (window.Draft) Draft.init(null); reveal(); });
     }
 
     // Wire up the buttons

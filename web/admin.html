@@ -5,6 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dashboard · eForm {{ORG_NICK}}</title>
 <link rel="stylesheet" href="/admin.css">
+<!-- An expired token is still a token, so the page used to render in full and only
+     jump to /login once the first request came back 401 — the dashboard flashed up
+     with its layout before disappearing. The shell is hidden until the session is
+     confirmed; admin.js reveals it, and a stale session redirects without ever having
+     been shown. Inline and before the body so it applies on the first paint. -->
+<style>html.auth-checking body{visibility:hidden}html.auth-checking{background:#f1f5f9}</style>
+<script>
+document.documentElement.classList.add("auth-checking");
+// Failsafe: if admin.js never loads or throws before it reveals the shell, a hidden
+// page would look like a dead browser. Better to show the dashboard late than never.
+setTimeout(function(){document.documentElement.classList.remove("auth-checking");},8000);
+</script>
 </head>
 <body>
 <header>
