@@ -66,6 +66,16 @@ table.resp-tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:500p
 .ff-input::placeholder{color:var(--muted)}
 </style>
 <link rel="stylesheet" href="/responses.css">
+<!-- An expired token is still a token, so the page used to render in full and only
+     redirect once a request came back 401 — it flashed up before disappearing. The shell
+     is hidden until a request comes back without rejecting us; api() reveals it. -->
+<style>html.auth-checking body{visibility:hidden}html.auth-checking{background:#f1f5f9}</style>
+<script>
+document.documentElement.classList.add("auth-checking");
+// Time limit: past this the page is shown regardless, so nothing slow behind the gate
+// can leave the window looking frozen.
+setTimeout(function(){document.documentElement.classList.remove("auth-checking");},1500);
+</script>
 </head>
 <body>
 <div class="shell">
@@ -154,6 +164,8 @@ let _searchTimer=null, _fieldTimer=null;
 async function api(path,opts={}){
   const r=await fetch(path,{...opts,headers:{...H,...(opts.headers||{})}});
   if(r.status===401){localStorage.removeItem("eform_token");location.replace("/login");throw new Error("session expired");}
+  // Session accepted — the page may be shown. See the gate in this file's <head>.
+  document.documentElement.classList.remove("auth-checking");
   const data=(r.headers.get("content-type")||"").includes("json")?await r.json():null;
   if(!r.ok)throw new Error((data&&data.error)||("HTTP "+r.status));
   return data;
