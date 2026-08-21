@@ -222,6 +222,11 @@ textarea.pv-in{width:100%;resize:vertical;min-height:72px}
 .gate-card-wide{max-width:540px}
 .gate-ubar{display:flex;align-items:center;gap:10px;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--line);text-align:left;font-size:13px}
 .resp-list{text-align:left;margin:12px 0;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+/* Past ten responses the card grew taller than the screen and "+ New Response" fell
+   below the fold. Applied by the count rather than by height, so a short list keeps its
+   natural size and never shows a scrollbar. min() keeps it inside the viewport on a
+   phone, where ten rows would not fit anyway. */
+.resp-list-scroll{overflow-x:hidden;overflow-y:auto;max-height:min(420px,55vh);-webkit-overflow-scrolling:touch}
 .resp-item{display:flex;align-items:center;flex-wrap:wrap;row-gap:8px;column-gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);font-size:13px}
 .resp-item:last-child{border-bottom:none}
 .resp-item-clickable{cursor:pointer;transition:background .12s}
@@ -1047,6 +1052,9 @@ function renderAccessDenied(meta){
 }
 
 let _responseMap={};
+// Beyond this many responses the list becomes its own scroll area rather than pushing
+// the rest of the card off the screen.
+const RESP_LIST_SCROLL_AFTER=10;
 function renderMyResponsesList(meta,responses){
   const title=txt(meta.title||txt(SCHEMA?.title)||"Form");
   document.title=title;
@@ -1068,8 +1076,8 @@ function renderMyResponsesList(meta,responses){
     // share) — only "Unsubmit" requires the share to still be active.
     // Clicking the container itself (rather than a separate button) opens "View Response".
     const action=isDraft
-      ?`<button class="btn btn-xs" onclick="editDraftResponseById('${esc(r.id)}')">Lanjutkan</button>`
-      :`<button class="btn btn-xs" onclick="event.stopPropagation();unsubmitResponseAPI('${r.id}')">Batalkan Submit</button>`;
+      ?`<button class="btn btn-xs" onclick="editDraftResponseById('${esc(r.id)}')">Continue</button>`
+      :`<button class="btn btn-xs" onclick="event.stopPropagation();unsubmitResponseAPI('${r.id}')">Unsubmit</button>`;
     const rowAttrs=isDraft?"":` onclick="viewSubmittedResponse('${esc(r.id)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();viewSubmittedResponse('${esc(r.id)}')}" role="button" tabindex="0"`;
     return `<div class="resp-item${isDraft?"":" resp-item-clickable"}"${rowAttrs}>
       <div class="resp-item-left"><span class="resp-num">Response ${responses.length-i}</span>${badge}</div>
@@ -1088,10 +1096,25 @@ function renderMyResponsesList(meta,responses){
     <div class="gate-icon">📋</div>
     <h2>${esc(title)}</h2>
     <p class="gate-sub">${responses.length===0?"You have no responses for this form yet.":"You have "+responses.length+" responses for this form."}</p>
-    <div class="resp-list">${emptyNote}${rows}</div>
+    <div class="resp-list${responses.length>RESP_LIST_SCROLL_AFTER?" resp-list-scroll":""}">${emptyNote}${rows}</div>
     ${newBtn}
   </div></div>`);
   renderInstallButton();
+  fitRespList();
+}
+/* Sizes the scroller to exactly RESP_LIST_SCROLL_AFTER rows. Measured rather than
+   assumed: rows are 47px on a desktop but grow when they wrap on a narrow screen or
+   carry a Continue button, so any hardcoded height would cut a row in half — the CSS
+   max-height stays as the fallback for that reason. Still clamped to the viewport, or
+   a phone would need to scroll the page to reach "+ New Response". */
+function fitRespList(){
+  const list=document.querySelector(".resp-list-scroll");
+  if(!list)return;
+  const rows=list.querySelectorAll(".resp-item");
+  if(rows.length<=RESP_LIST_SCROLL_AFTER)return;
+  const last=rows[RESP_LIST_SCROLL_AFTER-1];
+  const h=last.getBoundingClientRect().bottom-list.getBoundingClientRect().top;
+  if(h>0)list.style.maxHeight=Math.round(Math.min(h,window.innerHeight*0.55))+"px";
 }
 
 function startNewResponse(){
