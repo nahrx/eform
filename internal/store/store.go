@@ -79,7 +79,11 @@ func (sc ResponseScope) clauses(args []any) (string, []any) {
 // source builds the row source: submitted responses, plus drafts when the scope allows it.
 // $1 is always formID.
 func (sc ResponseScope) source() string {
-	base := `SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at
+	// source tells the two kinds of 'draft' apart: a response the respondent withdrew
+	// after submitting, and one that was saved but never sent. Both branches carry the
+	// column so the callers can scan it either way.
+	base := `SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at,
+		           'response'::text AS source
 		    FROM form_responses WHERE form_id=$1`
 	if !sc.IncludeDrafts {
 		return base
@@ -87,7 +91,8 @@ func (sc ResponseScope) source() string {
 	return base + `
 		  UNION ALL
 		  SELECT rd.id,rd.form_id,rd.share_id,rd.respondent_id,'draft'::text,rd.answers,
-		         jsonb_strip_nulls(jsonb_build_object('email',resp.email,'name',resp.name)),rd.saved_at
+		         jsonb_strip_nulls(jsonb_build_object('email',resp.email,'name',resp.name)),rd.saved_at,
+		         'working_draft'::text
 		    FROM response_drafts rd
 		    LEFT JOIN respondents resp ON resp.id=rd.respondent_id
 		    WHERE rd.form_id=$1`
@@ -1011,13 +1016,21 @@ func (s *Store) ListAllResponsesByForm(ctx context.Context, formID string, f Res
 	args = append(args, limit, offset)
 	limitN, offsetN := len(args)-1, len(args)
 
+	/* Two different things arrive as status 'draft': a response that was submitted and
+	   then unsubmitted (form_responses), and a half-filled form the respondent saved
+	   but has never sent (response_drafts). They read identically on screen, which had
+	   an operator believing the system duplicates a response on unsubmit. The origin is
+	   carried alongside the status so the list can say which is which — status itself is
+	   left alone because the filters key off it. */
 	q := fmt.Sprintf(`
-		SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at FROM (
-		  SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at
+		SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at,source FROM (
+		  SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at,
+		         'response'::text AS source
 		    FROM form_responses WHERE form_id=$1
 		  UNION ALL
 		  SELECT rd.id,rd.form_id,rd.share_id,rd.respondent_id,'draft'::text,rd.answers,
-		         jsonb_strip_nulls(jsonb_build_object('email',resp.email,'name',resp.name)),rd.saved_at
+		         jsonb_strip_nulls(jsonb_build_object('email',resp.email,'name',resp.name)),rd.saved_at,
+		         'working_draft'::text
 		    FROM response_drafts rd
 		    LEFT JOIN respondents resp ON resp.id=rd.respondent_id
 		    WHERE rd.form_id=$1
@@ -1034,7 +1047,7 @@ func (s *Store) ListAllResponsesByForm(ctx context.Context, formID string, f Res
 	var out []models.Response
 	for rows.Next() {
 		r := models.Response{}
-		if err := rows.Scan(&r.ID, &r.FormID, &r.ShareID, &r.RespondentID, &r.Status, &r.Answers, &r.Meta, &r.SubmittedAt); err != nil {
+		if err := rows.Scan(&r.ID, &r.FormID, &r.ShareID, &r.RespondentID, &r.Status, &r.Answers, &r.Meta, &r.SubmittedAt, &r.Source); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
@@ -1657,7 +1670,7 @@ func (s *Store) ListScopedResponses(ctx context.Context, sc ResponseScope, f Res
 	limitN, offsetN := len(args)-1, len(args)
 
 	q := fmt.Sprintf(`
-		SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at FROM (
+		SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at,source FROM (
 		  %s
 		) combined
 		WHERE 1=1%s%s
@@ -1673,7 +1686,7 @@ func (s *Store) ListScopedResponses(ctx context.Context, sc ResponseScope, f Res
 	var out []models.Response
 	for rows.Next() {
 		r := models.Response{}
-		if err := rows.Scan(&r.ID, &r.FormID, &r.ShareID, &r.RespondentID, &r.Status, &r.Answers, &r.Meta, &r.SubmittedAt); err != nil {
+		if err := rows.Scan(&r.ID, &r.FormID, &r.ShareID, &r.RespondentID, &r.Status, &r.Answers, &r.Meta, &r.SubmittedAt, &r.Source); err != nil {
 			return nil, err
 		}
 		r.Answers = maskAnswers(r.Answers, sc.VisibleFields)
@@ -1709,7 +1722,7 @@ func (s *Store) ForEachScopedResponse(ctx context.Context, sc ResponseScope, fn 
 	scopeClause, args := sc.clauses(args)
 
 	q := fmt.Sprintf(`
-		SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at FROM (
+		SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at,source FROM (
 		  %s
 		) combined
 		WHERE 1=1%s
@@ -1722,7 +1735,7 @@ func (s *Store) ForEachScopedResponse(ctx context.Context, sc ResponseScope, fn 
 	defer rows.Close()
 	for rows.Next() {
 		r := models.Response{}
-		if err := rows.Scan(&r.ID, &r.FormID, &r.ShareID, &r.RespondentID, &r.Status, &r.Answers, &r.Meta, &r.SubmittedAt); err != nil {
+		if err := rows.Scan(&r.ID, &r.FormID, &r.ShareID, &r.RespondentID, &r.Status, &r.Answers, &r.Meta, &r.SubmittedAt, &r.Source); err != nil {
 			return err
 		}
 		r.Answers = maskAnswers(r.Answers, sc.VisibleFields)
@@ -2203,13 +2216,17 @@ func (s *Store) ListEditorResponses(ctx context.Context, editorID, formID string
 	args = append(args, limit, offset)
 	limitN, offsetN := len(args)-1, len(args)
 
+	// source distinguishes a withdrawn response from one that was never sent — both
+	// arrive as status 'draft'. See ListAllResponsesByForm.
 	q := fmt.Sprintf(`
-		SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at FROM (
-		  SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at
+		SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at,source FROM (
+		  SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at,
+		         'response'::text AS source
 		    FROM form_responses WHERE form_id=$1
 		  UNION ALL
 		  SELECT rd.id,rd.form_id,rd.share_id,rd.respondent_id,'draft'::text,rd.answers,
-		         jsonb_strip_nulls(jsonb_build_object('email',resp.email,'name',resp.name)),rd.saved_at
+		         jsonb_strip_nulls(jsonb_build_object('email',resp.email,'name',resp.name)),rd.saved_at,
+		         'working_draft'::text
 		    FROM response_drafts rd
 		    LEFT JOIN respondents resp ON resp.id=rd.respondent_id
 		    WHERE rd.form_id=$1
@@ -2227,7 +2244,7 @@ func (s *Store) ListEditorResponses(ctx context.Context, editorID, formID string
 	var out []models.Response
 	for rows.Next() {
 		r := models.Response{}
-		if err := rows.Scan(&r.ID, &r.FormID, &r.ShareID, &r.RespondentID, &r.Status, &r.Answers, &r.Meta, &r.SubmittedAt); err != nil {
+		if err := rows.Scan(&r.ID, &r.FormID, &r.ShareID, &r.RespondentID, &r.Status, &r.Answers, &r.Meta, &r.SubmittedAt, &r.Source); err != nil {
 			return nil, err
 		}
 		out = append(out, r)

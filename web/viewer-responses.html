@@ -130,7 +130,7 @@ setTimeout(function(){document.documentElement.classList.remove("auth-checking")
       <select class="filter-sel" id="fStatus" onchange="onStatusChange()">
         <option value="">All</option>
         <option value="submitted">Submitted</option>
-        <option value="draft">Draft</option>
+        <option value="draft">Not submitted</option>
       </select>
     </div>
     <div class="ff-bar" id="ffBar"></div>
@@ -382,9 +382,14 @@ function renderTable(){
       return`<td class="td-val${empty}" title="${esc(display)}">${esc(display)}</td>`;
     }).join("");
 
+    // "Draft" covered two different things: a response withdrawn after being submitted,
+    // and one saved but never sent. Shown apart so the list cannot be misread.
+    const pill="font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px";
     const statusBadge=resp.status==="draft"
-      ?`<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;background:#fef3c7;color:#92400e">Draft</span>`
-      :`<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;background:var(--ok-soft);color:var(--ok)">Submitted</span>`;
+      ?(resp.source==="working_draft"
+        ?`<span style="${pill};background:#eef1f5;color:#79828f" title="Saved by the respondent but never submitted — not a response yet">Not sent</span>`
+        :`<span style="${pill};background:#fef3c7;color:#92400e" title="Was submitted, then withdrawn by the respondent">Withdrawn</span>`)
+      :`<span style="${pill};background:var(--ok-soft);color:var(--ok)">Submitted</span>`;
     html+=`<tr>
       <td class="td-num">${num}</td>
       <td class="td-status">${statusBadge}</td>

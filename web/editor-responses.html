@@ -69,6 +69,9 @@ table.resp-tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:600p
 .st-badge{display:inline-block;font-size:11px;padding:3px 9px;border-radius:999px;font-weight:700}
 .st-submitted{background:var(--ok-soft);color:var(--ok)}
 .st-draft{background:var(--warn-soft);color:var(--warn-ink)}
+/* Never-sent drafts are the quieter of the two: nothing was withdrawn, the respondent
+   simply has not finished. */
+.st-unsent{background:var(--line-2,#eef1f5);color:var(--muted,#79828f)}
 .tbl-foot{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);background:var(--panel-2)}
 .loading,.empty-state{padding:32px;text-align:center;color:var(--muted);font-size:13px}
 </style>
@@ -136,7 +139,7 @@ setTimeout(function(){document.documentElement.classList.remove("auth-checking")
       <select class="filter-sel" id="fStatus" onchange="onFilter()">
         <option value="">All</option>
         <option value="submitted">Submitted</option>
-        <option value="draft">Draft</option>
+        <option value="draft">Not submitted</option>
       </select>
     </div>
     <div class="ff-bar" id="ffBar"></div>
@@ -355,7 +358,9 @@ function renderTable(){
     const meta=parseAnswers(resp.meta);
     const isDraft=resp.status==="draft";
     const badge=isDraft
-      ?`<span class="st-badge st-draft">Draft</span>`
+      ?(resp.source==="working_draft"
+        ?`<span class="st-badge st-unsent" title="Saved by the respondent but never submitted — not a response yet">Not sent</span>`
+        :`<span class="st-badge st-draft" title="Was submitted, then withdrawn by the respondent">Withdrawn</span>`)
       :`<span class="st-badge st-submitted">Submitted</span>`;
     const who=meta.name
       ?`${esc(meta.name)}<br><span style="font-size:11px;color:var(--muted)">${esc(meta.email||"")}</span>`

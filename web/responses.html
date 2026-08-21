@@ -82,6 +82,9 @@ table.resp-tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:600p
 .st-badge{display:inline-block;font-size:11px;padding:3px 9px;border-radius:999px;font-weight:700}
 .st-submitted{background:var(--ok-soft);color:var(--ok)}
 .st-draft{background:var(--warn-soft);color:var(--warn-ink)}
+/* Never-sent drafts are the quieter of the two: nothing has been withdrawn, the
+   respondent simply has not finished. */
+.st-unsent{background:var(--line-2,#eef1f5);color:var(--muted,#79828f)}
 
 /* bottom pager */
 .tbl-foot{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);background:var(--panel-2)}
@@ -121,7 +124,7 @@ setTimeout(function(){document.documentElement.classList.remove("auth-checking")
     <div class="col-wrap" id="colWrap" hidden>
       <button class="btn" id="btnKolom">Columns ▾</button>
       <div class="col-panel" id="colPanel">
-        <div class="col-panel-h">Choose extra columns <span style="font-weight:400">(max 5)</span></div>
+        <div class="col-panel-h">Choose extra columns <span style="font-weight:400">(max 8)</span></div>
         <div class="col-list" id="colList"></div>
         <div class="col-panel-foot">
           <button class="btn-sm" id="btnColReset">Reset</button>
@@ -207,7 +210,7 @@ setTimeout(function(){document.documentElement.classList.remove("auth-checking")
       <select class="filter-sel" id="fStatus" onchange="onFilter()">
         <option value="">All</option>
         <option value="submitted">Submitted</option>
-        <option value="draft">Draft</option>
+        <option value="draft">Not submitted</option>
       </select>
     </div>
     <div class="drawer-sect">
@@ -546,7 +549,7 @@ function extractFields(schema){
 }
 
 function loadColPref(){
-  try{const s=localStorage.getItem(COL_KEY);if(s){const a=JSON.parse(s);if(Array.isArray(a))return a.slice(0,5);}}catch{}
+  try{const s=localStorage.getItem(COL_KEY);if(s){const a=JSON.parse(s);if(Array.isArray(a))return a.slice(0,8);}}catch{}
   return [];
 }
 function saveColPref(cols){try{localStorage.setItem(COL_KEY,JSON.stringify(cols));}catch{}}
@@ -561,7 +564,7 @@ function buildColPicker(){
   </label>`).join("");
   list.querySelectorAll("input[type=checkbox]").forEach(cb=>{
     cb.addEventListener("change",()=>{
-      if([...list.querySelectorAll("input:checked")].length>5)cb.checked=false;
+      if([...list.querySelectorAll("input:checked")].length>8)cb.checked=false;
     });
   });
 }
@@ -577,7 +580,7 @@ function saveColsToServer(cols){
 }
 
 document.getElementById("btnColApply")?.addEventListener("click",()=>{
-  const newCols=[...document.querySelectorAll("#colList input:checked")].map(cb=>cb.value).slice(0,5);
+  const newCols=[...document.querySelectorAll("#colList input:checked")].map(cb=>cb.value).slice(0,8);
   // clear filters for fields whose column was removed
   SEL_COLS.filter(c=>!newCols.includes(c)).forEach(c=>{delete FIELD_FILTERS[c];delete FIELD_EXACT_FILTERS[c];delete FIELD_ANY_FILTERS[c];delete FIELD_RANGE_FILTERS[c];});
   SEL_COLS=newCols;
@@ -633,8 +636,15 @@ function renderTable(){
     const answers=parseAnswers(resp.answers);
     const meta=parseAnswers(resp.meta);
     const isDraft=resp.status==="draft";
+    /* Two different things show up as "draft" and they used to be indistinguishable:
+       a response that was submitted and then pulled back, and a form the respondent
+       saved but never sent. Seeing both on one screen is what made a submitted answer
+       and an unsent draft look like the system had duplicated a response. */
+    const neverSent=resp.source==="working_draft";
     const badge=isDraft
-      ?`<span class="st-badge st-draft">Draft</span>`
+      ?(neverSent
+        ?`<span class="st-badge st-unsent" title="Saved by the respondent but never submitted — not a response yet">Not sent</span>`
+        :`<span class="st-badge st-draft" title="Was submitted, then withdrawn by the respondent">Withdrawn</span>`)
       :`<span class="st-badge st-submitted">Submitted</span>`;
     const who=meta.name
       ?`${esc(meta.name)}<br><span style="font-size:11px;color:var(--muted)">${esc(meta.email||"")}</span>`

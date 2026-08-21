@@ -70,6 +70,11 @@ type Response struct {
 	Answers      json.RawMessage `json:"answers"`
 	Meta         json.RawMessage `json:"meta,omitempty"`
 	SubmittedAt  time.Time       `json:"submittedAt"`
+	// Which table the row came from, filled only by the listings that union the two:
+	// 'response' for form_responses, 'working_draft' for response_drafts. Both can read
+	// as status 'draft', and telling them apart matters — one is a response the
+	// respondent pulled back, the other was never sent at all.
+	Source string `json:"source,omitempty"`
 }
 
 type Draft struct {
