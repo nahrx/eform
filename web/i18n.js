@@ -920,13 +920,31 @@
   // Fetch the language preference stored on the server (the account may be logged
   // in on another device) and apply it — the server stays the source of truth,
   // localStorage is only a cache.
-  function syncLangFromServer() {
+  /* One /api/auth/me for the whole page. This file and the page script both wanted it,
+     which meant two identical requests — and each one costs a database read for the
+     language preference. Resolves to {status, data} rather than the Response, because a
+     body can only be read once and two callers sharing a Response would collide.
+
+     admin.html starts the same promise in its head, before this file is even fetched;
+     the shape has to match. */
+  window.__meOnce = function () {
+    if (window.__mePromise) return window.__mePromise;
     var token = localStorage.getItem("eform_token");
-    if (!token) return;
-    fetch("/api/auth/me", { headers: { "Authorization": "Bearer " + token } })
-      .then(function (r) { return r.ok ? r.json() : null; })
+    if (!token) return Promise.resolve({ status: 0, data: null });
+    window.__mePromise = fetch("/api/auth/me", { headers: { "Authorization": "Bearer " + token } })
+      .then(function (r) {
+        if (!r.ok) return { status: r.status, data: null };
+        return r.json().then(function (d) { return { status: r.status, data: d }; });
+      });
+    return window.__mePromise;
+  };
+
+  function syncLangFromServer() {
+    if (!localStorage.getItem("eform_token")) return;
+    window.__meOnce()
+      .then(function (res) { return res.data; })
       .then(function (me) {
-        if (userChangedLang) return; // pilihan manual terjadi selagi fetch ini berjalan — jangan ditimpa
+        if (userChangedLang) return; // a manual choice happened while this was in flight — do not overwrite it
         if (me && (me.preferredLanguage === "en" || me.preferredLanguage === "id")) {
           window.setUILang(me.preferredLanguage);
           markActiveLangBtns();

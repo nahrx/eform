@@ -48,7 +48,11 @@ let FORM_STATUS="draft";
 
 (async()=>{
   try{
-    const me=await api("/api/auth/me");
+    // Shared with i18n.js, which wants the same answer for the language preference —
+    // this used to be two identical requests, each costing a database read.
+    const meRes=await window.__meOnce();
+    if(meRes.status===401){localStorage.removeItem("eform_token");location.replace("/login");return;}
+    const me=meRes.data||{};
     MY_ROLE=me.role||"admin";
     const uname=me.username||"",urole=me.role||"";
     const av=$("#userAvatar");if(av)av.textContent=uname.charAt(0).toUpperCase()||"?";

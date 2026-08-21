@@ -19,11 +19,17 @@ document.documentElement.classList.add("auth-checking");
    between one round trip and two. admin.js consumes this promise. */
 try{
   var t=localStorage.getItem("eform_token");
-  if(t)window.__meCheck=fetch("/api/auth/me",{headers:{Authorization:"Bearer "+t}});
+  // Same {status,data} shape as window.__meOnce in i18n.js, which reuses this promise
+  // instead of making a second identical request.
+  if(t)window.__mePromise=fetch("/api/auth/me",{headers:{Authorization:"Bearer "+t}})
+    .then(function(r){return r.ok?r.json().then(function(d){return{status:r.status,data:d};})
+                               :{status:r.status,data:null};});
 }catch(e){}
-// Failsafe: if admin.js never loads or throws before it reveals the shell, a hidden
-// page would look like a dead browser. Better to show the dashboard late than never.
-setTimeout(function(){document.documentElement.classList.remove("auth-checking");},8000);
+/* Time limit on the gate. It exists to hide a stale dashboard for the few hundred
+   milliseconds a session check takes — not to blank the screen while something else is
+   slow. Past this the page is shown regardless: a brief flash on an unusually slow
+   response is a far smaller problem than a window that looks frozen. */
+setTimeout(function(){document.documentElement.classList.remove("auth-checking");},1500);
 </script>
 </head>
 <body>
