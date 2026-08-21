@@ -40,7 +40,12 @@ let MY_ID="";
 let ACTIVE_NAV="forms";
 (async()=>{
   try{
-    const me=await api("/api/auth/me");
+    // Started in admin.html's head so it runs alongside the script downloads; falls
+    // back to a fresh request if that head script did not get to it.
+    const meRes=await (window.__meCheck||fetch("/api/auth/me",{headers:H}));
+    if(meRes.status===401){localStorage.removeItem("eform_token");location.replace("/login");return;}
+    if(!meRes.ok)throw new Error("HTTP "+meRes.status);
+    const me=await meRes.json();
     MY_ROLE=me.role||"admin";
     MY_ID=me.id||"";
     const uname=me.username||"",urole=me.role||"";

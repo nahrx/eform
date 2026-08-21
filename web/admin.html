@@ -13,6 +13,14 @@
 <style>html.auth-checking body{visibility:hidden}html.auth-checking{background:#f1f5f9}</style>
 <script>
 document.documentElement.classList.add("auth-checking");
+/* The session check is started here rather than in admin.js so it overlaps the ~65 KB
+   of scripts at the end of the body instead of queueing behind them. Nothing can be
+   painted until the answer arrives, so on a slow link that ordering was the difference
+   between one round trip and two. admin.js consumes this promise. */
+try{
+  var t=localStorage.getItem("eform_token");
+  if(t)window.__meCheck=fetch("/api/auth/me",{headers:{Authorization:"Bearer "+t}});
+}catch(e){}
 // Failsafe: if admin.js never loads or throws before it reveals the shell, a hidden
 // page would look like a dead browser. Better to show the dashboard late than never.
 setTimeout(function(){document.documentElement.classList.remove("auth-checking");},8000);
