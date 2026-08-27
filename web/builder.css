@@ -60,6 +60,14 @@
   .btn:disabled,.btn.icon:disabled{opacity:.38;cursor:not-allowed}
   .btn:disabled:hover{border-color:var(--line);background:var(--panel)}
 
+  /* A hidden option is dimmed rather than removed — it still belongs to the instrument
+     and still explains answers already recorded against it. */
+  .mini.opt-hidden{opacity:.55}
+  .mini.opt-hidden .ctrl{background:var(--panel-2);font-style:italic}
+  .opt-hide-row{display:flex;align-items:center;gap:6px;margin-top:6px;font-size:11.5px;color:var(--muted)}
+  .opt-hide-row input{accent-color:var(--accent);flex:none}
+  .mini.opt-hidden .opt-hide-row{opacity:1;color:var(--ink-soft);font-weight:600}
+
   /* bulk edit rows in the multi-select inspector */
   .bulk-row{display:grid;grid-template-columns:1fr auto auto auto;gap:6px;align-items:center;margin-bottom:6px}
   .bulk-lab{font-size:12.5px;color:var(--ink)}

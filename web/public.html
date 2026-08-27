@@ -1656,7 +1656,10 @@ async function optionsFor(c,rp){
       ?t.items.filter(it=>String(it.parent)===String(parentVal))
       :t.items;
     return items.map(it=>({value:it.code,label:txt(it.label)}));}
-  return(c.options||[]).map(o=>({value:o.value,label:txt(o.label)||String(o.value)}));
+  /* Hidden options are dropped here, where the choices to offer are built — never
+     where a stored value is turned back into a label. Retiring a choice part-way
+     through collection must not make the answers already given unreadable. */
+  return(c.options||[]).filter(o=>!o.hidden).map(o=>({value:o.value,label:txt(o.label)||String(o.value)}));
 }
 
 /* ---- field & node rendering ---- */
@@ -2064,7 +2067,9 @@ function fieldPendingTarget(f){
   const s=(f.skips||[]).find(x=>x.when&&x.to);
   if(s)return s.to;
   if(CHOICE.has(f.type)&&Array.isArray(f.options)){
-    const o=f.options.find(o=>o.skipTo);
+    // Only among the options that can actually be picked: a hidden one is never
+    // offered, so its skip must not decide what happens before the field is answered.
+    const o=f.options.find(o=>o.skipTo&&!o.hidden);
     if(o)return o.skipTo;
   }
   return null;

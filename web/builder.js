@@ -524,7 +524,11 @@ function renderNode(n){
   if(n.skips&&n.skips.length)badges.push(`<span class="badge skip">skip →</span>`);
   if(n.optionSource==="api"||(n.optionsApi&&n.optionsApi.url))badges.push(`<span class="badge">API</span>`);
   else if(n.optionsRef)badges.push(`<span class="badge">ref:${esc(n.optionsRef)}</span>`);
-  else if(n.options&&n.options.length)badges.push(`<span class="badge">${n.options.length} opsi</span>`);
+  else if(n.options&&n.options.length){
+    const shown=n.options.filter(o=>!o.hidden).length,hidden=n.options.length-shown;
+    badges.push(`<span class="badge">${shown} option${shown===1?"":"s"}</span>`);
+    if(hidden)badges.push(`<span class="badge">${hidden} hidden</span>`);
+  }
   if(n.validations&&n.validations.length)badges.push(`<span class="badge">${n.validations.length} cek</span>`);
   if(n.visibleWhen)badges.push(`<span class="badge">⊘ kondisi</span>`);
   const lbl=(n.type==="note"||n.type==="markdown")?`<span style="color:var(--ink-soft)">${esc(((n.type==="markdown"?(n.markdown||""):String(n.html||"").replace(/<[^>]+>/g," ")).replace(/[#>*`_-]/g," ").trim().slice(0,70))||"(empty label)")}</span>`:(n.label?esc(n.label):`<span class="empty">no label</span>`);
@@ -781,7 +785,11 @@ function optionsBlock(c){
   const seg=`<div class="seg" id="osSeg"><button data-os="manual" class="${mode==="manual"?"on":""}">Manual</button><button data-os="ref" class="${mode==="ref"?"on":""}">Inline</button><button data-os="api" class="${mode==="api"?"on":""}">API</button></div>`;
   let body="";
   if(mode==="manual"){
-    const rows=(c.options||[]).map((o,i)=>`<div class="mini" data-oi="${i}"><div class="mr"><input class="ctrl" data-of="value" placeholder="value" value="${esc(o.value??"")}"><input class="ctrl" data-of="label" placeholder="label" value="${esc(typeof o.label==="object"?(o.label.id||""):(o.label||""))}"><button class="x" data-orm>×</button></div><input class="ctrl mono" data-of="skipTo" placeholder="skipTo (optional)" value="${esc(o.skipTo||"")}" style="margin-top:6px"></div>`).join("");
+    /* Hidden options stay in the instrument but are not offered while filling it in.
+       Retiring a choice mid-collection is the point: deleting it would leave answers
+       already recorded against it pointing at a value the instrument no longer
+       describes, and the responses list could no longer put a label on them. */
+    const rows=(c.options||[]).map((o,i)=>`<div class="mini${o.hidden?" opt-hidden":""}" data-oi="${i}"><div class="mr"><input class="ctrl" data-of="value" placeholder="value" value="${esc(o.value??"")}"><input class="ctrl" data-of="label" placeholder="label" value="${esc(typeof o.label==="object"?(o.label.id||""):(o.label||""))}"><button class="x" data-orm>×</button></div><input class="ctrl mono" data-of="skipTo" placeholder="skipTo (optional)" value="${esc(o.skipTo||"")}" style="margin-top:6px"><label class="check opt-hide-row"><input type="checkbox" data-of="hidden" ${o.hidden?"checked":""}> Hidden — kept in the data, not offered when filling in</label></div>`).join("");
     body=`<div id="optRows">${rows}</div><button class="add-row" id="addOpt">+ Add option</button>`;
   } else if(mode==="ref"){
     // Only tables that can actually yield options. A table with no items — a leftover
@@ -831,7 +839,20 @@ function wireForm(pane,node){
   // options
   pane.querySelectorAll("#osSeg button").forEach(b=>b.addEventListener("click",()=>{node.optionSource=b.dataset.os;if(node.optionSource==="api"&&!node.optionsApi)node.optionsApi={url:"",valueField:"",labelField:""};render();}));
   pane.querySelectorAll("[data-api]").forEach(inp=>inp.addEventListener("input",()=>{node.optionsApi=node.optionsApi||{};node.optionsApi[inp.dataset.api]=inp.value;softUpdate();}));
-  pane.querySelectorAll("#optRows .mini").forEach(row=>{const i=+row.dataset.oi;row.querySelectorAll("[data-of]").forEach(inp=>inp.addEventListener("input",()=>{const f=inp.dataset.of;node.options[i][f]=inp.value;softUpdate();}));row.querySelector("[data-orm]")?.addEventListener("click",()=>{node.options.splice(i,1);render();});});
+  pane.querySelectorAll("#optRows .mini").forEach(row=>{const i=+row.dataset.oi;row.querySelectorAll("[data-of]").forEach(inp=>{
+    const h=()=>{
+      const f=inp.dataset.of;
+      if(inp.type==="checkbox"){
+        // "hidden" is the only boolean here; dropping it when false keeps the exported
+        // instrument free of a flag on every single option.
+        if(inp.checked)node.options[i][f]=true; else delete node.options[i][f];
+        render();   // the row is greyed out, so the whole pane redraws
+        return;
+      }
+      node.options[i][f]=inp.value;softUpdate();
+    };
+    inp.addEventListener("input",h);inp.addEventListener("change",h);
+  });row.querySelector("[data-orm]")?.addEventListener("click",()=>{node.options.splice(i,1);render();});});
   pane.querySelector("#addOpt")?.addEventListener("click",()=>{node.options=node.options||[];node.options.push({value:String(node.options.length+1),label:"Option "+(node.options.length+1)});render();});
   // skips
   pane.querySelectorAll("#skipRows .mini").forEach(row=>{const i=+row.dataset.si;row.querySelectorAll("[data-sf]").forEach(inp=>inp.addEventListener("input",()=>{node.skips[i][inp.dataset.sf]=inp.value;softUpdate();}));row.querySelector("[data-srm]")?.addEventListener("click",()=>{node.skips.splice(i,1);render();});});
@@ -869,7 +890,7 @@ function serNode(n){
   if(CHOICE.has(c.type)){const mode=c.optionSource||(c.optionsApi&&c.optionsApi.url?"api":(c.optionsRef?"ref":"manual"));
     if(mode==="api"&&c.optionsApi&&c.optionsApi.url){const a={url:c.optionsApi.url};["valueField","labelField","parentParam","searchParam","path","method","depKeys"].forEach(k=>{if(clean(c.optionsApi[k]))a[k]=c.optionsApi[k];});o.optionsApi=a;if(clean(c.optionsFilterBy))o.optionsFilterBy=c.optionsFilterBy;}
     else if(mode==="ref"&&clean(c.optionsRef)){o.optionsRef=c.optionsRef;if(clean(c.optionsFilterBy))o.optionsFilterBy=c.optionsFilterBy;}
-    else if(c.options&&c.options.length)o.options=c.options.map(op=>{const x={value:coerce(op.value)};if(clean(op.label))x.label=loc(op.label);if(clean(op.skipTo))x.skipTo=op.skipTo;return x;});}
+    else if(c.options&&c.options.length)o.options=c.options.map(op=>{const x={value:coerce(op.value)};if(clean(op.label))x.label=loc(op.label);if(clean(op.skipTo))x.skipTo=op.skipTo;if(op.hidden)x.hidden=true;return x;});}
   ["required","readOnly","allowRemark","promptOnAdd"].forEach(k=>{if(c[k])o[k]=true;});
   if(clean(c.defaultValue))o.defaultValue=c.defaultValue;
   ["visibleWhen","enableWhen","requiredWhen"].forEach(k=>{if(clean(c[k]))o[k]=c[k];});
@@ -927,6 +948,11 @@ function fieldLint(c,p,add){
     if(mode==="manual"){
       const opts=c.options||[];
       if(!opts.length)add("error",p,"a choice field with no options at all — nothing can be picked");
+      else if(opts.every(o=>o.hidden))add("error",p,"every option is hidden, so the question cannot be answered");
+      // A default pointing at a hidden option would preselect something the respondent
+      // can neither see nor change back to.
+      if(clean(c.defaultValue)&&opts.some(o=>o.hidden&&String(o.value??"")===String(c.defaultValue)))
+        add("warning",p,`the default value '${c.defaultValue}' is a hidden option, so it is preselected but never shown`);
       const seen=new Map();
       opts.forEach((o,i)=>{
         const v=String(o.value??"");
@@ -1021,7 +1047,7 @@ function impNode(n,forceKind){
   const f=newField(n.type||"text");f.uid=uid();f.name=n.name||f.name;f.label=textOf(n.label);f.hint=textOf(n.hint);f.html=textOf(n.html);f.markdown=textOf(n.markdown);f.calculate=n.calculate||"";f.autofill=!!n.autofill;
   ["required","readOnly","allowRemark","promptOnAdd","visibleWhen","enableWhen","requiredWhen","unit","pattern","optionsRef","optionsFilterBy","min","max","step","maxLength","maxPhotoKB","autoCompress","defaultValue"].forEach(k=>{if(n[k]!=null)f[k]=n[k];});
   f.placeholder=textOf(n.placeholder);
-  if(n.options)f.options=n.options.map(o=>({value:String(o.value),label:textOf(o.label),skipTo:o.skipTo||""}));
+  if(n.options)f.options=n.options.map(o=>{const x={value:String(o.value),label:textOf(o.label),skipTo:o.skipTo||""};if(o.hidden)x.hidden=true;return x;});
   if(n.optionsApi){f.optionsApi={...n.optionsApi};f.optionSource="api";}else if(n.optionsRef){f.optionSource="ref";}else if(CHOICE.has(f.type))f.optionSource="manual";
   if(n.skips)f.skips=n.skips.map(s=>({when:s.when||"",to:s.to||""}));
   if(n.validations)f.validations=n.validations.map(v=>({test:v.test||"",message:textOf(v.message),severity:v.severity||"error"}));
@@ -1620,7 +1646,7 @@ function calcUsable(r){return r!==undefined&&r!==""&&!(typeof r==="number"&&!Num
    Treated as "not filled in yet" so an in-progress form repairs itself. */
 function calcPoisoned(v){return v==="NaN"||v==="Infinity"||v==="-Infinity"||(typeof v==="number"&&!Number.isFinite(v));}
 function refLabels(ref,parentVal,filterField){const tbl=state.referenceData&&state.referenceData[ref];if(!tbl||!tbl.items)return [];return tbl.items.filter(it=>{if(filterField&&parentVal!=null&&parentVal!=="")return String(it.parent)===String(parentVal);return true;}).map(it=>({value:it.code,label:textOf(it.label)}));}
-function pvOptions(c,rowPrefix){if(c.optionsRef){const pVal=c.optionsFilterBy?refResolve(c.optionsFilterBy,rowPrefix):null;return refLabels(c.optionsRef,pVal,c.optionsFilterBy);}return (c.options||[]).map(o=>({value:o.value,label:textOf(o.label)||String(o.value)}));}
+function pvOptions(c,rowPrefix){if(c.optionsRef){const pVal=c.optionsFilterBy?refResolve(c.optionsFilterBy,rowPrefix):null;return refLabels(c.optionsRef,pVal,c.optionsFilterBy);}return (c.options||[]).filter(o=>!o.hidden).map(o=>({value:o.value,label:textOf(o.label)||String(o.value)}));}
 function getPath(obj,path){return String(path).split(".").reduce((o,k)=>(o==null?o:o[k]),obj);}
 function buildApiUrl(tbl,parentVal,rp){
   rp=rp||"";
@@ -1660,7 +1686,9 @@ function resolveOptions(c,rp){
   // here and then yielded no options at all in the field. Removed rather than
   // completed — a field that needs a live service already has its own API source.
   if(mode==="ref"&&c.optionsRef){const tbl=state.referenceData&&state.referenceData[c.optionsRef];if(!tbl)return {state:"ok",opts:[]};const parentVal=c.optionsFilterBy?refResolve(c.optionsFilterBy,rp):null;return {state:"ok",opts:refLabels(c.optionsRef,parentVal,c.optionsFilterBy)};}
-  return {state:"ok",opts:(c.options||[]).map(o=>({value:o.value,label:textOf(o.label)||String(o.value)}))};
+  // Hidden options are filtered out of what can be picked, never out of the schema:
+  // answers already recorded against them still resolve to a label everywhere else.
+  return {state:"ok",opts:(c.options||[]).filter(o=>!o.hidden).map(o=>({value:o.value,label:textOf(o.label)||String(o.value)}))};
 }
 function optWrap(ro,fn,key){
   if(ro.state==="skip"){if(key!=null)pv.values[key]="";return '<select class="pv-in" disabled><option value="">— fill in the previous field first —</option></select>';}
@@ -1698,7 +1726,9 @@ function fieldPendingTarget(f){
   const s=(f.skips||[]).find(x=>x.when&&x.to);
   if(s)return s.to;
   if(CHOICE.has(f.type)&&Array.isArray(f.options)){
-    const o=f.options.find(o=>o.skipTo);
+    // Only among options that can actually be picked — see fieldPendingTarget in
+    // public.html.
+    const o=f.options.find(o=>o.skipTo&&!o.hidden);
     if(o)return o.skipTo;
   }
   return null;
