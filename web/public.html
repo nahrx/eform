@@ -1882,7 +1882,7 @@ function fieldHtml(c,rp,scopes){
     const isPhoto=c.type==="photo";
     const disClass=(!enabled||c.readOnly)?' pv-photolabel-dis':'';
     const dis2=(!enabled||c.readOnly)?' disabled':'';
-    ctrl=`<div class="pv-photowrap" data-field-type="${isPhoto?'photo':'file'}" data-max-kb="${isPhoto?photoMaxKB(c):0}"><input type="hidden" data-k="${ke}" value="${esc(val)}"><div class="pv-photorow"><label class="pv-photolabel${disClass}"><input type="file" class="pv-photofile"${isPhoto?' accept="image/*" capture="environment"':''}${dis2}>${isPhoto?'📷 Take / Choose Photo':'📎 Choose File'}</label><button type="button" class="pv-smbtn pv-photoupload"${dis2} disabled>Upload</button></div><div class="pv-photostate"></div><div class="pv-photopreview" hidden></div></div>`;
+    ctrl=`<div class="pv-photowrap" data-field-type="${isPhoto?'photo':'file'}" data-max-kb="${isPhoto?photoMaxKB(c):0}"><input type="hidden" data-k="${ke}" value="${esc(val)}"><div class="pv-photorow">${isPhoto?(hasDeviceCamera()?`<label class="pv-photolabel${disClass}"><input type="file" class="pv-photofile" accept="image/*" capture="environment"${dis2}>📷 Take photo</label><label class="pv-photolabel${disClass}"><input type="file" class="pv-photofile" accept="image/*"${dis2}>🖼 From gallery</label>`:`<label class="pv-photolabel${disClass}"><input type="file" class="pv-photofile" accept="image/*"${dis2}>🖼 Choose photo</label>`):`<label class="pv-photolabel${disClass}"><input type="file" class="pv-photofile"${dis2}>📎 Choose File</label>`}<button type="button" class="pv-smbtn pv-photoupload"${dis2} disabled>Upload</button></div><div class="pv-photostate"></div><div class="pv-photopreview" hidden></div></div>`;
   }
   else
     ctrl=`<input type="text" data-k="${ke}" class="pv-in" placeholder="${esc(c.placeholder||"")}"${dis}${rdOnly}>`;
@@ -2888,13 +2888,25 @@ async function openBarcodeScanner(input){
 }
 
 /* ---- foto / file upload ---- */
+/* A phone or tablet has a camera worth offering as its own button; a desktop has a
+   file dialog and nothing else, so it gets one "choose photo" button. Judged by the
+   pointer first (an iPad reports a Mac user agent) with the user agent as backup. */
+function hasDeviceCamera(){
+  try{if(window.matchMedia&&matchMedia("(pointer:coarse)").matches)return true;}catch(_){}
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent||"");
+}
 /* Defined in /image-compress.js; falls back to no compression if that script failed
    to load, so a photo field still works rather than throwing during render. */
 function photoMaxKB(c){return window.ImageCompress?ImageCompress.maxKBFor(c):0;}
 function wirePhotoField(wrap){
   if(wrap._wired)return;wrap._wired=true;
   const hidden=wrap.querySelector("input[type=hidden]");
-  const fileInput=wrap.querySelector(".pv-photofile");
+  // A photo field offers two pickers — the camera and the gallery — so the enumerator
+  // is not forced through the camera when the picture was already taken. Both feed
+  // the same answer, so they are enabled, cleared and read together.
+  const fileInputs=[...wrap.querySelectorAll(".pv-photofile")];
+  const fileInput=fileInputs[0];
+  const setInputs=(prop,v)=>fileInputs.forEach(i=>{i[prop]=v;});
   const uploadBtn=wrap.querySelector(".pv-photoupload");
   const state=wrap.querySelector(".pv-photostate");
   const preview=wrap.querySelector(".pv-photopreview");
@@ -2903,8 +2915,10 @@ function wirePhotoField(wrap){
   const fieldType=wrap.dataset.fieldType||"file";
   renderPhotoPreview(wrap);
   wrap._pickSeq=0;
-  fileInput.addEventListener("change",async()=>{
-    const f=fileInput.files[0];if(!f)return;
+  fileInputs.forEach(inp=>inp.addEventListener("change",async()=>{
+    const f=inp.files[0];if(!f)return;
+    // Picking from the other button afterwards must not leave a stale file behind.
+    fileInputs.forEach(o=>{if(o!==inp)o.value="";});
     clearPendingUpload(key);
     let use=f,note="";
     const maxKB=Number(wrap.dataset.maxKb||0);
@@ -2932,12 +2946,12 @@ function wirePhotoField(wrap){
       objectUrl:(fieldType==="photo"||String(use.type||"").startsWith("image/"))?URL.createObjectURL(use):""
     };
     renderPhotoPreview(wrap);
-  });
+  }));
   uploadBtn.addEventListener("click",async()=>{
     const pending=PENDING_UPLOADS[key];
     if(!pending||!pending.file)return;
     uploadBtn.disabled=true;
-    fileInput.disabled=true;
+    setInputs("disabled",true);
     state.className="pv-photostate pending";
     state.textContent="Uploading the file…";
     try{
@@ -2952,12 +2966,12 @@ function wirePhotoField(wrap){
       const d=await r.json();
       if(!r.ok)throw new Error(d.error||"Failed to upload the file");
       hidden.value=d.url||"";
-      fileInput.value="";
-      fileInput.disabled=false;
+      setInputs("value","");
+      setInputs("disabled",false);
       clearPendingUpload(key);
       hidden.dispatchEvent(new Event("change",{bubbles:true}));
     }catch(e){
-      fileInput.disabled=false;
+      setInputs("disabled",false);
       // Offline the upload can never succeed, and refusing it would strand the whole
       // response: submit is blocked while a file is still pending. So the photo is
       // kept on the device and the answer points at it until it can be sent.
@@ -2965,7 +2979,7 @@ function wirePhotoField(wrap){
         try{
           const ref=await storeOfflineUpload(pending.file,fieldType);
           hidden.value=ref;
-          fileInput.value="";
+          setInputs("value","");
           clearPendingUpload(key);
           hidden.dispatchEvent(new Event("change",{bubbles:true}));
           updateOfflineBadge();
@@ -2979,13 +2993,13 @@ function wirePhotoField(wrap){
   preview.addEventListener("click",e=>{
     if(e.target.classList.contains("pv-photocancel")){
       clearPendingUpload(key);
-      fileInput.value="";
+      setInputs("value","");
       renderPhotoPreview(wrap);
       return;
     }
     if(!e.target.classList.contains("pv-photoclear"))return;
     clearPendingUpload(key);
-    hidden.value="";fileInput.value="";
+    hidden.value="";setInputs("value","");
     preview.hidden=true;preview.innerHTML="";
     hidden.dispatchEvent(new Event("change",{bubbles:true}));
   });

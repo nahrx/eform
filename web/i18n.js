@@ -517,7 +517,9 @@
     "⏳ Loading options from the API…": "⏳ Memuat pilihan dari API…",
     "✓ Clean — no issues found.": "✓ Bersih — tidak ada masalah.",
     "📎 Choose File": "📎 Pilih File",
-    "📷 Take / Choose Photo": "📷 Ambil / Pilih Foto",
+    "📷 Take photo": "📷 Ambil foto",
+    "🖼 From gallery": "🖼 Dari galeri",
+    "🖼 Choose photo": "🖼 Pilih foto",
 
     "Viewers can see this form's responses; editors can manage and edit them. An account is created automatically when someone is added who is not registered yet.": "Viewer bisa melihat jawaban kuesioner ini, editor bisa mengelola & mengedit jawabannya. Akun dibuat otomatis saat ditambahkan bila belum terdaftar.",
     "Limit what this editor can see and edit to rows whose field values match.": "Batasi data yang dapat dilihat dan diedit editor ini hanya pada data yang nilai variabelnya sesuai.",

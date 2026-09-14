@@ -2314,7 +2314,7 @@ function pvField(c,row){
   else if(c.type==="photo"||c.type==="file"){
     const isPhoto=c.type==="photo";
     const disClass=(enabled&&!c.readOnly)?"":" pv-photolabel-dis";
-    ctrl=`<div class="pv-photowrap" data-field-type="${isPhoto?'photo':'file'}" data-max-kb="${isPhoto?photoMaxKB(c):0}"><input type="hidden" ${da} value="${esc(val)}"><label class="pv-photolabel${disClass}"><input type="file" class="pv-photofile"${isPhoto?' accept="image/*" capture="environment"':''}${disAll}>${isPhoto?'📷 Take / Choose Photo':'📎 Choose File'}</label><div class="pv-photopreview" hidden></div></div>`;
+    ctrl=`<div class="pv-photowrap" data-field-type="${isPhoto?'photo':'file'}" data-max-kb="${isPhoto?photoMaxKB(c):0}"><input type="hidden" ${da} value="${esc(val)}">${isPhoto?(hasDeviceCamera()?`<div class="pv-photorow"><label class="pv-photolabel${disClass}"><input type="file" class="pv-photofile" accept="image/*" capture="environment"${disAll}>📷 Take photo</label><label class="pv-photolabel${disClass}"><input type="file" class="pv-photofile" accept="image/*"${disAll}>🖼 From gallery</label></div>`:`<label class="pv-photolabel${disClass}"><input type="file" class="pv-photofile" accept="image/*"${disAll}>🖼 Choose photo</label>`):`<label class="pv-photolabel${disClass}"><input type="file" class="pv-photofile"${disAll}>📎 Choose File</label>`}<div class="pv-photopreview" hidden></div></div>`;
   }
   else if(c.type==="signature")ctrl=`<div class="pv-sigwrap"><input type="hidden" ${da}><canvas class="pv-sigpad" width="400" height="140"${(enabled&&!c.readOnly)?"":' data-disabled="1"'}></canvas><div class="pv-sigactions"><button type="button" class="pv-smbtn pv-sigclear"${disAll}>Clear signature</button></div></div>`;
   else if(c.type==="barcode")ctrl=`<div class="pv-inbtn"><input ${da} class="pv-in" value="${esc(val)}" placeholder="scan / type code"${dis}${rdOnly}><button type="button" class="pv-smbtn pv-scanbtn"${disAll}>📷 Pindai</button></div>`;
@@ -2465,12 +2465,14 @@ async function openBarcodeScanner(input){
 function wirePhotoField(wrap){
   if(wrap._wired)return;wrap._wired=true;
   const hidden=wrap.querySelector("input[type=hidden]");
-  const fileInput=wrap.querySelector(".pv-photofile");
+  const fileInputs=[...wrap.querySelectorAll(".pv-photofile")]; // camera + gallery on a photo field
+  const fileInput=fileInputs[0];
   const preview=wrap.querySelector(".pv-photopreview");
   if(!hidden||!fileInput||!preview)return;
   if(hidden.value)showPhotoPreview(preview,hidden.value,fileInput.disabled);
-  fileInput.addEventListener("change",async()=>{
-    let f=fileInput.files[0];if(!f)return;
+  fileInputs.forEach(inp=>inp.addEventListener("change",async()=>{
+    let f=inp.files[0];if(!f)return;
+    fileInputs.forEach(o=>{if(o!==inp)o.value="";});
     // The preview never uploads, but running the same compression here is what lets
     // an admin see what their KB setting actually does to a real camera photo.
     const maxKB=Number(wrap.dataset.maxKb||0);
@@ -2491,13 +2493,20 @@ function wirePhotoField(wrap){
       showPhotoPreview(preview,e.target.result,false,note);
     };
     reader.readAsDataURL(f);
-  });
+  }));
   preview.addEventListener("click",e=>{
     if(!e.target.classList.contains("pv-photoclear"))return;
-    hidden.value="";fileInput.value="";
+    hidden.value="";fileInputs.forEach(i=>{i.value="";});
     preview.hidden=true;preview.innerHTML="";
     hidden.dispatchEvent(new Event("change",{bubbles:true}));
   });
+}
+/* A phone or tablet has a camera worth offering as its own button; a desktop has a
+   file dialog and nothing else, so it gets one "choose photo" button. Judged by the
+   pointer first (an iPad reports a Mac user agent) with the user agent as backup. */
+function hasDeviceCamera(){
+  try{if(window.matchMedia&&matchMedia("(pointer:coarse)").matches)return true;}catch(_){}
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent||"");
 }
 /* Defined in /image-compress.js — see the note on the same helper in public.html. */
 function photoMaxKB(c){return window.ImageCompress?ImageCompress.maxKBFor(c):0;}
