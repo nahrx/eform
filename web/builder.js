@@ -181,8 +181,44 @@ function separateRosters(node){const out=[];(function go(n){(n.components||[]).f
 /* The clipboard holds a list, in document order. It used to hold one node, and Ctrl+C
    read only `selected` — the item clicked last — so a multi-selection quietly copied a
    single element and the other four were simply not there on paste. */
-let clipboard=null; // {items:[{kind, data}, ...]}
-function copyNode(node){clipboard={items:[{kind:node.kind,data:JSON.parse(JSON.stringify(node))}]};}
+let clipboard=null; // {items:[{kind, data}, ...], from:{id,title}, tables:{ref:table}}
+/* The clipboard also lives in localStorage, so a copy made in one form can be pasted
+   into another — a different tab, or this tab after opening a different instrument.
+   It carries the reference tables the copied fields point at, because an optionsRef
+   means nothing in a form that has no such table; those come along on paste. */
+const CLIP_KEY="eform_builder_clipboard";
+function setClipboard(nodes){
+  const tables={};
+  (function go(n){
+    if(n.optionsRef&&state.referenceData&&state.referenceData[n.optionsRef])tables[n.optionsRef]=state.referenceData[n.optionsRef];
+    (n.components||[]).forEach(go);
+  })({components:nodes});
+  clipboard={items:nodes.map(n=>({kind:n.kind,data:JSON.parse(JSON.stringify(n))})),
+    from:{id:state.id||"",title:textOf(state.title)},tables,at:Date.now()};
+  try{localStorage.setItem(CLIP_KEY,JSON.stringify(clipboard));}
+  catch(_){try{localStorage.removeItem(CLIP_KEY);}catch(__){}}   // never leave an older copy there
+}
+function loadClipboard(){
+  try{const c=JSON.parse(localStorage.getItem(CLIP_KEY)||"null");
+    if(c&&Array.isArray(c.items)&&c.items.length&&c.items.every(i=>i&&i.kind&&i.data))return c;
+  }catch(_){}
+  return null;
+}
+// Whichever is newer wins: the stored copy may have been made in another tab since.
+function currentClipboard(){
+  const stored=loadClipboard();
+  if(stored&&(!clipboard||(stored.at||0)>=(clipboard.at||0)))clipboard=stored;
+  return clipboard;
+}
+clipboard=loadClipboard();
+window.addEventListener("storage",e=>{if(e.key===CLIP_KEY)clipboard=loadClipboard();});
+function clipNotice(msg){
+  const el=document.getElementById("ebb-toast");
+  if(!el)return;
+  el.textContent="✓ "+msg;el.classList.remove("err");el.classList.add("show");
+  clearTimeout(clipNotice._t);clipNotice._t=setTimeout(()=>el.classList.remove("show"),3500);
+}
+function copyNode(node){setClipboard([node]);}
 /* Copies everything in selectedSet. Outermost nodes only: if a block and a field inside
    it are both selected, the block's copy already carries the field, and copying the
    field again would paste it twice. Ordered by position in the instrument rather than
@@ -192,7 +228,7 @@ function copySelection(){
   const nodes=filterTopLevel([...selectedSet]).map(findNode).filter(Boolean)
     .sort((a,b)=>docOrder.indexOf(a)-docOrder.indexOf(b));
   if(!nodes.length)return false;
-  clipboard={items:nodes.map(n=>({kind:n.kind,data:JSON.parse(JSON.stringify(n))}))};
+  setClipboard(nodes);
   return true;
 }
 function ownerOf(id){
@@ -200,7 +236,39 @@ function ownerOf(id){
   for(const p of state.pages){if(p.uid===id)return null;const r=scan(p);if(r)return r;}
   return null;
 }
-function renameDeep(node){if(node.name)node.name=uniqueCopyName(node.name);(node.components||[]).forEach(renameDeep);}
+/* Gives the pasted (or duplicated) nodes names this form does not already use, and
+   points the references inside them at the new names. Only a clashing name changes:
+   a block brought over from another form keeps its names, so its own expressions and
+   skips still hold; pasted next to its original, everything becomes _copy and the
+   copies refer to each other rather than back to the originals. The batch is handled
+   as one so a field in the second item can still find the first. */
+function renamePasted(copies){
+  const used=allUsedNames(),map={};
+  (function go(n){
+    if(n.name){
+      if(used.has(n.name)){let k=1,nn=`${n.name}_copy`;while(used.has(nn)){k++;nn=`${n.name}_copy${k}`;}map[n.name]=nn;n.name=nn;}
+      used.add(n.name);
+    }
+    (n.components||[]).forEach(go);
+  })({components:copies});
+  const olds=Object.keys(map);
+  if(!olds.length)return map;
+  const rx=t=>t.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+  const exprRe=new RegExp("\\$\\{("+olds.sort((a,b)=>b.length-a.length).map(rx).join("|")+")(?=[}.])","g");
+  const fixExpr=v=>typeof v==="string"?v.replace(exprRe,(_,n)=>"${"+map[n]):v;
+  const fixName=v=>typeof v==="string"&&map[v]?map[v]:v;
+  const TEXT=["visibleWhen","enableWhen","requiredWhen","calculate","title","rowTitle","label","hint","description","placeholder"];
+  (function go(n){
+    TEXT.forEach(k=>{if(typeof n[k]==="string")n[k]=fixExpr(n[k]);else if(n[k]&&typeof n[k]==="object")Object.keys(n[k]).forEach(l=>{n[k][l]=fixExpr(n[k][l]);});});
+    (n.validations||[]).forEach(v=>{v.test=fixExpr(v.test);if(typeof v.message==="string")v.message=fixExpr(v.message);});
+    (n.skips||[]).forEach(sk=>{sk.when=fixExpr(sk.when);sk.to=fixName(sk.to);});
+    (n.options||[]).forEach(o=>{if(o.skipTo)o.skipTo=fixName(o.skipTo);});
+    if(n.optionsFilterBy)n.optionsFilterBy=fixName(n.optionsFilterBy);
+    if(n.countFrom)n.countFrom=fixName(n.countFrom);
+    (n.components||[]).forEach(go);
+  })({components:copies});
+  return map;
+}
 /* Places one copy relative to an anchor. The three strategies are the ones the
    single-item paste always had; they are just applied per item now.
      inside  — the anchor is a container that accepts this kind (first item only: the
@@ -232,15 +300,17 @@ function placeCopy(copy,kind,anchor,allowInside){
 }
 
 function pasteNode(){
+  currentClipboard();
   if(!clipboard||!clipboard.items||!clipboard.items.length)return;
   const pasted=[];
   let anchor=selected?findNode(selected):null;
-  for(const item of clipboard.items){
-    const copy=JSON.parse(JSON.stringify(item.data));
-    reuid(copy);renameDeep(copy);
+  const copies=clipboard.items.map(item=>{const c=JSON.parse(JSON.stringify(item.data));reuid(c);return c;});
+  renamePasted(copies);
+  for(let i=0;i<copies.length;i++){
+    const copy=copies[i];
     // Only the first item may go inside the target; every later one goes right after
     // the previous copy, so five copied fields land as five consecutive fields.
-    if(!placeCopy(copy,item.kind,anchor,pasted.length===0))break;
+    if(!placeCopy(copy,clipboard.items[i].kind,anchor,pasted.length===0))break;
     pasted.push(copy);
     anchor=copy;
   }
@@ -250,6 +320,16 @@ function pasteNode(){
   }
   if(pasted.length<clipboard.items.length)
     alert(`${pasted.length} of ${clipboard.items.length} pasted — the rest could not go here.`);
+  // Pasting from another form: bring the reference tables its fields depend on. A
+  // table this form already has is left alone — its own version is the right one here.
+  if(clipboard.from&&clipboard.from.id!==(state.id||"")){
+    const added=[];
+    Object.entries(clipboard.tables||{}).forEach(([k,v])=>{
+      state.referenceData=state.referenceData||{};
+      if(!state.referenceData[k]){state.referenceData[k]=JSON.parse(JSON.stringify(v));added.push(k);}
+    });
+    clipNotice(`Pasted ${pasted.length} item${pasted.length===1?"":"s"} from "${clipboard.from.title||"another form"}"`+(added.length?` · reference table${added.length===1?"":"s"} added: ${added.join(", ")}`:""));
+  }
   selected=pasted[pasted.length-1].uid;
   selectedSet=new Set(pasted.map(c=>c.uid));
   if(pasted[0].kind==="page")view={type:"page",uid:pasted[0].uid};
@@ -659,7 +739,7 @@ function duplicateSelected(){
   byArr.forEach((its,arr)=>{
     its.sort((a,b)=>arr.indexOf(b.node)-arr.indexOf(a.node));
     its.forEach(({node})=>{
-      const copy=JSON.parse(JSON.stringify(node));reuid(copy);copy.name=uniqueCopyName(node.name);
+      const copy=JSON.parse(JSON.stringify(node));reuid(copy);renamePasted([copy]);
       const i=arr.indexOf(node);arr.splice(i+1,0,copy);newSet.add(copy.uid);
     });
   });
@@ -814,7 +894,7 @@ function fieldForm(c){const t=c.type;let html=headBar(t,c.name);
   html+=`<div class="group"><div class="gh">Conditions & flow</div>${cond("visibleWhen","Visible when",c.visibleWhen)}${cond("enableWhen","Enabled when",c.enableWhen)}${cond("requiredWhen","Required when",c.requiredWhen)}${skipsBlock(c)}</div>`;
   html+=validationsBlock(c); return html;
 }
-function headBar(kind,name){const cat=CAT_OF[kind]||"node";const colorVar=({page:"--page",block:"--block",section:"--section",roster:"--roster"})[kind]||CAT_VAR[cat];const pasteBtn=clipboard&&clipboard.items&&clipboard.items.length?`<button class="icon-btn" id="pasteBtn" title="Paste ${clipboard.items.length===1?"the copied "+esc(clipboard.items[0].kind):clipboard.items.length+" copied items"}">📥</button>`:"";return `<div style="display:flex;align-items:center;gap:9px;margin-bottom:14px"><span style="width:4px;height:30px;border-radius:2px;background:var(${colorVar})"></span><div><div style="font-family:var(--mono);font-size:11px;color:var(${colorVar});font-weight:700;text-transform:uppercase">${kind}</div><div style="font-size:11px;color:var(--muted)">${esc(name)}</div></div><button class="icon-btn" id="copyBtn" title="Copy" style="margin-left:auto">📋</button><button class="icon-btn" id="dupBtn" title="Duplicate">⧉</button>${pasteBtn}<button class="icon-btn danger" id="delBtn" title="Delete">🗑</button></div>`;}
+function headBar(kind,name){const cat=CAT_OF[kind]||"node";const colorVar=({page:"--page",block:"--block",section:"--section",roster:"--roster"})[kind]||CAT_VAR[cat];currentClipboard();const pasteBtn=clipboard&&clipboard.items&&clipboard.items.length?`<button class="icon-btn" id="pasteBtn" title="Paste ${clipboard.items.length===1?"the copied "+esc(clipboard.items[0].kind):clipboard.items.length+" copied items"}${clipboard.from&&clipboard.from.id!==(state.id||"")?" (from "+esc(clipboard.from.title||"another form")+")":""}">📥</button>`:"";return `<div style="display:flex;align-items:center;gap:9px;margin-bottom:14px"><span style="width:4px;height:30px;border-radius:2px;background:var(${colorVar})"></span><div><div style="font-family:var(--mono);font-size:11px;color:var(${colorVar});font-weight:700;text-transform:uppercase">${kind}</div><div style="font-size:11px;color:var(--muted)">${esc(name)}</div></div><button class="icon-btn" id="copyBtn" title="Copy" style="margin-left:auto">📋</button><button class="icon-btn" id="dupBtn" title="Duplicate">⧉</button>${pasteBtn}<button class="icon-btn danger" id="delBtn" title="Delete">🗑</button></div>`;}
 function mini(k,l,v,type){const attrs=type==="number"?'type="number" step="1" min="0" inputmode="numeric"':(type?`type="${esc(type)}"`:'');return `<div class="field"><label>${l}</label><input class="ctrl" ${attrs} data-k="${k}" value="${esc(v??"")}"></div>`;}
 function cond(k,l,v){return `<div class="field"><label>${l}</label><textarea class="ctrl" data-k="${k}" placeholder="\${field} == value">${esc(v||"")}</textarea></div>`;}
 function optionsBlock(c){
@@ -867,7 +947,7 @@ function wireForm(pane,node){
     inp.addEventListener("change",onChange);
   });
   pane.querySelector("#delBtn")?.addEventListener("click",()=>{if(confirm("Delete this?")){removeNode(node.uid);selected=null;selectedSet=new Set();render();}});
-  pane.querySelector("#dupBtn")?.addEventListener("click",()=>{const arr=parentArrayOf(node.uid),i=arr.indexOf(node),copy=JSON.parse(JSON.stringify(node));reuid(copy);copy.name=uniqueCopyName(node.name);arr.splice(i+1,0,copy);selected=copy.uid;selectedSet=new Set([copy.uid]);render();});
+  pane.querySelector("#dupBtn")?.addEventListener("click",()=>{const arr=parentArrayOf(node.uid),i=arr.indexOf(node),copy=JSON.parse(JSON.stringify(node));reuid(copy);renamePasted([copy]);arr.splice(i+1,0,copy);selected=copy.uid;selectedSet=new Set([copy.uid]);render();});
   pane.querySelector("#copyBtn")?.addEventListener("click",()=>{copyNode(node);render();});
   pane.querySelector("#pasteBtn")?.addEventListener("click",()=>{pasteNode();});
   pane.querySelectorAll("#rtSeg button").forEach(b=>b.addEventListener("click",()=>{node.rosterType=b.dataset.rt;render();}));
@@ -1604,7 +1684,7 @@ document.addEventListener("keydown",e=>{
     // With several items selected, copy all of them — not just the one clicked last.
     if(copySelection()){render();e.preventDefault();}
   }
-  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="v"&&clipboard){pasteNode();e.preventDefault();}
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="v"&&currentClipboard()){pasteNode();e.preventDefault();}
   // Deliberately below the INPUT/TEXTAREA guard above: while the caret is in a text
   // box, Ctrl+Z belongs to that box. Click out and it undoes the instrument instead;
   // the toolbar buttons work regardless of where focus is.
