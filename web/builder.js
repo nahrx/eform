@@ -178,47 +178,82 @@ function removeNode(id){const arr=parentArrayOf(id);if(!arr)return;const i=arr.f
 function separateRosters(node){const out=[];(function go(n){(n.components||[]).forEach(c=>{if(c.kind==="roster"&&c.rosterType==="separate")out.push(c);go(c);});})(node);return out;}
 
 /* ---- copy & paste ---- */
-let clipboard=null; // {kind, data}
-function copyNode(node){clipboard={kind:node.kind,data:JSON.parse(JSON.stringify(node))};}
+/* The clipboard holds a list, in document order. It used to hold one node, and Ctrl+C
+   read only `selected` — the item clicked last — so a multi-selection quietly copied a
+   single element and the other four were simply not there on paste. */
+let clipboard=null; // {items:[{kind, data}, ...]}
+function copyNode(node){clipboard={items:[{kind:node.kind,data:JSON.parse(JSON.stringify(node))}]};}
+/* Copies everything in selectedSet. Outermost nodes only: if a block and a field inside
+   it are both selected, the block's copy already carries the field, and copying the
+   field again would paste it twice. Ordered by position in the instrument rather than
+   by the order the user clicked, so the pasted run reads the same as the original. */
+function copySelection(){
+  const docOrder=allNodes();
+  const nodes=filterTopLevel([...selectedSet]).map(findNode).filter(Boolean)
+    .sort((a,b)=>docOrder.indexOf(a)-docOrder.indexOf(b));
+  if(!nodes.length)return false;
+  clipboard={items:nodes.map(n=>({kind:n.kind,data:JSON.parse(JSON.stringify(n))}))};
+  return true;
+}
 function ownerOf(id){
   function scan(n){for(const c of (n.components||[])){if(c.uid===id)return n;const r=scan(c);if(r)return r;}return null;}
   for(const p of state.pages){if(p.uid===id)return null;const r=scan(p);if(r)return r;}
   return null;
 }
 function renameDeep(node){if(node.name)node.name=uniqueCopyName(node.name);(node.components||[]).forEach(renameDeep);}
-function pasteNode(){
-  if(!clipboard)return;
-  const copy=JSON.parse(JSON.stringify(clipboard.data));
-  reuid(copy);renameDeep(copy);
-
-  if(clipboard.kind==="page"){
-    const cur=selected?pageOf(selected):(view.type==="page"?findNode(view.uid):null);
-    const idx=cur?state.pages.indexOf(cur):state.pages.length-1;
+/* Places one copy relative to an anchor. The three strategies are the ones the
+   single-item paste always had; they are just applied per item now.
+     inside  — the anchor is a container that accepts this kind (first item only: the
+               ones after it go beside it, so the run stays together)
+     sibling — right after the anchor, inside the anchor's own parent
+     page    — a block onto the page on screen when nothing is selected
+   Returns true when the copy was put somewhere. */
+function placeCopy(copy,kind,anchor,allowInside){
+  if(kind==="page"){
+    const cur=anchor?pageOf(anchor.uid)||anchor:(view.type==="page"?findNode(view.uid):null);
+    const idx=cur&&cur.kind==="page"?state.pages.indexOf(cur):state.pages.length-1;
     state.pages.splice(idx+1,0,copy);
-    selected=copy.uid;selectedSet=new Set([copy.uid]);view={type:"page",uid:copy.uid};render();return;
+    return true;
   }
-
-  const target=selected?findNode(selected):null;
-  // 1) try pasting INSIDE the target if it accepts this kind
-  if(target&&kindAccepted(target.kind,clipboard.kind)){
-    target.components=target.components||[];target.components.push(copy);
-    selected=copy.uid;selectedSet=new Set([copy.uid]);render();return;
+  if(allowInside&&anchor&&kindAccepted(anchor.kind,kind)){
+    anchor.components=anchor.components||[];anchor.components.push(copy);
+    return true;
   }
-  // 2) try pasting as a SIBLING after the target
-  if(target){
-    const owner=ownerOf(target.uid),ownerKind=owner?owner.kind:"page";
-    const arr=parentArrayOf(target.uid);
-    if(arr&&kindAccepted(ownerKind,clipboard.kind)){
-      const i=arr.indexOf(target);arr.splice(i+1,0,copy);
-      selected=copy.uid;selectedSet=new Set([copy.uid]);render();return;
-    }
+  if(anchor){
+    const owner=ownerOf(anchor.uid),ownerKind=owner?owner.kind:"page";
+    const arr=parentArrayOf(anchor.uid);
+    if(arr&&kindAccepted(ownerKind,kind)){arr.splice(arr.indexOf(anchor)+1,0,copy);return true;}
   }
-  // 3) fallback: no target yet, but a page is on screen and the clipboard holds a block
-  if(!target&&view.type==="page"&&clipboard.kind==="block"){
+  if(!anchor&&view.type==="page"&&kind==="block"){
     const pg=findNode(view.uid);
-    if(pg){pg.components=pg.components||[];pg.components.push(copy);selected=copy.uid;selectedSet=new Set([copy.uid]);render();return;}
+    if(pg){pg.components=pg.components||[];pg.components.push(copy);return true;}
   }
-  alert("There is no valid location for this element. Select a target section/block/page first, then paste.");
+  return false;
+}
+
+function pasteNode(){
+  if(!clipboard||!clipboard.items||!clipboard.items.length)return;
+  const pasted=[];
+  let anchor=selected?findNode(selected):null;
+  for(const item of clipboard.items){
+    const copy=JSON.parse(JSON.stringify(item.data));
+    reuid(copy);renameDeep(copy);
+    // Only the first item may go inside the target; every later one goes right after
+    // the previous copy, so five copied fields land as five consecutive fields.
+    if(!placeCopy(copy,item.kind,anchor,pasted.length===0))break;
+    pasted.push(copy);
+    anchor=copy;
+  }
+  if(!pasted.length){
+    alert("There is no valid location for this element. Select a target section/block/page first, then paste.");
+    return;
+  }
+  if(pasted.length<clipboard.items.length)
+    alert(`${pasted.length} of ${clipboard.items.length} pasted — the rest could not go here.`);
+  selected=pasted[pasted.length-1].uid;
+  selectedSet=new Set(pasted.map(c=>c.uid));
+  if(pasted[0].kind==="page")view={type:"page",uid:pasted[0].uid};
+  render();
 }
 
 /* ===================== PALETTE (sidebar 1) ===================== */
@@ -670,6 +705,7 @@ function renderInspector(){
       </div>
       <div class="gh" style="margin-bottom:6px">Set on all selected fields</div>
       <div style="margin-bottom:14px">${bulkRows}</div>
+      <button class="btn" id="copyAllBtn" style="width:100%;margin-bottom:8px">⎘ Copy all (${selectedSet.size})</button>
       <button class="btn" id="dupAllBtn" style="width:100%;margin-bottom:8px">⧉ Duplicate all (${selectedSet.size})</button>
       <button class="btn danger" id="delAllBtn" style="width:100%;margin-bottom:8px">🗑 Delete all (${selectedSet.size})</button>
       <button class="btn ghost" id="clearSelBtn" style="width:100%">Cancel selection</button>
@@ -683,6 +719,7 @@ function renderInspector(){
       // undo separately.
       History.flush();
     }));
+    pane.querySelector("#copyAllBtn").addEventListener("click",()=>{if(copySelection())render();});
     pane.querySelector("#dupAllBtn").addEventListener("click",()=>duplicateSelected());
     pane.querySelector("#delAllBtn").addEventListener("click",()=>{if(confirm(`Delete the ${selectedSet.size} selected items?`)){[...selectedSet].forEach(uid=>removeNode(uid));selected=null;selectedSet=new Set();render();}});
     pane.querySelector("#clearSelBtn").addEventListener("click",()=>{selected=null;selectedSet=new Set();render();});
@@ -777,7 +814,7 @@ function fieldForm(c){const t=c.type;let html=headBar(t,c.name);
   html+=`<div class="group"><div class="gh">Conditions & flow</div>${cond("visibleWhen","Visible when",c.visibleWhen)}${cond("enableWhen","Enabled when",c.enableWhen)}${cond("requiredWhen","Required when",c.requiredWhen)}${skipsBlock(c)}</div>`;
   html+=validationsBlock(c); return html;
 }
-function headBar(kind,name){const cat=CAT_OF[kind]||"node";const colorVar=({page:"--page",block:"--block",section:"--section",roster:"--roster"})[kind]||CAT_VAR[cat];const pasteBtn=clipboard?`<button class="icon-btn" id="pasteBtn" title="Paste the copied ${esc(clipboard.kind)}">📥</button>`:"";return `<div style="display:flex;align-items:center;gap:9px;margin-bottom:14px"><span style="width:4px;height:30px;border-radius:2px;background:var(${colorVar})"></span><div><div style="font-family:var(--mono);font-size:11px;color:var(${colorVar});font-weight:700;text-transform:uppercase">${kind}</div><div style="font-size:11px;color:var(--muted)">${esc(name)}</div></div><button class="icon-btn" id="copyBtn" title="Copy" style="margin-left:auto">📋</button><button class="icon-btn" id="dupBtn" title="Duplicate">⧉</button>${pasteBtn}<button class="icon-btn danger" id="delBtn" title="Delete">🗑</button></div>`;}
+function headBar(kind,name){const cat=CAT_OF[kind]||"node";const colorVar=({page:"--page",block:"--block",section:"--section",roster:"--roster"})[kind]||CAT_VAR[cat];const pasteBtn=clipboard&&clipboard.items&&clipboard.items.length?`<button class="icon-btn" id="pasteBtn" title="Paste ${clipboard.items.length===1?"the copied "+esc(clipboard.items[0].kind):clipboard.items.length+" copied items"}">📥</button>`:"";return `<div style="display:flex;align-items:center;gap:9px;margin-bottom:14px"><span style="width:4px;height:30px;border-radius:2px;background:var(${colorVar})"></span><div><div style="font-family:var(--mono);font-size:11px;color:var(${colorVar});font-weight:700;text-transform:uppercase">${kind}</div><div style="font-size:11px;color:var(--muted)">${esc(name)}</div></div><button class="icon-btn" id="copyBtn" title="Copy" style="margin-left:auto">📋</button><button class="icon-btn" id="dupBtn" title="Duplicate">⧉</button>${pasteBtn}<button class="icon-btn danger" id="delBtn" title="Delete">🗑</button></div>`;}
 function mini(k,l,v,type){const attrs=type==="number"?'type="number" step="1" min="0" inputmode="numeric"':(type?`type="${esc(type)}"`:'');return `<div class="field"><label>${l}</label><input class="ctrl" ${attrs} data-k="${k}" value="${esc(v??"")}"></div>`;}
 function cond(k,l,v){return `<div class="field"><label>${l}</label><textarea class="ctrl" data-k="${k}" placeholder="\${field} == value">${esc(v||"")}</textarea></div>`;}
 function optionsBlock(c){
@@ -1563,7 +1600,10 @@ document.addEventListener("keydown",e=>{
     }
     return;
   }
-  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="c"&&selected){const n=findNode(selected);if(n){copyNode(n);render();e.preventDefault();}}
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="c"&&selectedSet.size){
+    // With several items selected, copy all of them — not just the one clicked last.
+    if(copySelection()){render();e.preventDefault();}
+  }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="v"&&clipboard){pasteNode();e.preventDefault();}
   // Deliberately below the INPUT/TEXTAREA guard above: while the caret is in a text
   // box, Ctrl+Z belongs to that box. Click out and it undoes the instrument instead;
