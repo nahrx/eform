@@ -1458,7 +1458,7 @@ function renderViewField(c,ans,rp){
     const mime=(src.match(/^data:([^;]+)/)||[])[1]||"file";
     return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer"><a href="${esc(src)}" download="file" style="color:var(--accent)">Download file (${esc(mime)})</a></div></div>`;
   }
-  const display=val==null||val===""?null:String(val);
+  const display=val==null||val===""?null:(c.type==="currency"?curFormat(val)||String(val):String(val));
   const isEmpty=display==null;
   if(c.type==="textarea"||c.type==="text_long")
     return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer-box">${isEmpty?`<span style="color:var(--muted);font-style:italic">—</span>`:esc(display)}</div></div>`;
@@ -1734,6 +1734,49 @@ async function optionsFor(c,rp){
   return(c.options||[]).filter(o=>!o.hidden).map(o=>({value:o.value,label:txt(o.label)||String(o.value)}));
 }
 
+/* ---- currency display ----
+   A currency answer is stored exactly as before — a plain number string such as
+   "1250000.5", so expressions, exports and the API see nothing new. Only what the
+   respondent looks at changes: the box shows "1.250.000,5" (Indonesian grouping,
+   comma for the decimals) and regroups as they type. */
+function curFormat(v){
+  if(v==null||v==="")return "";
+  let str=String(v).trim();
+  const neg=str.startsWith("-");if(neg)str=str.slice(1);
+  let [int,dec]=str.split(".");
+  int=(int||"").replace(/\D/g,"").replace(/^0+(?=\d)/,"");
+  dec=dec==null?null:dec.replace(/\D/g,"");
+  if(!int&&!dec)return "";
+  return (neg?"-":"")+(int||"0").replace(/\B(?=(\d{3})+(?!\d))/g,".")+(dec?","+dec:"");
+}
+function curParse(text){
+  let str=String(text??"").trim();
+  if(!str)return "";
+  const neg=str.startsWith("-");
+  str=str.replace(/[^\d,]/g,"");           // drops the grouping dots, spaces, "Rp"
+  const ci=str.indexOf(",");
+  let int=ci>=0?str.slice(0,ci):str, dec=ci>=0?str.slice(ci+1).replace(/,/g,""):"";
+  int=int.replace(/^0+(?=\d)/,"");
+  if(!int&&!dec)return "";
+  return (neg?"-":"")+(int||"0")+(dec?"."+dec:"");
+}
+// Regroups the box while typing and puts the caret back after the same digit it
+// was on, so the dots appearing to its left do not push it around.
+function curLiveFormat(el){
+  const raw=el.value;
+  const before=(raw.slice(0,el.selectionStart??raw.length).match(/[\d,]/g)||[]).length;
+  const trailingComma=/,$/.test(raw)&&raw.indexOf(",")===raw.length-1;
+  let out=curFormat(curParse(raw));
+  if(trailingComma&&out)out+=",";
+  if(!out&&raw.trim()==="-")out="-";
+  if(out===raw)return;
+  el.value=out;
+  let seen=0,pos=out.startsWith("-")?1:0;
+  for(let i=0;i<out.length&&before>0;i++){if(/[\d,]/.test(out[i])){seen++;if(seen===before){pos=i+1;break;}}}
+  try{el.setSelectionRange(pos,pos);}catch(_){}
+}
+document.addEventListener("input",e=>{const el=e.target;if(el&&el.matches&&el.matches("input[data-cur]"))curLiveFormat(el);});
+
 /* ---- field & node rendering ---- */
 const NUMER=new Set(["number","integer","decimal","currency","range","rating"]);
 const CHOICE=new Set(["select","multiselect","radio","checkbox"]);
@@ -1814,6 +1857,8 @@ function fieldHtml(c,rp,scopes){
     ctrl=`<textarea data-k="${ke}" class="pv-in" rows="3"${dis}${rdOnly}></textarea>`;
   else if(c.type==="email")
     ctrl=`<input type="email" data-k="${ke}" class="pv-in" placeholder="${esc(c.placeholder||"name@domain.com")}"${dis}${rdOnly}>`;
+  else if(c.type==="currency")
+    ctrl=`<input type="text" inputmode="decimal" autocomplete="off" data-k="${ke}" data-cur class="pv-in" style="width:auto;min-width:160px" placeholder="0"${dis}${rdOnly}>`+(c.unit?`<span class="pv-unit">${esc(c.unit)}</span>`:"");
   else if(NUMER.has(c.type))
     ctrl=`<input type="number" data-k="${ke}" class="pv-in" style="width:auto;min-width:160px"${c.min!=null&&c.min!==""?` min="${esc(String(c.min))}"` :""}${c.max!=null&&c.max!==""?` max="${esc(String(c.max))}"`:""}${dis}${rdOnly}>` +(c.unit?`<span class="pv-unit">${esc(c.unit)}</span>`:"");
   else if(DATETIME.has(c.type))
@@ -2034,7 +2079,7 @@ function openAddRowModal(roster,hostRp){
   const promptFields=flatRosterFields(roster).filter(f=>f.promptOnAdd);
   const bg=document.createElement("div");bg.className="pv-modal-bg";
   const fieldsHtml=promptFields.length
-    ?promptFields.map(f=>`<div style="margin-bottom:10px"><label style="display:block;font-size:12.5px;font-weight:500;margin-bottom:5px">${esc(txt(f.label)||f.name)}</label><input class="pv-modal-in" data-pf="${esc(f.name)}" placeholder="${esc(txt(f.placeholder)||txt(f.label)||f.name)}…" style="width:100%;border:1px solid var(--line);border-radius:var(--radius-s);padding:9px 10px;font-size:13px;box-sizing:border-box"></div>`).join("")
+    ?promptFields.map(f=>`<div style="margin-bottom:10px"><label style="display:block;font-size:12.5px;font-weight:500;margin-bottom:5px">${esc(txt(f.label)||f.name)}</label><input class="pv-modal-in" data-pf="${esc(f.name)}"${f.type==="currency"?' data-cur inputmode="decimal" autocomplete="off"':""} placeholder="${esc(txt(f.placeholder)||txt(f.label)||f.name)}…" style="width:100%;border:1px solid var(--line);border-radius:var(--radius-s);padding:9px 10px;font-size:13px;box-sizing:border-box"></div>`).join("")
     :`<input type="text" id="addRowInput" placeholder="${esc(title)}…">`;
   bg.innerHTML=`<div class="pv-modal"><h3>Add ${esc(title)}</h3>${fieldsHtml}<div class="pv-modal-actions"><button class="btn ghost" id="addRowCancel">Cancel</button><button class="btn primary" id="addRowConfirm">+ Add ${esc(title)}</button></div></div>`;
   document.body.appendChild(bg);
@@ -2060,7 +2105,7 @@ function openAddRowModal(roster,hostRp){
     }
     answers[`${scope}count`]=idx+1;
     if(promptFields.length){
-      bg.querySelectorAll("[data-pf]").forEach(el=>{const v=el.value.trim();if(v)answers[`${scope}${idx}#${el.dataset.pf}`]=v;});
+      bg.querySelectorAll("[data-pf]").forEach(el=>{const v=el.dataset.cur!=null?curParse(el.value):el.value.trim();if(v)answers[`${scope}${idx}#${el.dataset.pf}`]=v;});
     }else{
       const val=bg.querySelector("#addRowInput")?.value.trim();
       if(val){const pf=primaryRowField(roster);if(pf)answers[`${scope}${idx}#${pf}`]=val;}
@@ -2422,7 +2467,7 @@ function logout(){clearRespSession();location.reload();}
 
 /* ---- navigasi ---- */
 function saveAnswers(){
-  document.querySelectorAll("[data-k]").forEach(el=>{answers[el.dataset.k]=el.value;});
+  document.querySelectorAll("[data-k]").forEach(el=>{answers[el.dataset.k]=el.dataset.cur!=null?curParse(el.value):el.value;});
   document.querySelectorAll("[data-kr]:checked").forEach(el=>{answers[el.dataset.kr]=el.value;});
   const cbKeys=new Set([...document.querySelectorAll("[data-kc]")].map(el=>el.dataset.kc));
   cbKeys.forEach(key=>{answers[key]=[...document.querySelectorAll(`[data-kc="${CSS.escape(key)}"]:checked`)].map(el=>el.value);});
@@ -2598,7 +2643,7 @@ function renderRosterRow(){
 
 /* ---- restore & bind ---- */
 function restoreAnswers(){
-  document.querySelectorAll("[data-k]").forEach(el=>{const v=answers[el.dataset.k];if(v!=null)el.value=v;});
+  document.querySelectorAll("[data-k]").forEach(el=>{const v=answers[el.dataset.k];if(v!=null)el.value=el.dataset.cur!=null?curFormat(v):v;});
   document.querySelectorAll("[data-kr]").forEach(el=>{el.checked=(String(answers[el.dataset.kr])===el.value);});
 }
 function bindPageEvents(){
