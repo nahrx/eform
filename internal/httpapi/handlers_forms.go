@@ -213,12 +213,13 @@ func (s *Server) createShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		Label          string `json:"label"`
-		AllowResponses *bool  `json:"allowResponses"`
-		MultiResponse  bool   `json:"multiResponse"`
-		AccessMode     string `json:"accessMode"`
-		Password       string `json:"password"`
-		ExpiresAt      string `json:"expiresAt"`
+		Label          string   `json:"label"`
+		AllowResponses *bool    `json:"allowResponses"`
+		MultiResponse  bool     `json:"multiResponse"`
+		RowDisplay     []string `json:"rowDisplay"`
+		AccessMode     string   `json:"accessMode"`
+		Password       string   `json:"password"`
+		ExpiresAt      string   `json:"expiresAt"`
 	}
 	_ = decodeJSON(r, &in)
 
@@ -249,7 +250,7 @@ func (s *Server) createShare(w http.ResponseWriter, r *http.Request) {
 	}
 	uid := userFrom(r.Context()).Subject
 	token := randToken(12)
-	sh, err := s.st.CreateShare(r.Context(), formID, token, in.Label, allow, in.MultiResponse, in.AccessMode, ph, exp, &uid)
+	sh, err := s.st.CreateShare(r.Context(), formID, token, in.Label, allow, in.MultiResponse, in.AccessMode, cleanRowDisplay(in.RowDisplay, in.MultiResponse), ph, exp, &uid)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "failed to create share")
 		return
@@ -313,14 +314,15 @@ func (s *Server) updateShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		Label          string `json:"label"`
-		AllowResponses *bool  `json:"allowResponses"`
-		MultiResponse  bool   `json:"multiResponse"`
-		AccessMode     string `json:"accessMode"`
-		UpdatePassword bool   `json:"updatePassword"`
-		Password       string `json:"password"` // "" + updatePassword=true → remove the password
-		UpdateExpiry   bool   `json:"updateExpiry"`
-		ExpiresAt      string `json:"expiresAt"` // "" + updateExpiry=true → remove the expiry
+		Label          string   `json:"label"`
+		AllowResponses *bool    `json:"allowResponses"`
+		MultiResponse  bool     `json:"multiResponse"`
+		RowDisplay     []string `json:"rowDisplay"`
+		AccessMode     string   `json:"accessMode"`
+		UpdatePassword bool     `json:"updatePassword"`
+		Password       string   `json:"password"` // "" + updatePassword=true → remove the password
+		UpdateExpiry   bool     `json:"updateExpiry"`
+		ExpiresAt      string   `json:"expiresAt"` // "" + updateExpiry=true → remove the expiry
 	}
 	if err := decodeJSON(r, &in); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid format")
@@ -352,7 +354,7 @@ func (s *Server) updateShare(w http.ResponseWriter, r *http.Request) {
 		}
 		exp = &t
 	}
-	sh, err := s.st.UpdateShare(r.Context(), r.PathValue("id"), in.Label, allow, in.MultiResponse, in.AccessMode, in.UpdatePassword, newPH, in.UpdateExpiry, exp)
+	sh, err := s.st.UpdateShare(r.Context(), r.PathValue("id"), in.Label, allow, in.MultiResponse, in.AccessMode, cleanRowDisplay(in.RowDisplay, in.MultiResponse), in.UpdatePassword, newPH, in.UpdateExpiry, exp)
 	if errors.Is(err, store.ErrNotFound) {
 		writeErr(w, http.StatusNotFound, "share not found")
 		return
@@ -369,11 +371,35 @@ func (s *Server) shareWithURL(sh *models.Share) map[string]any {
 		"id": sh.ID, "formId": sh.FormID, "token": sh.Token, "label": sh.Label,
 		"isActive": sh.IsActive, "allowResponses": sh.AllowResponses,
 		"multiResponse": sh.MultiResponse, "accessMode": sh.AccessMode,
+		"rowDisplay":    sh.RowDisplay,
 		"hasPassword": sh.HasPassword,
 		"expiresAt":   sh.ExpiresAt, "viewCount": sh.ViewCount, "createdAt": sh.CreatedAt,
 		"shareUrl": s.cfg.PublicBaseURL + "/f/" + sh.Token,
 		"apiUrl":   s.cfg.PublicBaseURL + "/api/public/forms/" + sh.Token,
 	}
+}
+
+// cleanRowDisplay trims, de-duplicates and caps the dataKeys a share wants shown on
+// each row of the respondent's list. The setting only means something on a
+// multi-response share, so a single-response one always stores the empty list.
+func cleanRowDisplay(keys []string, multi bool) []string {
+	out := []string{}
+	if !multi {
+		return out
+	}
+	seen := map[string]bool{}
+	for _, k := range keys {
+		k = strings.TrimSpace(k)
+		if k == "" || len(k) > 64 || seen[k] {
+			continue
+		}
+		seen[k] = true
+		out = append(out, k)
+		if len(out) >= 5 {
+			break
+		}
+	}
+	return out
 }
 
 func (s *Server) deleteSharePermanent(w http.ResponseWriter, r *http.Request) {

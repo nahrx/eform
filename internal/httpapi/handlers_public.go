@@ -84,6 +84,7 @@ func (s *Server) publicGetForm(w http.ResponseWriter, r *http.Request) {
 		"schema":          f.Schema,
 		"allowResponses": sh.AllowResponses,
 		"multiResponse":  sh.MultiResponse,
+		"rowDisplay":     sh.RowDisplay,
 		"accessMode":     sh.AccessMode,
 		"requireAuth":    true,
 		"googleEnabled":  s.cfg.GoogleClientID != "",

@@ -44,6 +44,10 @@ type Share struct {
 	IsActive       bool       `json:"isActive"`
 	AllowResponses bool       `json:"allowResponses"`
 	MultiResponse  bool       `json:"multiResponse"`
+	// dataKeys whose answers label each row of a respondent's own list on a
+	// multi-response share, so "Response 3" can read "Budi · RT 04" instead. Empty
+	// means the numbered fallback.
+	RowDisplay     []string   `json:"rowDisplay"`
 	AccessMode     string     `json:"accessMode"`
 	HasPassword    bool       `json:"hasPassword"`
 	ExpiresAt      *time.Time `json:"expiresAt,omitempty"`

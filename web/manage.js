@@ -170,9 +170,14 @@ function openShareCreateDlg(){
   $("#shareMulti").checked=false;$("#shareAllow").checked=true;
   document.getElementById("shareAccessPublic").checked=true;
   $("#restrictedSection").style.display="none";
+  $("#rowDisplayFields").innerHTML=rowDisplayPickerHtml([]);
+  $("#rowDisplaySection").style.display="none";
   pendingEmails=[];renderPendingEmails();
   shareCreateDlg.showModal();
 }
+$("#shareMulti").addEventListener("change",()=>{
+  $("#rowDisplaySection").style.display=$("#shareMulti").checked?"block":"none";
+});
 
 document.getElementById("shareAccessRestricted").addEventListener("change",()=>{
   $("#restrictedSection").style.display="block";
@@ -220,6 +225,8 @@ async function saveShareEdit(id,hasPassword){
   const label=(document.getElementById("elabel_"+id)?.value||"").trim();
   const allowResponses=document.getElementById("eallow_"+id)?.checked??true;
   const multiResponse=document.getElementById("emulti_"+id)?.checked??false;
+  const rdBox=document.getElementById("erd_"+id);
+  const rowDisplay=multiResponse&&rdBox?rowDisplayPicked(rdBox):[];
   const accessMode=document.querySelector(`input[name="eacc_${id}"]:checked`)?.value||"public";
   const pwInput=(document.getElementById("epw_"+id)?.value||"");
   const clearPw=document.getElementById("eclearpw_"+id)?.checked||false;
@@ -231,7 +238,7 @@ async function saveShareEdit(id,hasPassword){
   if(btn){btn.disabled=true;btn.textContent="Saving…";}
   try{
     await api("/api/shares/"+id,{method:"PATCH",body:JSON.stringify({
-      label,allowResponses,multiResponse,accessMode,
+      label,allowResponses,multiResponse,rowDisplay,accessMode,
       updatePassword,password,
       updateExpiry:true,expiresAt
     })});
@@ -263,6 +270,7 @@ async function refreshShares(){
       const badges=[];
       if(s.hasPassword)badges.push(`<span class="tag tag-icon">${ICON_LOCK} Password</span>`);
       if(s.multiResponse)badges.push('<span class="tag">Multi-response</span>');
+      if(s.multiResponse&&(s.rowDisplay||[]).length)badges.push(`<span class="tag" title="Shown on each row of the respondent's list">Rows: ${esc(s.rowDisplay.join(" · "))}</span>`);
       if(s.accessMode==="restricted")badges.push('<span class="tag">Terbatas</span>');
 
       const editSection=isEditing?`<div class="share-edit">
@@ -271,7 +279,12 @@ async function refreshShares(){
         </div>
         <div class="edit-row" style="gap:16px;flex-wrap:wrap">
           <label class="muted"><input type="checkbox" id="eallow_${s.id}" ${s.allowResponses?"checked":""}> Accepting responses</label>
-          <label class="muted"><input type="checkbox" id="emulti_${s.id}" ${s.multiResponse?"checked":""}> Multi-response</label>
+          <label class="muted"><input type="checkbox" id="emulti_${s.id}" ${s.multiResponse?"checked":""} onchange="document.getElementById('erdsect_${s.id}').style.display=this.checked?'block':'none'"> Multi-response</label>
+        </div>
+        <div id="erdsect_${s.id}" class="rd-sect" style="${s.multiResponse?"":"display:none"}">
+          <div class="rd-h">Show on each row of the respondent's list</div>
+          <div class="muted" style="font-size:11px;margin-bottom:6px">Leave all unchecked to show "Response 1, 2, 3…".</div>
+          <div id="erd_${s.id}" class="rd-list">${rowDisplayPickerHtml(s.rowDisplay||[])}</div>
         </div>
         <div class="edit-row" style="gap:16px;flex-wrap:wrap">
           <span class="edit-lbl">Akses</span>
@@ -370,6 +383,7 @@ $("#makeShare").addEventListener("click",async()=>{
       label:$("#shareLabel").value.trim(),
       allowResponses:$("#shareAllow").checked,
       multiResponse:$("#shareMulti").checked,
+      rowDisplay:$("#shareMulti").checked?rowDisplayPicked($("#rowDisplayFields")):[],
       accessMode,
       password:$("#sharePw").value
     })});
@@ -382,6 +396,7 @@ $("#makeShare").addEventListener("click",async()=>{
     $("#shareLabel").value="";$("#sharePw").value="";$("#shareMulti").checked=false;
     document.getElementById("shareAccessPublic").checked=true;
     $("#restrictedSection").style.display="none";
+    $("#rowDisplaySection").style.display="none";
     shareCreateDlg.close();
     refreshShares();
     adminToast("Share link created");
@@ -890,6 +905,33 @@ function buildFieldCheckboxes(containerId,schema,checked){
 }
 
 function buildVpdFieldList(schema,checked){buildFieldCheckboxes("vpdFieldList",schema,checked);}
+
+// Fields a multi-response share can put on each row of the respondent's own list:
+// every answerable top-level field. Roster children are skipped — a row has one
+// label, and a roster answer is a list.
+const ROW_DISPLAY_SKIP=new Set(["note","markdown","hidden","file","signature","image"]);
+function rowDisplayFields(schema){
+  const out=[];
+  function walk(comps){
+    for(const c of comps||[]){
+      if(c.kind==="roster")continue;
+      if(c.kind==="field"&&c.name&&!ROW_DISPLAY_SKIP.has(c.type))
+        out.push({name:c.name,label:typeof c.label==="string"?c.label:(c.label?.id||c.name)});
+      else if(c.components)walk(c.components);
+    }
+  }
+  for(const p of schema?.pages||[])walk(p.components||[]);
+  return out;
+}
+function rowDisplayPickerHtml(checked){
+  const fields=rowDisplayFields(FORM_SCHEMA);
+  if(!fields.length)return '<div style="font-size:12px;color:var(--muted)">There are no fields in this form.</div>';
+  const set=new Set(checked||[]);
+  return fields.map(f=>`<label><input type="checkbox" value="${esc(f.name)}" ${set.has(f.name)?"checked":""}> <span>${esc(f.label)}</span> <span class="rd-key">${esc(f.name)}</span></label>`).join("");
+}
+function rowDisplayPicked(container){
+  return [...container.querySelectorAll("input[type=checkbox]:checked")].map(cb=>cb.value);
+}
 
 function vpdCheckAll(on){
   document.querySelectorAll("#vpdFieldList input[type=checkbox]").forEach(cb=>{cb.checked=on;});

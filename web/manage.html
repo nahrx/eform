@@ -8,7 +8,13 @@
 <link rel="stylesheet" href="/manage.css">
 <!-- Same stale-session gate as admin.html: an expired token still renders the page, so
      without this the management screen flashes up before the 401 sends it to /login. -->
-<style>html.auth-checking body{visibility:hidden}html.auth-checking{background:#f1f5f9}</style>
+<style>html.auth-checking body{visibility:hidden}html.auth-checking{background:#f1f5f9}.rd-sect{border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;margin:4px 0 8px;background:var(--surface)}
+.rd-h{font-size:12px;font-weight:600;margin-bottom:4px;color:var(--muted)}
+.rd-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:2px 14px;max-height:180px;overflow:auto}
+.rd-list label{display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;min-width:0}
+.rd-list label>span:first-of-type{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rd-list .rd-key{color:var(--muted);font-family:monospace;font-size:11px;flex:none}
+</style>
 <script>
 document.documentElement.classList.add("auth-checking");
 setTimeout(function(){document.documentElement.classList.remove("auth-checking");},1500);
@@ -230,6 +236,11 @@ setTimeout(function(){document.documentElement.classList.remove("auth-checking")
     <div class="row"><input id="shareLabel" placeholder="Label (optional, e.g. 'Field User')" style="flex:1"></div>
     <div class="row"><label class="muted"><input type="checkbox" id="shareAllow" checked> Accepting responses</label></div>
     <div class="row"><label class="muted"><input type="checkbox" id="shareMulti"> Allow multiple responses (one account may submit more than once)</label></div>
+    <div id="rowDisplaySection" class="rd-sect" style="display:none">
+      <div class="rd-h">Show on each row of the respondent's list</div>
+      <div class="muted" style="font-size:11px;margin-bottom:6px">Pick the fields whose answers label each response. Leave all unchecked to show "Response 1, 2, 3…".</div>
+      <div id="rowDisplayFields" class="rd-list"></div>
+    </div>
     <div class="row" style="gap:16px">
       <label class="muted"><input type="radio" name="shareAccess" id="shareAccessPublic" value="public" checked> Public (anyone can fill it out)</label>
       <label class="muted"><input type="radio" name="shareAccess" id="shareAccessRestricted" value="restricted"> Restricted (registered accounts only)</label>
