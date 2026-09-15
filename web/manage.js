@@ -172,6 +172,7 @@ function openShareCreateDlg(){
   $("#restrictedSection").style.display="none";
   $("#rowDisplayFields").innerHTML=rowDisplayPickerHtml([]);
   $("#rowDisplaySection").style.display="none";
+  document.querySelector("input[name='shareNewWhileDraft'][value='0']").checked=true;
   pendingEmails=[];renderPendingEmails();
   shareCreateDlg.showModal();
 }
@@ -227,6 +228,7 @@ async function saveShareEdit(id,hasPassword){
   const multiResponse=document.getElementById("emulti_"+id)?.checked??false;
   const rdBox=document.getElementById("erd_"+id);
   const rowDisplay=multiResponse&&rdBox?rowDisplayPicked(rdBox):[];
+  const allowNewWhileDraft=multiResponse&&document.querySelector(`input[name="enwd_${id}"]:checked`)?.value==="1";
   const accessMode=document.querySelector(`input[name="eacc_${id}"]:checked`)?.value||"public";
   const pwInput=(document.getElementById("epw_"+id)?.value||"");
   const clearPw=document.getElementById("eclearpw_"+id)?.checked||false;
@@ -238,7 +240,7 @@ async function saveShareEdit(id,hasPassword){
   if(btn){btn.disabled=true;btn.textContent="Saving…";}
   try{
     await api("/api/shares/"+id,{method:"PATCH",body:JSON.stringify({
-      label,allowResponses,multiResponse,rowDisplay,accessMode,
+      label,allowResponses,multiResponse,rowDisplay,allowNewWhileDraft,accessMode,
       updatePassword,password,
       updateExpiry:true,expiresAt
     })});
@@ -270,6 +272,7 @@ async function refreshShares(){
       const badges=[];
       if(s.hasPassword)badges.push(`<span class="tag tag-icon">${ICON_LOCK} Password</span>`);
       if(s.multiResponse)badges.push('<span class="tag">Multi-response</span>');
+      if(s.multiResponse&&s.allowNewWhileDraft)badges.push('<span class="tag" title="A respondent may start a new response while another is still a draft">Drafts may stack</span>');
       if(s.multiResponse&&(s.rowDisplay||[]).length)badges.push(`<span class="tag" title="Shown on each row of the respondent's list">Rows: ${esc(s.rowDisplay.join(" · "))}</span>`);
       if(s.accessMode==="restricted")badges.push('<span class="tag">Terbatas</span>');
 
@@ -285,6 +288,9 @@ async function refreshShares(){
           <div class="rd-h">Show on each row of the respondent's list</div>
           <div class="muted" style="font-size:11px;margin-bottom:6px">Leave all unchecked to show "Response 1, 2, 3…".</div>
           <div id="erd_${s.id}" class="rd-list">${rowDisplayPickerHtml(s.rowDisplay||[])}</div>
+          <div class="rd-h" style="margin-top:10px">New response while a draft is open</div>
+          <label class="rd-radio"><input type="radio" name="enwd_${s.id}" value="0" ${s.allowNewWhileDraft?"":"checked"}> Not allowed — the draft must be submitted or discarded first</label>
+          <label class="rd-radio"><input type="radio" name="enwd_${s.id}" value="1" ${s.allowNewWhileDraft?"checked":""}> Allowed — several drafts may be open at once</label>
         </div>
         <div class="edit-row" style="gap:16px;flex-wrap:wrap">
           <span class="edit-lbl">Akses</span>
@@ -384,6 +390,7 @@ $("#makeShare").addEventListener("click",async()=>{
       allowResponses:$("#shareAllow").checked,
       multiResponse:$("#shareMulti").checked,
       rowDisplay:$("#shareMulti").checked?rowDisplayPicked($("#rowDisplayFields")):[],
+      allowNewWhileDraft:$("#shareMulti").checked&&document.querySelector("input[name='shareNewWhileDraft']:checked")?.value==="1",
       accessMode,
       password:$("#sharePw").value
     })});

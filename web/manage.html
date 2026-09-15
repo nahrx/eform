@@ -14,6 +14,7 @@
 .rd-list label{display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;min-width:0}
 .rd-list label>span:first-of-type{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rd-list .rd-key{color:var(--muted);font-family:monospace;font-size:11px;flex:none}
+.rd-radio{display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;padding:2px 0}
 </style>
 <script>
 document.documentElement.classList.add("auth-checking");
@@ -240,6 +241,9 @@ setTimeout(function(){document.documentElement.classList.remove("auth-checking")
       <div class="rd-h">Show on each row of the respondent's list</div>
       <div class="muted" style="font-size:11px;margin-bottom:6px">Pick the fields whose answers label each response. Leave all unchecked to show "Response 1, 2, 3…".</div>
       <div id="rowDisplayFields" class="rd-list"></div>
+      <div class="rd-h" style="margin-top:10px">New response while a draft is open</div>
+      <label class="rd-radio"><input type="radio" name="shareNewWhileDraft" value="0" checked> Not allowed — the draft must be submitted or discarded first</label>
+      <label class="rd-radio"><input type="radio" name="shareNewWhileDraft" value="1" > Allowed — several drafts may be open at once</label>
     </div>
     <div class="row" style="gap:16px">
       <label class="muted"><input type="radio" name="shareAccess" id="shareAccessPublic" value="public" checked> Public (anyone can fill it out)</label>

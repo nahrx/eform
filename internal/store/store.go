@@ -620,7 +620,7 @@ func (s *Store) SlugExists(ctx context.Context, slug string) (bool, error) {
 
 /* ---------------- shares ---------------- */
 
-func (s *Store) CreateShare(ctx context.Context, formID, token, label string, allowResponses, multiResponse bool, accessMode string, rowDisplay []string, passwordHash *string, expiresAt *time.Time, createdBy *string) (*models.Share, error) {
+func (s *Store) CreateShare(ctx context.Context, formID, token, label string, allowResponses, multiResponse bool, accessMode string, rowDisplay []string, allowNewWhileDraft bool, passwordHash *string, expiresAt *time.Time, createdBy *string) (*models.Share, error) {
 	if rowDisplay == nil {
 		rowDisplay = []string{}
 	}
@@ -630,11 +630,11 @@ func (s *Store) CreateShare(ctx context.Context, formID, token, label string, al
 	sh := &models.Share{}
 	var ph *string
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO form_shares(form_id,token,label,allow_responses,multi_response,access_mode,row_display,password_hash,expires_at,created_by)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-		 RETURNING id,form_id,token,label,is_active,allow_responses,multi_response,access_mode,row_display,password_hash,expires_at,view_count,created_at`,
-		formID, token, label, allowResponses, multiResponse, accessMode, rowDisplay, passwordHash, expiresAt, createdBy,
-	).Scan(&sh.ID, &sh.FormID, &sh.Token, &sh.Label, &sh.IsActive, &sh.AllowResponses, &sh.MultiResponse, &sh.AccessMode, &sh.RowDisplay, &ph, &sh.ExpiresAt, &sh.ViewCount, &sh.CreatedAt)
+		`INSERT INTO form_shares(form_id,token,label,allow_responses,multi_response,access_mode,row_display,allow_new_while_draft,password_hash,expires_at,created_by)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$11,$8,$9,$10)
+		 RETURNING id,form_id,token,label,is_active,allow_responses,multi_response,access_mode,row_display,allow_new_while_draft,password_hash,expires_at,view_count,created_at`,
+		formID, token, label, allowResponses, multiResponse, accessMode, rowDisplay, passwordHash, expiresAt, createdBy, allowNewWhileDraft,
+	).Scan(&sh.ID, &sh.FormID, &sh.Token, &sh.Label, &sh.IsActive, &sh.AllowResponses, &sh.MultiResponse, &sh.AccessMode, &sh.RowDisplay, &sh.AllowNewWhileDraft, &ph, &sh.ExpiresAt, &sh.ViewCount, &sh.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -644,7 +644,7 @@ func (s *Store) CreateShare(ctx context.Context, formID, token, label string, al
 
 func (s *Store) ListSharesByForm(ctx context.Context, formID string) ([]models.Share, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id,form_id,token,label,is_active,allow_responses,multi_response,access_mode,row_display,password_hash,expires_at,view_count,created_at
+		`SELECT id,form_id,token,label,is_active,allow_responses,multi_response,access_mode,row_display,allow_new_while_draft,password_hash,expires_at,view_count,created_at
 		 FROM form_shares WHERE form_id=$1 ORDER BY created_at DESC`, formID)
 	if err != nil {
 		return nil, err
@@ -654,7 +654,7 @@ func (s *Store) ListSharesByForm(ctx context.Context, formID string) ([]models.S
 	for rows.Next() {
 		sh := models.Share{}
 		var ph *string
-		if err := rows.Scan(&sh.ID, &sh.FormID, &sh.Token, &sh.Label, &sh.IsActive, &sh.AllowResponses, &sh.MultiResponse, &sh.AccessMode, &sh.RowDisplay, &ph, &sh.ExpiresAt, &sh.ViewCount, &sh.CreatedAt); err != nil {
+		if err := rows.Scan(&sh.ID, &sh.FormID, &sh.Token, &sh.Label, &sh.IsActive, &sh.AllowResponses, &sh.MultiResponse, &sh.AccessMode, &sh.RowDisplay, &sh.AllowNewWhileDraft, &ph, &sh.ExpiresAt, &sh.ViewCount, &sh.CreatedAt); err != nil {
 			return nil, err
 		}
 		sh.HasPassword = ph != nil
@@ -666,9 +666,9 @@ func (s *Store) ListSharesByForm(ctx context.Context, formID string) ([]models.S
 func (s *Store) GetShareByToken(ctx context.Context, token string) (*models.Share, error) {
 	sh := &models.Share{}
 	err := s.pool.QueryRow(ctx,
-		`SELECT id,form_id,token,label,is_active,allow_responses,multi_response,access_mode,row_display,password_hash,expires_at,view_count,created_at
+		`SELECT id,form_id,token,label,is_active,allow_responses,multi_response,access_mode,row_display,allow_new_while_draft,password_hash,expires_at,view_count,created_at
 		 FROM form_shares WHERE token=$1`, token,
-	).Scan(&sh.ID, &sh.FormID, &sh.Token, &sh.Label, &sh.IsActive, &sh.AllowResponses, &sh.MultiResponse, &sh.AccessMode, &sh.RowDisplay, &sh.PasswordHash, &sh.ExpiresAt, &sh.ViewCount, &sh.CreatedAt)
+	).Scan(&sh.ID, &sh.FormID, &sh.Token, &sh.Label, &sh.IsActive, &sh.AllowResponses, &sh.MultiResponse, &sh.AccessMode, &sh.RowDisplay, &sh.AllowNewWhileDraft, &sh.PasswordHash, &sh.ExpiresAt, &sh.ViewCount, &sh.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -683,9 +683,9 @@ func (s *Store) GetShareByToken(ctx context.Context, token string) (*models.Shar
 func (s *Store) GetShareByID(ctx context.Context, id string) (*models.Share, error) {
 	sh := &models.Share{}
 	err := s.pool.QueryRow(ctx,
-		`SELECT id,form_id,token,label,is_active,allow_responses,multi_response,access_mode,row_display,password_hash,expires_at,view_count,created_at
+		`SELECT id,form_id,token,label,is_active,allow_responses,multi_response,access_mode,row_display,allow_new_while_draft,password_hash,expires_at,view_count,created_at
 		 FROM form_shares WHERE id=$1`, id,
-	).Scan(&sh.ID, &sh.FormID, &sh.Token, &sh.Label, &sh.IsActive, &sh.AllowResponses, &sh.MultiResponse, &sh.AccessMode, &sh.RowDisplay, &sh.PasswordHash, &sh.ExpiresAt, &sh.ViewCount, &sh.CreatedAt)
+	).Scan(&sh.ID, &sh.FormID, &sh.Token, &sh.Label, &sh.IsActive, &sh.AllowResponses, &sh.MultiResponse, &sh.AccessMode, &sh.RowDisplay, &sh.AllowNewWhileDraft, &sh.PasswordHash, &sh.ExpiresAt, &sh.ViewCount, &sh.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -722,7 +722,7 @@ func (s *Store) ReactivateShare(ctx context.Context, id string) error {
 // UpdateShare updates the configuration of a still-active share.
 // updatePassword=true  → password_hash is set to passwordHash (nil removes the password).
 // updateExpiry=true    → expires_at is set to expiresAt (nil removes the expiry).
-func (s *Store) UpdateShare(ctx context.Context, id, label string, allowResponses, multiResponse bool, accessMode string, rowDisplay []string, updatePassword bool, passwordHash *string, updateExpiry bool, expiresAt *time.Time) (*models.Share, error) {
+func (s *Store) UpdateShare(ctx context.Context, id, label string, allowResponses, multiResponse bool, accessMode string, rowDisplay []string, allowNewWhileDraft bool, updatePassword bool, passwordHash *string, updateExpiry bool, expiresAt *time.Time) (*models.Share, error) {
 	if accessMode != "public" && accessMode != "restricted" {
 		accessMode = "public"
 	}
@@ -738,15 +738,16 @@ func (s *Store) UpdateShare(ctx context.Context, id, label string, allowResponse
 		  multi_response=$4,
 		  access_mode=$5,
 		  row_display=$10,
+		  allow_new_while_draft=$11,
 		  password_hash = CASE WHEN $6 THEN $7 ELSE password_hash END,
 		  expires_at    = CASE WHEN $8 THEN $9 ELSE expires_at END
 		WHERE id=$1
-		RETURNING id,form_id,token,label,is_active,allow_responses,multi_response,access_mode,row_display,password_hash,expires_at,view_count,created_at`,
+		RETURNING id,form_id,token,label,is_active,allow_responses,multi_response,access_mode,row_display,allow_new_while_draft,password_hash,expires_at,view_count,created_at`,
 		id, label, allowResponses, multiResponse, accessMode,
 		updatePassword, passwordHash,
 		updateExpiry, expiresAt,
-		rowDisplay,
-	).Scan(&sh.ID, &sh.FormID, &sh.Token, &sh.Label, &sh.IsActive, &sh.AllowResponses, &sh.MultiResponse, &sh.AccessMode, &sh.RowDisplay, &ph, &sh.ExpiresAt, &sh.ViewCount, &sh.CreatedAt)
+		rowDisplay, allowNewWhileDraft,
+	).Scan(&sh.ID, &sh.FormID, &sh.Token, &sh.Label, &sh.IsActive, &sh.AllowResponses, &sh.MultiResponse, &sh.AccessMode, &sh.RowDisplay, &sh.AllowNewWhileDraft, &ph, &sh.ExpiresAt, &sh.ViewCount, &sh.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}

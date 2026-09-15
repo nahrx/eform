@@ -213,13 +213,14 @@ func (s *Server) createShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		Label          string   `json:"label"`
-		AllowResponses *bool    `json:"allowResponses"`
-		MultiResponse  bool     `json:"multiResponse"`
-		RowDisplay     []string `json:"rowDisplay"`
-		AccessMode     string   `json:"accessMode"`
-		Password       string   `json:"password"`
-		ExpiresAt      string   `json:"expiresAt"`
+		Label              string   `json:"label"`
+		AllowResponses     *bool    `json:"allowResponses"`
+		MultiResponse      bool     `json:"multiResponse"`
+		RowDisplay         []string `json:"rowDisplay"`
+		AllowNewWhileDraft bool     `json:"allowNewWhileDraft"`
+		AccessMode         string   `json:"accessMode"`
+		Password           string   `json:"password"`
+		ExpiresAt          string   `json:"expiresAt"`
 	}
 	_ = decodeJSON(r, &in)
 
@@ -250,7 +251,7 @@ func (s *Server) createShare(w http.ResponseWriter, r *http.Request) {
 	}
 	uid := userFrom(r.Context()).Subject
 	token := randToken(12)
-	sh, err := s.st.CreateShare(r.Context(), formID, token, in.Label, allow, in.MultiResponse, in.AccessMode, cleanRowDisplay(in.RowDisplay, in.MultiResponse), ph, exp, &uid)
+	sh, err := s.st.CreateShare(r.Context(), formID, token, in.Label, allow, in.MultiResponse, in.AccessMode, cleanRowDisplay(in.RowDisplay, in.MultiResponse), in.AllowNewWhileDraft && in.MultiResponse, ph, exp, &uid)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "failed to create share")
 		return
@@ -314,15 +315,16 @@ func (s *Server) updateShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		Label          string   `json:"label"`
-		AllowResponses *bool    `json:"allowResponses"`
-		MultiResponse  bool     `json:"multiResponse"`
-		RowDisplay     []string `json:"rowDisplay"`
-		AccessMode     string   `json:"accessMode"`
-		UpdatePassword bool     `json:"updatePassword"`
-		Password       string   `json:"password"` // "" + updatePassword=true → remove the password
-		UpdateExpiry   bool     `json:"updateExpiry"`
-		ExpiresAt      string   `json:"expiresAt"` // "" + updateExpiry=true → remove the expiry
+		Label              string   `json:"label"`
+		AllowResponses     *bool    `json:"allowResponses"`
+		MultiResponse      bool     `json:"multiResponse"`
+		RowDisplay         []string `json:"rowDisplay"`
+		AllowNewWhileDraft bool     `json:"allowNewWhileDraft"`
+		AccessMode         string   `json:"accessMode"`
+		UpdatePassword     bool     `json:"updatePassword"`
+		Password           string   `json:"password"` // "" + updatePassword=true → remove the password
+		UpdateExpiry       bool     `json:"updateExpiry"`
+		ExpiresAt          string   `json:"expiresAt"` // "" + updateExpiry=true → remove the expiry
 	}
 	if err := decodeJSON(r, &in); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid format")
@@ -354,7 +356,7 @@ func (s *Server) updateShare(w http.ResponseWriter, r *http.Request) {
 		}
 		exp = &t
 	}
-	sh, err := s.st.UpdateShare(r.Context(), r.PathValue("id"), in.Label, allow, in.MultiResponse, in.AccessMode, cleanRowDisplay(in.RowDisplay, in.MultiResponse), in.UpdatePassword, newPH, in.UpdateExpiry, exp)
+	sh, err := s.st.UpdateShare(r.Context(), r.PathValue("id"), in.Label, allow, in.MultiResponse, in.AccessMode, cleanRowDisplay(in.RowDisplay, in.MultiResponse), in.AllowNewWhileDraft && in.MultiResponse, in.UpdatePassword, newPH, in.UpdateExpiry, exp)
 	if errors.Is(err, store.ErrNotFound) {
 		writeErr(w, http.StatusNotFound, "share not found")
 		return
@@ -371,9 +373,10 @@ func (s *Server) shareWithURL(sh *models.Share) map[string]any {
 		"id": sh.ID, "formId": sh.FormID, "token": sh.Token, "label": sh.Label,
 		"isActive": sh.IsActive, "allowResponses": sh.AllowResponses,
 		"multiResponse": sh.MultiResponse, "accessMode": sh.AccessMode,
-		"rowDisplay":    sh.RowDisplay,
-		"hasPassword": sh.HasPassword,
-		"expiresAt":   sh.ExpiresAt, "viewCount": sh.ViewCount, "createdAt": sh.CreatedAt,
+		"rowDisplay":         sh.RowDisplay,
+		"allowNewWhileDraft": sh.AllowNewWhileDraft,
+		"hasPassword":        sh.HasPassword,
+		"expiresAt":          sh.ExpiresAt, "viewCount": sh.ViewCount, "createdAt": sh.CreatedAt,
 		"shareUrl": s.cfg.PublicBaseURL + "/f/" + sh.Token,
 		"apiUrl":   s.cfg.PublicBaseURL + "/api/public/forms/" + sh.Token,
 	}

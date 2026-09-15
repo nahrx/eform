@@ -381,6 +381,7 @@ let RESP_USER=null;
 let EXISTING_RESPONSE=null;
 let MULTI_RESPONSE=false;  // whether one account may submit more than one response
 let ROW_DISPLAY=[];        // dataKeys the share wants shown on each row of the response list
+let ALLOW_NEW_WHILE_DRAFT=false; // multi-response: may a new response start while a draft is open?
 let ACCESS_MODE="public";  // 'public' or 'restricted'
 let EDITING_RESPONSE_ID=null; // the form_responses row id currently being edited (draft mode)
 let DRAFT_RESTORED_AT=null; // timestamp of the local draft in use (null when there is none)
@@ -900,6 +901,7 @@ async function fetchForm(){
   SCHEMA_VERSION_ID=data.schemaVersionId||"";
   MULTI_RESPONSE=!!data.multiResponse;
   ROW_DISPLAY=Array.isArray(data.rowDisplay)?data.rowDisplay.filter(k=>typeof k==="string"&&k):[];
+  ALLOW_NEW_WHILE_DRAFT=!!data.allowNewWhileDraft;
   ACCESS_MODE=data.accessMode||"public";
   OFFLINE_MODE=!!(SCHEMA?.settings?.offline?.enabled)&&MULTI_RESPONSE;
   if(OFFLINE_MODE){
@@ -1154,7 +1156,7 @@ function renderMyResponsesList(meta,responses){
     </div>`;
   }).join("");
   const emptyNote=responses.length===0?`<div class="muted" style="padding:12px;text-align:center;font-size:13px">No responses yet.</div>`:"";
-  const newBtn=ALLOW&&!hasDraft
+  const newBtn=ALLOW&&(!hasDraft||ALLOW_NEW_WHILE_DRAFT)
     ?`<button class="btn primary" style="margin-top:16px;width:100%" onclick="startNewResponse()">+ New Response</button>`
     :(ALLOW&&hasDraft?`<p class="gate-sub muted" style="font-size:12px;margin-top:12px">Finish or discard the existing draft before adding a new response.</p>`:"");
   setRoot(`<div class="gate-wrap"><div class="gate-card gate-card-wide">

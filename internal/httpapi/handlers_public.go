@@ -85,6 +85,7 @@ func (s *Server) publicGetForm(w http.ResponseWriter, r *http.Request) {
 		"allowResponses": sh.AllowResponses,
 		"multiResponse":  sh.MultiResponse,
 		"rowDisplay":     sh.RowDisplay,
+		"allowNewWhileDraft": sh.AllowNewWhileDraft,
 		"accessMode":     sh.AccessMode,
 		"requireAuth":    true,
 		"googleEnabled":  s.cfg.GoogleClientID != "",
@@ -222,8 +223,9 @@ func (s *Server) publicSubmit(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		} else {
-			// Create a new row — make sure no unfinished draft is still active
-			if !in.Draft {
+			// Create a new row — make sure no unfinished draft is still active, unless the
+			// share lets a respondent keep several going at once.
+			if !in.Draft && !sh.AllowNewWhileDraft {
 				hasDraft, chkErr := s.st.HasDraftResponse(r.Context(), sh.FormID, rc.RespondentID)
 				if chkErr != nil {
 					writeErr(w, http.StatusInternalServerError, "server error")

@@ -48,6 +48,9 @@ type Share struct {
 	// multi-response share, so "Response 3" can read "Budi · RT 04" instead. Empty
 	// means the numbered fallback.
 	RowDisplay     []string   `json:"rowDisplay"`
+	// On a multi-response share: may a respondent start another response while one of
+	// theirs is still a draft? Off means the draft has to be submitted or discarded first.
+	AllowNewWhileDraft bool `json:"allowNewWhileDraft"`
 	AccessMode     string     `json:"accessMode"`
 	HasPassword    bool       `json:"hasPassword"`
 	ExpiresAt      *time.Time `json:"expiresAt,omitempty"`
