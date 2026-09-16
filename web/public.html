@@ -387,7 +387,12 @@ let EDITING_RESPONSE_ID=null; // the form_responses row id currently being edite
 let DRAFT_RESTORED_AT=null; // timestamp of the local draft in use (null when there is none)
 let AUTOSAVE_TIMER=null;
 let PENDING_UPLOADS={};
-let OFFLINE_MODE=false; // settings.offline.enabled on the instrument AND a multi-response share
+/* settings.offline.enabled on the instrument AND a multi-response share. This used to
+   gate everything offline. Now it only decides whether the page installs as a PWA
+   (service worker, cached instrument, background sync). Saving locally when a request
+   cannot reach the server happens on every share: a dropped connection is not a
+   feature to opt into, and losing a filled-in response to it is never acceptable. */
+let OFFLINE_MODE=false;
 let DEFERRED_INSTALL_PROMPT=null;
 window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();DEFERRED_INSTALL_PROMPT=e;renderInstallButton();});
 
@@ -621,7 +626,7 @@ function deviceId(){
   return v;
 }
 async function reportQueueState(){
-  if(!OFFLINE_MODE||!OQ||!RESP_TOKEN)return;
+  if(!OQ||!RESP_TOKEN)return;
   let body;
   try{body=await OQ.reportPayload(deviceId());}catch(_e){return;}
   const adaIsi=body.pending>0||body.failed>0||body.files>0;
@@ -1626,6 +1631,15 @@ async function fetchMyDraft(){
   }catch{return null;}
 }
 
+/* "Failed to save draft" on its own sent people guessing. The server always says why —
+   the session ran out, the link was closed, the draft was submitted or removed on
+   another device — so the reason is passed on, with the status code as the fallback. */
+async function draftSaveError(r){
+  let msg="";
+  try{msg=(await r.json()).error||"";}catch(_){}
+  if(r.status===401)return "Session expired — please sign in again, then save the draft.";
+  return "Failed to save draft"+(msg?": "+msg:" (HTTP "+r.status+")");
+}
 async function saveDraftToServer(){
   const btn=document.getElementById("pvSaveDraft");
   if(btn){btn.disabled=true;btn.textContent="Saving…";}
@@ -1647,26 +1661,34 @@ async function saveDraftToServer(){
       try{
         r=await fetch(url,{method:"POST",headers,body:JSON.stringify(body)});
       }catch(e){
-        if(OFFLINE_MODE&&isNetworkError(e)){
+        if(isNetworkError(e)){
           await queueOfflineRequest(url,headers,JSON.stringify(body));
           offlineQueued=true;savedAt=new Date().toISOString();
         }else throw new Error("No internet connection.");
       }
       if(!offlineQueued){
-        if(!r.ok)throw new Error("Failed to save draft");
+        if(!r.ok)throw new Error(await draftSaveError(r));
         const d=await r.json();
         EDITING_RESPONSE_ID=d.id; // keep the id so the next save updates the same row
         savedAt=d.submittedAt;
       }
     }else{
-      const r=await fetch("/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/draft",{
-        method:"POST",
-        headers:pubHeaders({"Content-Type":"application/json"}),
-        body:JSON.stringify({answers:ans,curPage})
-      });
-      if(!r.ok)throw new Error("Failed to save draft");
-      const d=await r.json();
-      savedAt=d.savedAt;
+      const url="/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/draft";
+      const headers=pubHeaders({"Content-Type":"application/json"});
+      const payload=JSON.stringify({answers:ans,curPage});
+      let r;
+      try{
+        r=await fetch(url,{method:"POST",headers,body:payload});
+      }catch(e){
+        if(!isNetworkError(e))throw e;
+        await queueOfflineRequest(url,headers,payload);
+        offlineQueued=true;savedAt=new Date().toISOString();
+      }
+      if(!offlineQueued){
+        if(!r.ok)throw new Error(await draftSaveError(r));
+        const d=await r.json();
+        savedAt=d.savedAt;
+      }
     }
     saveDraft(); // refresh the local draft too
     if(btn){btn.className="pv-savedraft saved";btn.textContent=offlineQueued?"⏳ Saved offline":"✓ Saved "+formatDraftTime(savedAt);setTimeout(()=>{if(btn){btn.className="pv-savedraft";btn.textContent="Save Draft";btn.disabled=false;}},3000);}
@@ -2788,7 +2810,7 @@ function wireSignaturePad(canvas){
       hidden.dispatchEvent(new Event("change",{bubbles:true}));
       setMsg("Signature saved.","ok");
     }catch(e){
-      if(OFFLINE_MODE&&isNetworkError(e)){
+      if(isNetworkError(e)){
         try{
           const ref=await storeOfflineUpload(new File([blob],`signature-${Date.now()}.png`,{type:"image/png"}),"signature");
           hidden.value=ref;
@@ -2977,7 +2999,7 @@ function wirePhotoField(wrap){
       // Offline the upload can never succeed, and refusing it would strand the whole
       // response: submit is blocked while a file is still pending. So the photo is
       // kept on the device and the answer points at it until it can be sent.
-      if(OFFLINE_MODE&&isNetworkError(e)){
+      if(isNetworkError(e)){
         try{
           const ref=await storeOfflineUpload(pending.file,fieldType);
           hidden.value=ref;
@@ -3155,7 +3177,7 @@ async function submit(){
   try{
     r=await fetch(url,{method:"POST",headers,body:JSON.stringify(body)});
   }catch(e){
-    if(OFFLINE_MODE&&isNetworkError(e)){
+    if(isNetworkError(e)){
       await queueOfflineRequest(url,headers,JSON.stringify(body));
       clearDraft();EDITING_RESPONSE_ID=null;document.getElementById("draftNote")?.remove();
       msg.className="msg ok";
