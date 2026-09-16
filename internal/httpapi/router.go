@@ -124,23 +124,24 @@ func (s *Server) Routes() http.Handler {
 	// --- viewer portal (for signed-in viewers) ---
 	// the role check is widened to "viewer","editor" because one account can now be a viewer
 	// on one form and an editor on another — the real per-form authorisation
-	// is still checked inside each handler via GetViewerPermission.
-	mux.Handle("GET /api/viewer/my-forms", s.authMW(s.requireRole(s.viewerMyForms, "viewer", "editor")))
-	mux.Handle("GET /api/viewer/forms/{id}", s.authMW(s.requireRole(s.viewerGetForm, "viewer", "editor")))
-	mux.Handle("GET /api/viewer/forms/{id}/permission", s.authMW(s.requireRole(s.viewerMyFormPermission, "viewer", "editor")))
-	mux.Handle("GET /api/viewer/forms/{id}/responses", s.authMW(s.requireRole(s.viewerListResponses, "viewer", "editor")))
-	mux.Handle("GET /api/viewer/forms/{id}/responses/{responseId}", s.authMW(s.requireRole(s.viewerGetResponse, "viewer", "editor")))
-	mux.Handle("GET /api/viewer/forms/{id}/responses.csv", s.authMW(s.requireRole(s.viewerExportResponses, "viewer", "editor")))
-	mux.Handle("GET /api/viewer/forms/{id}/responses.xlsx", s.authMW(s.requireRole(s.viewerExportResponsesXLSX, "viewer", "editor")))
+	// is still checked inside each handler via GetViewerPermission. "admin" is on the
+	// list for the same reason: an admin can be given access to a form they do not own.
+	mux.Handle("GET /api/viewer/my-forms", s.authMW(s.requireRole(s.viewerMyForms, "viewer", "editor", "admin")))
+	mux.Handle("GET /api/viewer/forms/{id}", s.authMW(s.requireRole(s.viewerGetForm, "viewer", "editor", "admin")))
+	mux.Handle("GET /api/viewer/forms/{id}/permission", s.authMW(s.requireRole(s.viewerMyFormPermission, "viewer", "editor", "admin")))
+	mux.Handle("GET /api/viewer/forms/{id}/responses", s.authMW(s.requireRole(s.viewerListResponses, "viewer", "editor", "admin")))
+	mux.Handle("GET /api/viewer/forms/{id}/responses/{responseId}", s.authMW(s.requireRole(s.viewerGetResponse, "viewer", "editor", "admin")))
+	mux.Handle("GET /api/viewer/forms/{id}/responses.csv", s.authMW(s.requireRole(s.viewerExportResponses, "viewer", "editor", "admin")))
+	mux.Handle("GET /api/viewer/forms/{id}/responses.xlsx", s.authMW(s.requireRole(s.viewerExportResponsesXLSX, "viewer", "editor", "admin")))
 
 	// --- editor portal (for signed-in editors) ---
-	mux.Handle("GET /api/editor/my-forms", s.authMW(s.requireRole(s.editorMyForms, "editor", "viewer")))
-	mux.Handle("GET /api/editor/forms/{id}", s.authMW(s.requireRole(s.editorGetForm, "editor", "viewer")))
-	mux.Handle("GET /api/editor/forms/{id}/responses", s.authMW(s.requireRole(s.editorListResponses, "editor", "viewer")))
-	mux.Handle("GET /api/editor/forms/{id}/responses/{responseId}", s.authMW(s.requireRole(s.editorGetResponse, "editor", "viewer")))
-	mux.Handle("PATCH /api/editor/forms/{id}/responses/{responseId}", s.authMW(s.requireRole(s.editorUpdateResponse, "editor", "viewer")))
-	mux.Handle("GET /api/editor/forms/{id}/responses.csv", s.authMW(s.requireRole(s.editorExportResponses, "editor", "viewer")))
-	mux.Handle("GET /api/editor/forms/{id}/responses.xlsx", s.authMW(s.requireRole(s.editorExportResponsesXLSX, "editor", "viewer")))
+	mux.Handle("GET /api/editor/my-forms", s.authMW(s.requireRole(s.editorMyForms, "editor", "viewer", "admin")))
+	mux.Handle("GET /api/editor/forms/{id}", s.authMW(s.requireRole(s.editorGetForm, "editor", "viewer", "admin")))
+	mux.Handle("GET /api/editor/forms/{id}/responses", s.authMW(s.requireRole(s.editorListResponses, "editor", "viewer", "admin")))
+	mux.Handle("GET /api/editor/forms/{id}/responses/{responseId}", s.authMW(s.requireRole(s.editorGetResponse, "editor", "viewer", "admin")))
+	mux.Handle("PATCH /api/editor/forms/{id}/responses/{responseId}", s.authMW(s.requireRole(s.editorUpdateResponse, "editor", "viewer", "admin")))
+	mux.Handle("GET /api/editor/forms/{id}/responses.csv", s.authMW(s.requireRole(s.editorExportResponses, "editor", "viewer", "admin")))
+	mux.Handle("GET /api/editor/forms/{id}/responses.xlsx", s.authMW(s.requireRole(s.editorExportResponsesXLSX, "editor", "viewer", "admin")))
 
 	// --- public: reference data (no login) ---
 	mux.HandleFunc("GET /api/wilayah", s.wilayahList)

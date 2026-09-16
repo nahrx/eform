@@ -91,6 +91,14 @@ setTimeout(function(){document.documentElement.classList.remove("auth-checking")
         </div>
       </section>
 
+      <section id="sharedSection" hidden>
+        <div class="bar"><h2>Shared with me</h2><span class="muted" style="font-size:12px">Forms owned by another admin where you were given viewer or editor access</span></div>
+        <div class="table-scroll">
+        <table class="cards"><thead><tr><th>Title</th><th>Access</th><th>Scope</th><th></th></tr></thead>
+        <tbody id="sharedRows"></tbody></table>
+        </div>
+      </section>
+
       <section id="usersSection" hidden>
         <div class="bar"><h2>User Management</h2><button class="btn" id="refreshUsers" type="button">↻ Reload</button></div>
 

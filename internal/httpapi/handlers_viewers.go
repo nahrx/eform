@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/csv"
@@ -10,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/nahrx/eform/internal/auth"
 	"github.com/nahrx/eform/internal/models"
 	"github.com/nahrx/eform/internal/store"
@@ -271,7 +273,7 @@ func (s *Server) bulkAssignViewerPermissions(w http.ResponseWriter, r *http.Requ
 			results[i] = res
 			continue
 		}
-		u, err := s.st.GetUserByUsername(r.Context(), email)
+		u, err := s.findAccountByEmail(r.Context(), email)
 		if errors.Is(err, store.ErrNotFound) {
 			b := make([]byte, 24)
 			if _, rerr := rand.Read(b); rerr != nil {
@@ -291,6 +293,9 @@ func (s *Server) bulkAssignViewerPermissions(w http.ResponseWriter, r *http.Requ
 			if err != nil {
 				res["status"] = "error"
 				res["error"] = "failed to create viewer account"
+				if isUniqueViolation(err) {
+					res["error"] = "an account with this email already exists under another username"
+				}
 				results[i] = res
 				continue
 			}
@@ -299,9 +304,11 @@ func (s *Server) bulkAssignViewerPermissions(w http.ResponseWriter, r *http.Requ
 			res["error"] = "failed to check the account"
 			results[i] = res
 			continue
-		} else if u.Role == "superadmin" || u.Role == "admin" {
+		} else if u.Role == "superadmin" {
+			// An admin may be given viewer access on a form another admin or the superadmin
+			// owns; a superadmin already sees every form, so there is nothing to grant.
 			res["status"] = "error"
-			res["error"] = "the email is registered as an admin account"
+			res["error"] = "the email is registered as a superadmin account"
 			results[i] = res
 			continue
 		} else if n := strings.TrimSpace(item.Note); n != "" {
@@ -682,4 +689,23 @@ func keepVisibleColumns(cols, visible []string) []string {
 		}
 	}
 	return out
+}
+
+// findAccountByEmail resolves the account an email in the add-viewer/add-editor dialog
+// refers to. Accounts created through those dialogs use the email as their username,
+// but one created by hand may carry the email under a different username — and since
+// users.email is unique, creating a second account would fail. Neither table of
+// respondents is consulted: filling a form in never creates a user account.
+func (s *Server) findAccountByEmail(ctx context.Context, email string) (*models.User, error) {
+	u, err := s.st.GetUserByUsername(ctx, email)
+	if !errors.Is(err, store.ErrNotFound) {
+		return u, err
+	}
+	return s.st.GetUserByEmail(ctx, email)
+}
+
+// isUniqueViolation reports whether err is PostgreSQL's unique_violation (23505).
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }

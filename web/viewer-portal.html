@@ -114,7 +114,7 @@ function initPortal(){
   (async()=>{
     try{
       const me=await api("/api/auth/me");
-      if(me.role!=="viewer"&&me.role!=="editor"){
+      if(me.role!=="viewer"&&me.role!=="editor"&&me.role!=="admin"){
         location.replace("/admin");
         return;
       }

@@ -62,6 +62,7 @@ let ACTIVE_NAV="forms";
   }
   revealAdminShell();
   load();
+  loadShared();
 })();
 /* Undoes the pre-paint gate in admin.html. Safe to call more than once. */
 function revealAdminShell(){document.documentElement.classList.remove("auth-checking");}
@@ -193,6 +194,33 @@ async function load(){
     if(answersTh) answersTh.style.display=canViewResults?"":"none";
     $("#rows").innerHTML=`<tr><td colspan="${(canViewResults?4:3)+1}" class="empty">${esc(e.message)}</td></tr>`;
   }
+}
+
+/* Forms another admin (or the superadmin) owns that this admin was given viewer or
+   editor access to. They never appear in /api/forms, which lists owned forms only, so
+   they get their own section — hidden when there are none, and never for the
+   superadmin, who owns the view of every form already. */
+async function loadShared(){
+  const sec=$("#sharedSection"),rows=$("#sharedRows");
+  if(!sec||!rows||MY_ROLE!=="admin"){if(sec)sec.hidden=true;return;}
+  try{
+    const [v,e]=await Promise.all([
+      api("/api/viewer/my-forms").catch(()=>({forms:[]})),
+      api("/api/editor/my-forms").catch(()=>({forms:[]})),
+    ]);
+    const items=[
+      ...(v.forms||[]).map(f=>({title:f.formTitle||f.title,id:f.formId||f.id,type:"viewer",scope:(f.respondentAccess==="all"?"All respondents":"Selected respondents")+(f.visibleFields&&f.visibleFields.length?` · ${f.visibleFields.length} fields`:" · all fields"),href:"/viewer-responses?id="+encodeURIComponent(f.formId||f.id)})),
+      ...(e.forms||[]).map(f=>({title:f.formTitle||f.title,id:f.id||f.formId,type:"editor",scope:f.respondentAccess==="all"?"All respondents":"Selected respondents",href:"/editor-responses?id="+encodeURIComponent(f.id||f.formId)})),
+    ];
+    if(!items.length){sec.hidden=true;return;}
+    rows.innerHTML=items.map(it=>`<tr onclick="location.href='${it.href}'" style="cursor:pointer">
+      <td><b>${esc(it.title||"Form")}</b></td>
+      <td><span class="tag">${it.type==="viewer"?"Viewer":"Editor"}</span></td>
+      <td class="muted">${esc(it.scope)}</td>
+      <td style="text-align:right"><a class="btn" href="${it.href}" onclick="event.stopPropagation()">View responses →</a></td>
+    </tr>`).join("");
+    sec.hidden=false;
+  }catch(_){sec.hidden=true;}
 }
 
 /* ======================================================

@@ -278,7 +278,7 @@ func (s *Server) bulkAssignEditorPermissions(w http.ResponseWriter, r *http.Requ
 			results[i] = res
 			continue
 		}
-		u, err := s.st.GetUserByUsername(r.Context(), email)
+		u, err := s.findAccountByEmail(r.Context(), email)
 		if errors.Is(err, store.ErrNotFound) {
 			b := make([]byte, 24)
 			if _, rerr := rand.Read(b); rerr != nil {
@@ -298,6 +298,9 @@ func (s *Server) bulkAssignEditorPermissions(w http.ResponseWriter, r *http.Requ
 			if err != nil {
 				res["status"] = "error"
 				res["error"] = "failed to create editor account"
+				if isUniqueViolation(err) {
+					res["error"] = "an account with this email already exists under another username"
+				}
 				results[i] = res
 				continue
 			}
@@ -306,9 +309,11 @@ func (s *Server) bulkAssignEditorPermissions(w http.ResponseWriter, r *http.Requ
 			res["error"] = "failed to check the account"
 			results[i] = res
 			continue
-		} else if u.Role == "superadmin" || u.Role == "admin" {
+		} else if u.Role == "superadmin" {
+			// An admin may be given editor access on a form another admin or the superadmin
+			// owns; a superadmin already sees every form, so there is nothing to grant.
 			res["status"] = "error"
-			res["error"] = "the email is registered as an admin account"
+			res["error"] = "the email is registered as a superadmin account"
 			results[i] = res
 			continue
 		} else if n := strings.TrimSpace(item.Note); n != "" {

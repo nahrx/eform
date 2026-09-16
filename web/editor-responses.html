@@ -90,7 +90,7 @@ setTimeout(function(){document.documentElement.classList.remove("auth-checking")
 <body>
 <div class="shell">
   <header class="topbar">
-    <a class="btn" href="/viewer-portal">← Portal</a>
+    <a class="btn" id="backLink" href="/viewer-portal">← Portal</a>
     <span class="form-title" id="formTitle">Loading…</span>
     <span class="count-badge" id="countBadge" hidden></span>
     <button class="btn" id="btnFilter">
@@ -188,7 +188,9 @@ async function init(){
     // form and a viewer on another); authorisation for THIS form is decided by
     // the /api/editor/forms/{id} call below, not the account's global role.
     const me=await api("/api/auth/me");
-    if(me.role!=="editor"&&me.role!=="viewer"){location.replace("/viewer-portal");return;}
+    if(me.role!=="editor"&&me.role!=="viewer"&&me.role!=="admin"){location.replace("/viewer-portal");return;}
+    // An admin reaches this page from the dashboard, so that is where "back" should lead.
+    if(me.role==="admin"){const b=document.getElementById("backLink");if(b){b.href="/admin";b.textContent="← Dashboard";}}
 
     const form=await api("/api/editor/forms/"+FORM_ID);
     SCHEMA=form.schema;
