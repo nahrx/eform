@@ -346,25 +346,36 @@ const SHARE_TOKEN=location.pathname.split("/").filter(Boolean).pop();
    bookmark takes its picture from the favicon — of which there was none, so the icon
    came out blank. Both now exist from the first paint, and neither depends on a
    network round trip that a field connection may take seconds to finish. */
-(function installHeadIcons(){
-  const icon=size=>"/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/icon.png?size="+size;
-  const add=(rel,href,extra)=>{
-    const l=document.createElement("link");l.rel=rel;l.href=href;
-    if(extra)Object.assign(l,extra);
-    document.head.appendChild(l);
+let HEAD_ASSET_NONCE=0;
+function installHeadIcons(){
+  const bust=HEAD_ASSET_NONCE?"&v="+HEAD_ASSET_NONCE:"";
+  const base="/api/public/forms/"+encodeURIComponent(SHARE_TOKEN);
+  const icon=size=>base+"/icon.png?size="+size+bust;
+  // Marked so a later call replaces its own tags rather than piling a second set on top.
+  document.head.querySelectorAll("[data-pv-head]").forEach(el=>el.remove());
+  const add=(tag,props)=>{
+    const l=document.createElement(tag);Object.assign(l,props);
+    l.dataset.pvHead="1";document.head.appendChild(l);
   };
-  add("icon",icon(32),{type:"image/png",sizes:"32x32"});
-  add("icon",icon(192),{type:"image/png",sizes:"192x192"});
-  add("apple-touch-icon",icon(180));
-  const theme=document.createElement("meta");
-  theme.name="theme-color";theme.content="#0e7490";document.head.appendChild(theme);
+  add("link",{rel:"icon",href:icon(32),type:"image/png",sizes:"32x32"});
+  add("link",{rel:"icon",href:icon(192),type:"image/png",sizes:"192x192"});
+  add("link",{rel:"apple-touch-icon",href:icon(180)});
+  add("meta",{name:"theme-color",content:"#0e7490"});
   // The manifest 404s for forms without offline mode — those are not installable, which
   // is deliberate. Declaring it unconditionally costs one ignorable console warning and
   // removes the race for the forms that are.
-  const m=document.createElement("link");m.id="pvManifestLink";m.rel="manifest";
-  m.href="/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/manifest.webmanifest";
-  document.head.appendChild(m);
-})();
+  add("link",{id:"pvManifestLink",rel:"manifest",
+    href:base+"/manifest.webmanifest"+(HEAD_ASSET_NONCE?"?v="+HEAD_ASSET_NONCE:"")});
+}
+installHeadIcons();
+
+/* On a password-protected share the parse-time requests above come back 401: the browser
+   fetches the manifest and the icons itself, and cannot send the X-Share-Password header.
+   Unlocking the form sets a cookie that those requests do carry, so the links are attached
+   again — under a fresh URL, or the browser would simply reuse the failed response. That
+   re-run is what makes Chrome re-check installability and finally fire
+   beforeinstallprompt, which is what puts the "Install App" button on screen. */
+function refreshHeadIcons(){HEAD_ASSET_NONCE=Date.now();installHeadIcons();}
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const txt=v=>v==null?"":(typeof v==="object"?(v.id||Object.values(v)[0]||""):v);
 
@@ -1709,7 +1720,7 @@ function clearRespSession(){
 function setRoot(html){document.getElementById("root").innerHTML=html;}
 function askPassword(msg){
   setRoot(`<div class="init-wrap"><div class="pw-card"><h3>Form locked</h3><p class="pw-sub">${esc(msg||"Enter the password to unlock the form")}</p><input id="pw" type="password" placeholder="Password…"><button class="btn primary" id="pwbtn" style="width:100%">Open</button></div></div>`);
-  document.getElementById("pwbtn").onclick=()=>{PW=document.getElementById("pw").value;setRoot('<div class="init-wrap"><span class="init-msg">Loading…</span></div>');fetchForm().catch(e=>showErr(e.message));};
+  document.getElementById("pwbtn").onclick=()=>{PW=document.getElementById("pw").value;setRoot('<div class="init-wrap"><span class="init-msg">Loading…</span></div>');fetchForm().then(refreshHeadIcons).catch(e=>showErr(e.message));};
 }
 function showErr(m){setRoot(`<div class="init-wrap"><div class="pw-card"><div class="msg err" style="display:block">${esc(m)}</div></div></div>`);}
 

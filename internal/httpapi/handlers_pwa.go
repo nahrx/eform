@@ -40,7 +40,7 @@ func offlineSettingsOf(schema json.RawMessage) bool {
 // this combination (form published, share set to multi-response, and the offline toggle on in the builder).
 // The manifest/icon endpoints validate this server-side too (not only in the client) as defence in depth.
 func (s *Server) resolvePWAForm(w http.ResponseWriter, r *http.Request) (*models.Form, bool) {
-	sh, ok := s.resolveShare(w, r)
+	sh, ok := s.resolveShareForBrowserAsset(w, r)
 	if !ok {
 		return nil, false
 	}
@@ -117,7 +117,7 @@ func (s *Server) publicManifest(w http.ResponseWriter, r *http.Request) {
 // had no icon to fall back on: "Add to home screen" on a page Chrome has not judged
 // installable creates a plain bookmark, and a plain bookmark uses the favicon.
 func (s *Server) publicIcon(w http.ResponseWriter, r *http.Request) {
-	sh, ok := s.resolveShare(w, r)
+	sh, ok := s.resolveShareForBrowserAsset(w, r)
 	if !ok {
 		return
 	}

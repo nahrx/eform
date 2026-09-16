@@ -19,6 +19,17 @@ import (
 
 // resolveShare validates the token: active, not expired, and (when required) the password matches.
 func (s *Server) resolveShare(w http.ResponseWriter, r *http.Request) (*models.Share, bool) {
+	return s.resolveShareWith(w, r, false)
+}
+
+// resolveShareForBrowserAsset resolves the share for the requests the BROWSER issues by
+// itself — the manifest and the icons. Those cannot carry the X-Share-Password header, so
+// the unlock cookie counts as the password there. See share_password.go.
+func (s *Server) resolveShareForBrowserAsset(w http.ResponseWriter, r *http.Request) (*models.Share, bool) {
+	return s.resolveShareWith(w, r, true)
+}
+
+func (s *Server) resolveShareWith(w http.ResponseWriter, r *http.Request, allowUnlockCookie bool) (*models.Share, bool) {
 	token := r.PathValue("token")
 	sh, err := s.st.GetShareByToken(r.Context(), token)
 	if errors.Is(err, store.ErrNotFound) {
@@ -38,8 +49,15 @@ func (s *Server) resolveShare(w http.ResponseWriter, r *http.Request) (*models.S
 		return nil, false
 	}
 	if sh.PasswordHash != nil {
-		pw := r.Header.Get("X-Share-Password")
-		if !auth.CheckPassword(*sh.PasswordHash, pw) {
+		cookieOK := s.sharePWCookieOK(r, sh)
+		if auth.CheckPassword(*sh.PasswordHash, r.Header.Get("X-Share-Password")) {
+			// The password just checked out, so hand the browser the cookie it needs for
+			// the requests it makes on its own — the manifest and the icons, without which
+			// the form is not installable as a PWA.
+			if !cookieOK {
+				s.setSharePWCookie(w, sh)
+			}
+		} else if !(allowUnlockCookie && cookieOK) {
 			writeErr(w, http.StatusUnauthorized, "incorrect link password")
 			return nil, false
 		}
