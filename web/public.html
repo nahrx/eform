@@ -364,7 +364,13 @@ function installHeadIcons(){
   // The manifest 404s for forms without offline mode — those are not installable, which
   // is deliberate. Declaring it unconditionally costs one ignorable console warning and
   // removes the race for the forms that are.
-  add("link",{id:"pvManifestLink",rel:"manifest",
+  //
+  // crossOrigin "use-credentials" is what makes the browser send cookies with the
+  // manifest request. Without it the manifest is fetched with credentials omitted —
+  // even from the same origin — so the unlock cookie a password-protected share hands
+  // out (see refreshHeadIcons) never reached the server, the manifest stayed 401, and
+  // the form was never judged installable: no "Install App" button, password or not.
+  add("link",{id:"pvManifestLink",rel:"manifest",crossOrigin:"use-credentials",
     href:base+"/manifest.webmanifest"+(HEAD_ASSET_NONCE?"?v="+HEAD_ASSET_NONCE:"")});
 }
 installHeadIcons();
@@ -457,7 +463,10 @@ async function warmOfflineCache(){
                 "/searchable-select.js","/geo-map.js","/image-compress.js",
                 "/vendor/leaflet/leaflet.js","/vendor/leaflet/leaflet.css"];
     // One at a time: with addAll a single failure would discard the whole warm-up.
-    await Promise.all(urls.map(u=>c.add(u).catch(()=>{})));
+    // The instrument request carries the share password like the page's own fetch
+    // does; without it a protected share answered 401 here, nothing was cached, and
+    // the installed app opened to an error the moment it was offline.
+    await Promise.all(urls.map(u=>c.add(PW?new Request(u,{headers:{"X-Share-Password":PW}}):u).catch(()=>{})));
   }catch(_e){}
 }
 function renderInstallButton(){

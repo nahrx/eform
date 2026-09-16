@@ -29,6 +29,25 @@ func (s *Server) resolveShareForBrowserAsset(w http.ResponseWriter, r *http.Requ
 	return s.resolveShareWith(w, r, true)
 }
 
+// resolveShareIgnoringPassword checks that the link exists and is live, and nothing
+// else. Only for assets that give away nothing the password protects (the icon).
+func (s *Server) resolveShareIgnoringPassword(w http.ResponseWriter, r *http.Request) (*models.Share, bool) {
+	sh, err := s.st.GetShareByToken(r.Context(), r.PathValue("token"))
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "link not found")
+		return nil, false
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "server error")
+		return nil, false
+	}
+	if !sh.IsActive || (sh.ExpiresAt != nil && time.Now().After(*sh.ExpiresAt)) {
+		writeErr(w, http.StatusGone, "the link has been disabled")
+		return nil, false
+	}
+	return sh, true
+}
+
 func (s *Server) resolveShareWith(w http.ResponseWriter, r *http.Request, allowUnlockCookie bool) (*models.Share, bool) {
 	token := r.PathValue("token")
 	sh, err := s.st.GetShareByToken(r.Context(), token)

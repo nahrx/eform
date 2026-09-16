@@ -116,8 +116,13 @@ func (s *Server) publicManifest(w http.ResponseWriter, r *http.Request) {
 // page's favicon and apple-touch-icon, and gating it behind offline mode was why a phone
 // had no icon to fall back on: "Add to home screen" on a page Chrome has not judged
 // installable creates a plain bookmark, and a plain bookmark uses the favicon.
+//
+// Nor is it behind the share password. The icon is the first letter of the title on a
+// coloured square — nothing the password guards — and the browser fetches the manifest's
+// icons on its own terms, not always with cookies, so a locked icon could still leave
+// an installed app blank.
 func (s *Server) publicIcon(w http.ResponseWriter, r *http.Request) {
-	sh, ok := s.resolveShareForBrowserAsset(w, r)
+	sh, ok := s.resolveShareIgnoringPassword(w, r)
 	if !ok {
 		return
 	}
