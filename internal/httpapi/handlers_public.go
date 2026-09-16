@@ -225,7 +225,15 @@ func (s *Server) publicSubmit(w http.ResponseWriter, r *http.Request) {
 		} else {
 			// Create a new row — make sure no unfinished draft is still active, unless the
 			// share lets a respondent keep several going at once.
-			if !in.Draft && !sh.AllowNewWhileDraft {
+			//
+			// The check covers a new draft as well as a new submission. It used to skip
+			// drafts (`!in.Draft && ...`), which left the rule to the database: a second
+			// "Save Draft" hit the one-draft-per-respondent unique index and came back as
+			// a bare "failed to save response". That index is gone as of migration 0023 —
+			// a share with allow_new_while_draft may now hold several drafts — so the
+			// limit is enforced here, where the per-share setting is known and the message
+			// can say what actually went wrong.
+			if !sh.AllowNewWhileDraft {
 				hasDraft, chkErr := s.st.HasDraftResponse(r.Context(), sh.FormID, rc.RespondentID)
 				if chkErr != nil {
 					writeErr(w, http.StatusInternalServerError, "server error")
@@ -251,6 +259,15 @@ func (s *Server) publicSubmit(w http.ResponseWriter, r *http.Request) {
 		resp, err = s.st.UpsertResponse(r.Context(), sh.FormID, &sid, rc.RespondentID, in.Answers, metaJSON)
 	}
 	if err != nil {
+		// A database that has not had migration 0023 applied yet still carries the
+		// one-draft-per-respondent unique index, so a second draft arrives here as a
+		// unique violation. Say so instead of returning a blank 500.
+		if store.IsUniqueViolation(err) {
+			log.Printf("[submit] form %s respondent %s: %v", sh.FormID, rc.RespondentID, err)
+			writeErr(w, http.StatusConflict, "You still have an unfinished draft — please continue or discard it first")
+			return
+		}
+		log.Printf("[submit] form %s respondent %s: %v", sh.FormID, rc.RespondentID, err)
 		writeErr(w, http.StatusInternalServerError, "failed to save response")
 		return
 	}
@@ -303,7 +320,7 @@ func (s *Server) unsubmitResponse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	responseID := r.PathValue("responseId")
-	resp, err := s.st.UnsubmitResponse(r.Context(), responseID, rc.RespondentID, sh.FormID)
+	resp, err := s.st.UnsubmitResponse(r.Context(), responseID, rc.RespondentID, sh.FormID, sh.AllowNewWhileDraft)
 	if errors.Is(err, store.ErrNotFound) {
 		writeErr(w, http.StatusNotFound, "response not found or does not belong to you")
 		return

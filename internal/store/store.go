@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nahrx/eform/internal/models"
 )
@@ -1085,6 +1086,14 @@ func (s *Store) CountAllResponsesByForm(ctx context.Context, formID string, f Re
 	return n, err
 }
 
+// IsUniqueViolation reports whether err is PostgreSQL's unique-violation (SQLSTATE 23505).
+// Callers use it to turn a constraint the application also enforces into a 409 with a
+// readable message, rather than a generic 500.
+func IsUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+}
+
 // HasDraftResponse reports whether the respondent still has an active draft for this form.
 func (s *Store) HasDraftResponse(ctx context.Context, formID, respondentID string) (bool, error) {
 	var exists bool
@@ -1122,15 +1131,18 @@ func (s *Store) UpdateMultiResponseDraft(ctx context.Context, id, respondentID, 
 }
 
 // UnsubmitResponse moves a response from 'submitted' back to 'draft' so it can be edited.
-// It fails if the same respondent already has another draft for the same form.
-func (s *Store) UnsubmitResponse(ctx context.Context, id, respondentID, formID string) (*models.Response, error) {
-	var draftExists bool
-	_ = s.pool.QueryRow(ctx,
-		`SELECT EXISTS(SELECT 1 FROM form_responses WHERE form_id=$1 AND respondent_id=$2 AND status='draft' AND id!=$3)`,
-		formID, respondentID, id,
-	).Scan(&draftExists)
-	if draftExists {
-		return nil, errors.New("another draft already exists — please finish or discard it first")
+// Unless allowWhileDraft is set (the share lets a respondent keep several responses going
+// at once), it fails if the same respondent already has another draft for the same form.
+func (s *Store) UnsubmitResponse(ctx context.Context, id, respondentID, formID string, allowWhileDraft bool) (*models.Response, error) {
+	if !allowWhileDraft {
+		var draftExists bool
+		_ = s.pool.QueryRow(ctx,
+			`SELECT EXISTS(SELECT 1 FROM form_responses WHERE form_id=$1 AND respondent_id=$2 AND status='draft' AND id!=$3)`,
+			formID, respondentID, id,
+		).Scan(&draftExists)
+		if draftExists {
+			return nil, errors.New("another draft already exists — please finish or discard it first")
+		}
 	}
 	r := &models.Response{}
 	err := s.pool.QueryRow(ctx,
