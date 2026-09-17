@@ -405,6 +405,24 @@
     return out.sort((a, b) => (b.failedAt || 0) - (a.failedAt || 0));
   }
 
+  /* Every request still waiting to go out, oldest first, bodies included. The
+     respondent's own list uses it to show what this device is holding — a response
+     submitted offline is not on the server yet, and a list that leaves it out reads
+     as "your work is gone". Rejected records are not included; they have their own
+     list (listFailed). */
+  async function listQueued() {
+    try {
+      const db = await openDB();
+      const q = await getAll(db, QUEUE);
+      return q
+        .filter((r) => !r.failed)
+        .sort((a, b) => a.ts - b.ts)
+        .map((r) => ({ id: r.id, url: r.url, body: r.body, ts: r.ts }));
+    } catch (_e) {
+      return [];
+    }
+  }
+
   const storeOf = (kind) => (kind === "file" ? FILES : QUEUE);
 
   /* Put a record back in the queue. The attempt counter is reset too: the reason
@@ -508,7 +526,7 @@
     CACHE_NAME, MAX_ATTEMPTS, MAX_AGE_MS,
     openDB, runTx, getAll, add, put, del,
     storeFile, getFile, queueRequest, stats, resolveRefs, flush,
-    listFailed, retryFailed, retryAllFailed, discardFailed, exportFailed,
+    listFailed, retryFailed, retryAllFailed, discardFailed, exportFailed, listQueued,
     reportPayload,
   };
 })(self);

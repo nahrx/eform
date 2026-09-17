@@ -401,6 +401,12 @@ let ROW_DISPLAY=[];        // dataKeys the share wants shown on each row of the 
 let ALLOW_NEW_WHILE_DRAFT=false; // multi-response: may a new response start while a draft is open?
 let ACCESS_MODE="public";  // 'public' or 'restricted'
 let EDITING_RESPONSE_ID=null; // the form_responses row id currently being edited (draft mode)
+/* Multi-response: which response the draft on this device belongs to. The server id
+   once there is one, otherwise a "local-…" id the device made up — sent along with
+   every save so the server can tell "the same new response, saved again" from "another
+   new response". One key per response, so several drafts can live side by side and
+   starting a new response no longer wipes the one before it. */
+let LOCAL_DRAFT_ID=null;
 let DRAFT_RESTORED_AT=null; // timestamp of the local draft in use (null when there is none)
 let AUTOSAVE_TIMER=null;
 let PENDING_UPLOADS={};
@@ -417,7 +423,32 @@ try{RESP_USER=JSON.parse(localStorage.getItem("eform_resp_user")||"null");}catch
 
 /* ---- local draft/autosave: keep progress in localStorage so it is not lost if
    the tab closes or the connection drops before "Submit". ---- */
-function draftKey(){return RESP_USER?`eform_draft_${SHARE_TOKEN}_${RESP_USER.id}`:null;}
+function draftKeyPrefix(){return RESP_USER?`eform_draft_${SHARE_TOKEN}_${RESP_USER.id}`:null;}
+function draftKey(){
+  const p=draftKeyPrefix();if(!p)return null;
+  if(!MULTI_RESPONSE)return p;                       // single-response: one slot, as before
+  // No slot outside a response — on the list, or right after a submit — so the
+  // autosave timer cannot conjure a ghost draft out of answers that were just sent.
+  return LOCAL_DRAFT_ID?p+"_"+LOCAL_DRAFT_ID:null;
+}
+function newLocalId(){return "local-"+((self.crypto&&crypto.randomUUID)?crypto.randomUUID():Date.now().toString(36)+Math.random().toString(36).slice(2));}
+// Every per-response draft this device holds for the signed-in respondent.
+function listLocalDrafts(){
+  const p=draftKeyPrefix();if(!p)return [];
+  const out=[];
+  try{
+    for(let i=0;i<localStorage.length;i++){
+      const k=localStorage.key(i);if(!k||!k.startsWith(p+"_"))continue;
+      try{const d=JSON.parse(localStorage.getItem(k));if(d&&d.answers)out.push({localId:k.slice(p.length+1),answers:d.answers,curPage:d.curPage||0,savedAt:d.savedAt||null});}catch(_){}
+    }
+  }catch(_){}
+  return out;
+}
+// Once the server has given a new response its id, the draft moves under that id.
+function migrateLocalDraft(fromId,toId){
+  const p=draftKeyPrefix();if(!p||!fromId||!toId||fromId===toId)return;
+  try{const v=localStorage.getItem(p+"_"+fromId);if(v!=null){localStorage.setItem(p+"_"+toId,v);localStorage.removeItem(p+"_"+fromId);}}catch(_){}
+}
 function saveDraft(){
   const key=draftKey();if(!key)return;
   try{localStorage.setItem(key,JSON.stringify({answers,curPage,savedAt:new Date().toISOString()}));}catch(_){}
@@ -1058,14 +1089,16 @@ async function fetchMyResponse(){
   }catch{return null;}
 }
 
+/* null, not [], when the server could not be asked — the list then falls back to
+   what this device knows (see composeResponseList) instead of reading as empty. */
 async function fetchMyResponses(){
   try{
     const r=await fetch("/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/my-responses",
       {headers:pubHeaders({})});
-    if(!r.ok)return [];
+    if(!r.ok)return null;
     const d=await r.json();
     return d.responses||[];
-  }catch{return [];}
+  }catch{return null;}
 }
 
 function renderAccessDenied(meta){
@@ -1144,11 +1177,54 @@ async function refineRowDisplayLabels(responses){
   }
 }
 
-let _responseMap={};
+let _responseMap={},_listOffline=false;
+const respListCacheKey=()=>RESP_USER?`eform_resplist_${SHARE_TOKEN}_${RESP_USER.id}`:null;
+/* What the respondent sees as "my responses" is more than what the server has: a
+   response submitted offline is still in the queue, a draft saved offline is on this
+   device, and offline the server cannot be asked at all. So the list is assembled from
+   three sources — the server (or, offline, the last list it gave), the outgoing
+   queue, and the drafts kept here — matched up by server id or by the device's own
+   localId so one response appears once. */
+async function composeResponseList(server){
+  _listOffline=!Array.isArray(server);
+  let base=[];
+  const ck=respListCacheKey();
+  if(!_listOffline){base=server.map(r=>({...r}));try{if(ck)localStorage.setItem(ck,JSON.stringify(server));}catch(_){}}
+  else{try{base=ck?(JSON.parse(localStorage.getItem(ck)||"[]")||[]):[];}catch(_){base=[];}}
+  base.forEach(r=>{const m=parseAnswers(r.meta);if(m&&m.localId)r.localId=String(m.localId);});
+  // A draft from before per-response keys existed keeps its place under a fixed id.
+  const p=draftKeyPrefix();
+  if(p){try{const legacy=localStorage.getItem(p);if(legacy!=null){localStorage.setItem(p+"_local-legacy",legacy);localStorage.removeItem(p);}}catch(_){}}
+  const byId=new Map(base.map(r=>[r.id,r])),byLocal=new Map(base.filter(r=>r.localId).map(r=>[r.localId,r]));
+  const respUrl="/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/responses";
+  let queued=[];try{queued=OQ?await OQ.listQueued():[];}catch(_){}
+  for(const q of queued){
+    if(q.url!==respUrl)continue;
+    let b;try{b=JSON.parse(q.body);}catch(_){continue;}
+    const status=b.draft?"draft":"submitted",ts=new Date(q.ts).toISOString();
+    let row=b.responseId?byId.get(b.responseId):(b.localId?byLocal.get(b.localId):null);
+    if(row){row.answers=b.answers||{};row.status=status;row.submittedAt=ts;row._pending=true;}
+    else{
+      const localId=b.localId||("queued-"+q.id);
+      row={id:"queued:"+localId,localId,status,answers:b.answers||{},submittedAt:ts,_pending:true};
+      base.push(row);byLocal.set(localId,row);
+    }
+  }
+  for(const d of listLocalDrafts()){
+    if(byId.has(d.localId)||byLocal.has(d.localId))continue;   // its response is listed already
+    if(!d.answers||!Object.keys(d.answers).length)continue;
+    base.push({id:"local:"+d.localId,localId:d.localId,status:"draft",answers:d.answers,submittedAt:d.savedAt||new Date(0).toISOString(),_local:true});
+  }
+  base.sort((a,b)=>new Date(b.submittedAt||0)-new Date(a.submittedAt||0));
+  return base;
+}
 // Beyond this many responses the list becomes its own scroll area rather than pushing
 // the rest of the card off the screen.
 const RESP_LIST_SCROLL_AFTER=10;
-function renderMyResponsesList(meta,responses){
+async function renderMyResponsesList(meta,responses){
+  renderMyResponsesListNow(meta,await composeResponseList(responses));
+}
+function renderMyResponsesListNow(meta,responses){
   const title=txt(meta.title||txt(SCHEMA?.title)||"Form");
   document.title=title;
   _responseMap={};responses.forEach(r=>{_responseMap[r.id]=r;});
@@ -1162,17 +1238,25 @@ function renderMyResponsesList(meta,responses){
   const hasDraft=responses.some(r=>r.status==="draft");
   const rows=responses.map((r,i)=>{
     const isDraft=r.status==="draft";
-    const badge=isDraft
-      ?`<span class="resp-badge resp-badge-draft">Draft</span>`
+    // Not on the server yet: still in the outgoing queue, or a draft kept only here.
+    const unsent=!!(r._pending||r._local);
+    const badge=r._pending
+      ?`<span class="resp-badge resp-badge-draft">⏳ ${isDraft?"Draft · waiting to be sent":"Waiting to be sent"}</span>`
+      :r._local?`<span class="resp-badge resp-badge-draft">Draft · on this device</span>`
+      :isDraft?`<span class="resp-badge resp-badge-draft">Draft</span>`
       :`<span class="resp-badge resp-badge-ok">Submitted</span>`;
     // A submitted answer stays viewable at any time, regardless of ALLOW (a closed
     // share) — only "Unsubmit" requires the share to still be active.
     // Clicking the container itself (rather than a separate button) opens "View Response".
+    // A submission that has not reached the server can be neither viewed there nor
+    // unsubmitted; it simply waits.
     const action=isDraft
       ?`<button class="btn btn-xs" onclick="editDraftResponseById('${esc(r.id)}')">Continue</button>`
+      :unsent?""
       :`<button class="btn btn-xs" onclick="event.stopPropagation();unsubmitResponseAPI('${r.id}')">Unsubmit</button>`;
-    const rowAttrs=isDraft?"":` onclick="viewSubmittedResponse('${esc(r.id)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();viewSubmittedResponse('${esc(r.id)}')}" role="button" tabindex="0"`;
-    return `<div class="resp-item${isDraft?"":" resp-item-clickable"}"${rowAttrs}>
+    const clickable=!isDraft&&!unsent;
+    const rowAttrs=clickable?` onclick="viewSubmittedResponse('${esc(r.id)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();viewSubmittedResponse('${esc(r.id)}')}" role="button" tabindex="0"`:"";
+    return `<div class="resp-item${clickable?" resp-item-clickable":""}"${rowAttrs}>
       <div class="resp-item-left"><span class="resp-num" data-rid="${esc(r.id)}" title="Response ${responses.length-i}">${esc(rowDisplayLabel(r,responses.length-i))}</span>${badge}</div>
       <div class="resp-item-right">
         <span class="resp-date">${isDraft?"Draft · "+fmt(r.submittedAt):fmt(r.submittedAt)}</span>
@@ -1181,6 +1265,7 @@ function renderMyResponsesList(meta,responses){
     </div>`;
   }).join("");
   const emptyNote=responses.length===0?`<div class="muted" style="padding:12px;text-align:center;font-size:13px">No responses yet.</div>`:"";
+  const offlineNote=_listOffline?`<p class="gate-sub muted" style="font-size:12px;margin:0 0 8px">⚠ Offline — showing what is stored on this device. The list refreshes once you are back online.</p>`:"";
   const newBtn=ALLOW&&(!hasDraft||ALLOW_NEW_WHILE_DRAFT)
     ?`<button class="btn primary" style="margin-top:16px;width:100%" onclick="startNewResponse()">+ New Response</button>`
     :(ALLOW&&hasDraft?`<p class="gate-sub muted" style="font-size:12px;margin-top:12px">Finish or discard the existing draft before adding a new response.</p>`:"");
@@ -1189,6 +1274,7 @@ function renderMyResponsesList(meta,responses){
     <div class="gate-icon">📋</div>
     <h2>${esc(title)}</h2>
     <p class="gate-sub">${responses.length===0?"You have no responses for this form yet.":"You have "+responses.length+" responses for this form."}</p>
+    ${offlineNote}
     <div class="resp-list${responses.length>RESP_LIST_SCROLL_AFTER?" resp-list-scroll":""}">${emptyNote}${rows}</div>
     ${newBtn}
   </div></div>`);
@@ -1215,8 +1301,9 @@ function startNewResponse(){
   resetPendingUploads();
   EDITING_RESPONSE_ID=null;
   EXISTING_RESPONSE=null;
+  LOCAL_DRAFT_ID=newLocalId();   // its own draft slot — the others stay untouched
+  DRAFT_RESTORED_AT=null;
   answers={};
-  clearDraft();
   render({title:txt(SCHEMA?.title)||"Form",schema:SCHEMA});
   goToPage(0);
 }
@@ -1226,10 +1313,23 @@ function editDraftResponseById(id){
 }
 function editDraftResponse(resp){
   resetPendingUploads();
-  EDITING_RESPONSE_ID=resp.id;
   EXISTING_RESPONSE=null;
-  try{answers=typeof resp.answers==="string"?JSON.parse(resp.answers):(resp.answers||{});}catch{answers={};}
-  clearDraft();saveDraft(); // sync to localStorage as well
+  let ans={};try{ans=typeof resp.answers==="string"?JSON.parse(resp.answers):(resp.answers||{});}catch{ans={};}
+  if(resp._local||(resp._pending&&String(resp.id).startsWith("queued:"))){
+    // Not on the server yet: keep saving under the device id; the server will match it.
+    EDITING_RESPONSE_ID=null;LOCAL_DRAFT_ID=resp.localId||newLocalId();
+  }else{
+    EDITING_RESPONSE_ID=resp.id;
+    if(resp.localId)migrateLocalDraft(resp.localId,resp.id);
+    LOCAL_DRAFT_ID=resp.id;
+  }
+  // A copy on this device that is newer than what the list shows holds edits that
+  // never reached the server (made offline, or before the last save) — it wins.
+  const local=loadDraft();
+  const localNewer=!!(local&&local.answers&&Object.keys(local.answers).length&&local.savedAt&&(!resp.submittedAt||new Date(local.savedAt)>new Date(resp.submittedAt)));
+  answers=localNewer?local.answers:ans;
+  DRAFT_RESTORED_AT=localNewer?local.savedAt:null;
+  saveDraft(); // sync to localStorage as well
   render({title:txt(SCHEMA?.title)||"Form",schema:SCHEMA});
   goToPage(0);
 }
@@ -1675,6 +1775,7 @@ async function saveDraftToServer(){
       // For multi-response, save the draft into form_responses (not response_drafts)
       const body={answers:ans,draft:true,schemaVersionId:SCHEMA_VERSION_ID};
       if(EDITING_RESPONSE_ID)body.responseId=EDITING_RESPONSE_ID;
+      else body.localId=LOCAL_DRAFT_ID||(LOCAL_DRAFT_ID=newLocalId());
       const url="/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/responses";
       const headers=pubHeaders({"Content-Type":"application/json"});
       let r;
@@ -1690,6 +1791,7 @@ async function saveDraftToServer(){
         if(!r.ok)throw new Error(await draftSaveError(r));
         const d=await r.json();
         EDITING_RESPONSE_ID=d.id; // keep the id so the next save updates the same row
+        if(LOCAL_DRAFT_ID!==d.id){migrateLocalDraft(LOCAL_DRAFT_ID,d.id);LOCAL_DRAFT_ID=d.id;}
         savedAt=d.submittedAt;
       }
     }else{
@@ -3192,6 +3294,7 @@ async function submit(){
   // names the instrument it was filled against rather than today's.
   const body={answers:ans,schemaVersionId:SCHEMA_VERSION_ID};
   if(EDITING_RESPONSE_ID)body.responseId=EDITING_RESPONSE_ID;
+  else if(MULTI_RESPONSE)body.localId=LOCAL_DRAFT_ID||(LOCAL_DRAFT_ID=newLocalId());
   const url="/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/responses";
   let r;
   try{
@@ -3199,7 +3302,7 @@ async function submit(){
   }catch(e){
     if(isNetworkError(e)){
       await queueOfflineRequest(url,headers,JSON.stringify(body));
-      clearDraft();EDITING_RESPONSE_ID=null;document.getElementById("draftNote")?.remove();
+      clearDraft();EDITING_RESPONSE_ID=null;LOCAL_DRAFT_ID=null;document.getElementById("draftNote")?.remove();
       msg.className="msg ok";
       msg.textContent="Saved on this device — it will be sent automatically once you are back online.";
       // Success (saved) — the button stays disabled so it cannot be submitted twice;
@@ -3217,7 +3320,7 @@ async function submit(){
     if(!r.ok)throw new Error(d.error||"Failed to submit");
     const wasEditingCancelled=!!EDITING_RESPONSE_ID;
     clearDraft();
-    EDITING_RESPONSE_ID=null;
+    EDITING_RESPONSE_ID=null;LOCAL_DRAFT_ID=null;
     document.getElementById("draftNote")?.remove();
     if(MULTI_RESPONSE){
       // Multi-response: after submitting, show success and return to the list

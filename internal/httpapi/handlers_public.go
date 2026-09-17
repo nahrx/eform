@@ -230,6 +230,12 @@ func (s *Server) publicSubmit(w http.ResponseWriter, r *http.Request) {
 		// Which instrument the client was actually showing. Carried by the device
 		// through an offline queue, so it can be older than the newest snapshot.
 		SchemaVersionID string `json:"schemaVersionId"`
+		// The device's own id for a response that has no server id yet. Offline, a
+		// respondent may save the same new response several times and then submit it;
+		// each of those is a separate queued request with no responseId. Without this
+		// they would each create a row. With it, the first creates the row and the
+		// rest find it.
+		LocalID string `json:"localId"`
 	}
 	if err := decodeJSON(r, &in); err != nil || len(in.Answers) == 0 {
 		writeErr(w, http.StatusBadRequest, "empty response or invalid format")
@@ -241,6 +247,22 @@ func (s *Server) publicSubmit(w http.ResponseWriter, r *http.Request) {
 		"receivedAt": time.Now().Format(time.RFC3339),
 		"email":      rc.Email,
 		"name":       rc.Name,
+	}
+	if in.LocalID = strings.TrimSpace(in.LocalID); in.LocalID != "" {
+		if len(in.LocalID) > 64 {
+			in.LocalID = in.LocalID[:64]
+		}
+		meta["localId"] = in.LocalID
+		if sh.MultiResponse && in.ResponseID == "" {
+			existing, err := s.st.FindResponseByLocalID(r.Context(), sh.FormID, rc.RespondentID, in.LocalID)
+			if err != nil && !errors.Is(err, store.ErrNotFound) {
+				writeErr(w, http.StatusInternalServerError, "server error")
+				return
+			}
+			if existing != nil {
+				in.ResponseID = existing.ID
+			}
+		}
 	}
 	metaJSON, _ := json.Marshal(meta)
 	sid := sh.ID

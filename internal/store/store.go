@@ -1130,6 +1130,24 @@ func (s *Store) UpdateMultiResponseDraft(ctx context.Context, id, respondentID, 
 	return r, err
 }
 
+// FindResponseByLocalID finds the row an offline device already created for its own
+// response id (meta.localId), so a second queued save of the same response updates it
+// rather than adding another. Newest first in case an old duplicate exists.
+func (s *Store) FindResponseByLocalID(ctx context.Context, formID, respondentID, localID string) (*models.Response, error) {
+	r := &models.Response{}
+	err := s.pool.QueryRow(ctx, `
+		SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at
+		FROM form_responses
+		WHERE form_id=$1 AND respondent_id=$2 AND meta->>'localId'=$3
+		ORDER BY submitted_at DESC LIMIT 1`,
+		formID, respondentID, localID,
+	).Scan(&r.ID, &r.FormID, &r.ShareID, &r.RespondentID, &r.Status, &r.Answers, &r.Meta, &r.SubmittedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return r, err
+}
+
 // UnsubmitResponse moves a response from 'submitted' back to 'draft' so it can be edited.
 // Unless allowWhileDraft is set (the share lets a respondent keep several responses going
 // at once), it fails if the same respondent already has another draft for the same form.
