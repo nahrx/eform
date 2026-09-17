@@ -933,7 +933,17 @@ func (s *Store) GetFormAnswerColumns(ctx context.Context, formID string) ([]stri
 		}
 		cols = append(cols, col)
 	}
-	return cols, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	// The DISTINCT list is alphabetical; exports want the questions in the order the
+	// instrument asks them. The schema is fetched on its own so the columns query stays
+	// light — it runs ahead of every export and response table.
+	var schema json.RawMessage
+	if err := s.pool.QueryRow(ctx, `SELECT schema FROM forms WHERE id=$1`, formID).Scan(&schema); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return nil, err
+	}
+	return OrderColumnsBySchema(schema, cols), nil
 }
 
 // GetDistinctFieldValues returns the distinct values that have actually been recorded for
