@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1590ad"/>
+      <stop offset="1" stop-color="#0b5e75"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <!-- roof -->
+  <path d="M256 118 L80 274 H132 V400 H380 V274 H432 Z" fill="#f4f6f8"/>
+  <path d="M256 118 L80 274 H432 Z" fill="#ffffff"/>
+  <!-- chimney -->
+  <rect x="318" y="150" width="34" height="70" rx="4" fill="#ffffff"/>
+  <!-- door -->
+  <rect x="226" y="304" width="60" height="96" rx="8" fill="#0e7490"/>
+  <circle cx="272" cy="354" r="5" fill="#ffffff"/>
+  <!-- windows -->
+  <rect x="158" y="304" width="46" height="46" rx="6" fill="#0e7490"/>
+  <rect x="308" y="304" width="46" height="46" rx="6" fill="#0e7490"/>
+  <!-- ground line -->
+  <rect x="112" y="400" width="288" height="14" rx="7" fill="#ffffff" opacity=".85"/>
+</svg>

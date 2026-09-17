@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e0891a"/>
+      <stop offset="1" stop-color="#b4640b"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <!-- shop body -->
+  <rect x="112" y="226" width="288" height="176" rx="10" fill="#f4f6f8"/>
+  <!-- awning: scalloped stripes -->
+  <g>
+    <path d="M96 176 H416 V226 H96 Z" fill="#ffffff"/>
+    <rect x="96" y="176" width="40" height="50" fill="#b4640b"/>
+    <rect x="176" y="176" width="40" height="50" fill="#b4640b"/>
+    <rect x="256" y="176" width="40" height="50" fill="#b4640b"/>
+    <rect x="336" y="176" width="40" height="50" fill="#b4640b"/>
+    <path d="M96 226 a20 20 0 0 0 40 0 a20 20 0 0 0 40 0 a20 20 0 0 0 40 0 a20 20 0 0 0 40 0 a20 20 0 0 0 40 0 a20 20 0 0 0 40 0 a20 20 0 0 0 40 0 a20 20 0 0 0 40 0 V226 Z" fill="#ffffff"/>
+    <path d="M96 226 a20 20 0 0 0 40 0 Z M176 226 a20 20 0 0 0 40 0 Z M256 226 a20 20 0 0 0 40 0 Z M336 226 a20 20 0 0 0 40 0 Z" fill="#b4640b"/>
+  </g>
+  <!-- sign board -->
+  <rect x="112" y="122" width="288" height="54" rx="10" fill="#ffffff"/>
+  <rect x="150" y="142" width="212" height="14" rx="7" fill="#e0891a" opacity=".55"/>
+  <!-- door -->
+  <rect x="222" y="300" width="68" height="102" rx="8" fill="#b4640b"/>
+  <circle cx="276" cy="352" r="5" fill="#ffffff"/>
+  <!-- display window -->
+  <rect x="140" y="300" width="56" height="56" rx="6" fill="#b4640b"/>
+  <rect x="316" y="300" width="56" height="56" rx="6" fill="#b4640b"/>
+</svg>
