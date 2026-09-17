@@ -1,15 +1,20 @@
 package httpapi
 
 import (
+	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"image"
 	"image/color"
+	_ "image/gif"  // decoders for the icon an admin uploads in the builder
+	_ "image/jpeg" //
 	"image/png"
 	"net/http"
 	"strconv"
 	"strings"
 	"unicode"
 
+	"golang.org/x/image/draw"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/gofont/goregular"
 	"golang.org/x/image/font/opentype"
@@ -20,20 +25,69 @@ import (
 
 // offlineSettingsOf reads settings.offline.enabled from the instrument schema (free-form JSON).
 func offlineSettingsOf(schema json.RawMessage) bool {
+	enabled, _ := offlineSettings(schema)
+	return enabled
+}
+
+// offlineSettings reads settings.offline from the schema: whether offline mode is on,
+// and the app icon the admin uploaded in the builder (a data: URL, "" when none).
+func offlineSettings(schema json.RawMessage) (enabled bool, icon string) {
 	if len(schema) == 0 {
-		return false
+		return false, ""
 	}
 	var parsed struct {
 		Settings struct {
 			Offline struct {
-				Enabled bool `json:"enabled"`
+				Enabled bool   `json:"enabled"`
+				Icon    string `json:"icon"`
 			} `json:"offline"`
 		} `json:"settings"`
 	}
 	if err := json.Unmarshal(schema, &parsed); err != nil {
-		return false
+		return false, ""
 	}
-	return parsed.Settings.Offline.Enabled
+	return parsed.Settings.Offline.Enabled, parsed.Settings.Offline.Icon
+}
+
+// decodeDataURLImage turns the builder's "data:image/png;base64,..." into an image.
+// Anything it cannot read yields nil, and the caller falls back to the lettered icon —
+// a bad upload must never leave a form without an icon.
+func decodeDataURLImage(dataURL string) image.Image {
+	const maxLen = 2 << 20 // the builder stores at most a few hundred KB; this is a sanity cap
+	if len(dataURL) > maxLen || !strings.HasPrefix(dataURL, "data:image/") {
+		return nil
+	}
+	i := strings.Index(dataURL, ";base64,")
+	if i < 0 {
+		return nil
+	}
+	raw, err := base64.StdEncoding.DecodeString(dataURL[i+len(";base64,"):])
+	if err != nil {
+		return nil
+	}
+	img, _, err := image.Decode(bytes.NewReader(raw))
+	if err != nil {
+		return nil
+	}
+	return img
+}
+
+// writeScaledIcon serves an uploaded icon at the requested square size. The source is
+// cropped to a centred square first so a non-square upload is not squashed.
+func writeScaledIcon(w http.ResponseWriter, src image.Image, size int) {
+	b := src.Bounds()
+	side := b.Dx()
+	if b.Dy() < side {
+		side = b.Dy()
+	}
+	// Built as a literal: image.Rect would swap corners to keep Min <= Max.
+	min := image.Pt(b.Min.X+(b.Dx()-side)/2, b.Min.Y+(b.Dy()-side)/2)
+	crop := image.Rectangle{Min: min, Max: min.Add(image.Pt(side, side))}
+	dst := image.NewNRGBA(image.Rect(0, 0, size, size))
+	draw.CatmullRom.Scale(dst, dst.Bounds(), src, crop, draw.Src, nil)
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	_ = png.Encode(w, dst)
 }
 
 // resolvePWAForm validates the share + form and confirms that offline mode is genuinely enabled for
@@ -138,6 +192,12 @@ func (s *Server) publicIcon(w http.ResponseWriter, r *http.Request) {
 	case 32, 180, 192, 512: // favicon, iOS home screen, Android, Play/splash
 	default:
 		size = 192
+	}
+	if _, icon := offlineSettings(f.Schema); icon != "" {
+		if img := decodeDataURLImage(icon); img != nil {
+			writeScaledIcon(w, img, size)
+			return
+		}
 	}
 	writeIconPNG(w, iconInitial(f.Title), size)
 }

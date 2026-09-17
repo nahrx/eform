@@ -823,9 +823,58 @@ function instrumentForm(){const nv=state.settings.navigation;const off=state.set
     <label class="check"><input type="checkbox" data-i="nav.gateRequired" ${nv.gateRequired?"checked":""}> Must be completed before continuing</label></div>
   <div class="group"><div class="gh">Offline Mode (PWA)</div>
     <label class="check"><input type="checkbox" data-i="offline.enabled" ${off.enabled?"checked":""}> Enable offline mode</label>
-    <div class="help" style="margin-left:0;margin-top:6px">The form can be installed like a native app on a phone and filled in offline — responses are stored on the device and sent automatically once back online. <b>Only applies</b> to share links set as <b>multi-response</b>.</div></div>
+    <div class="help" style="margin-left:0;margin-top:6px">The form can be installed like a native app on a phone and filled in offline — responses are stored on the device and sent automatically once back online. <b>Only applies</b> to share links set as <b>multi-response</b>.</div>
+    <div id="offIconWrap" style="margin-top:12px;${off.enabled?"":"display:none"}">
+      <label style="display:block;font-size:12px;font-weight:600;margin-bottom:6px">App icon <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+      <div style="display:flex;gap:12px;align-items:flex-start">
+        <img id="offIconPrev" alt="" src="${off.icon?esc(off.icon):""}" style="width:56px;height:56px;border-radius:12px;border:1px solid var(--line);object-fit:cover;background:var(--panel);flex:none;${off.icon?"":"display:none"}">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <label class="btn" style="cursor:pointer;margin:0"><input type="file" id="offIconFile" accept="image/*" style="display:none">${off.icon?"Change icon":"Choose icon…"}</label>
+            ${off.icon?`<button class="btn" id="offIconRm" type="button">Remove</button>`:""}
+          </div>
+          <div class="help" style="margin-left:0;margin-top:6px">Shown on the home screen once the form is installed. PNG or JPG, square works best; it is resized to 512×512 and kept inside the form. Without one, the first letter of the title is used.</div>
+        </div>
+      </div>
+    </div></div>
   <div class="group"><div class="gh">Lookup source / Reference data (JSON)</div><textarea class="ctrl mono" data-i="referenceData" rows="6" placeholder='{ "kabupaten": { "items":[ {"code":"6472","label":"Samarinda"} ] } }'>${esc(jsonOrEmpty(state.referenceData))}</textarea><div class="help" style="margin-left:0;margin-top:6px">Each table lists its options inline under <code>items</code>, every entry a <code>code</code> and a <code>label</code>. Add <code>parent</code> to an entry to make the table cascade from another field. Reference a table from a field using <b>optionsRef</b>. To pull options from an external service instead, set the field's choice source to <b>API</b>.</div></div>`;}
-function wireInstrument(pane){pane.querySelectorAll("[data-i]").forEach(inp=>inp.addEventListener("input",()=>{const k=inp.dataset.i,v=inp.type==="checkbox"?inp.checked:inp.value;if(k.startsWith("nav."))state.settings.navigation[k.slice(4)]=v;else if(k.startsWith("offline."))state.settings.offline[k.slice(8)]=v;else if(k==="locales")state.locales=v.split(",").map(s=>s.trim()).filter(Boolean);else if(k==="referenceData"){try{state.referenceData=v.trim()?JSON.parse(v):{};inp.style.borderColor="";}catch(_){inp.style.borderColor="var(--bad)";}}else state[k]=v;runValidation();}));}
+/* The uploaded icon is stored in the schema as a data: URL, already squared and shrunk
+   here so a 4 MB camera photo does not end up inside every load of the form. PNG keeps
+   transparency; when that comes out large (a photo) JPEG on white is used instead. */
+const APP_ICON_SIZE=512,APP_ICON_PNG_MAX=300*1024;
+function readAppIcon(file){
+  return new Promise((resolve,reject)=>{
+    if(!file||!/^image\//.test(file.type)){reject(new Error("Please choose an image file."));return;}
+    const url=URL.createObjectURL(file),img=new Image();
+    img.onload=()=>{
+      URL.revokeObjectURL(url);
+      const side=Math.min(img.naturalWidth,img.naturalHeight);
+      if(!side){reject(new Error("The image could not be read."));return;}
+      const c=document.createElement("canvas");c.width=c.height=APP_ICON_SIZE;
+      const ctx=c.getContext("2d");
+      const sx=(img.naturalWidth-side)/2,sy=(img.naturalHeight-side)/2;
+      ctx.drawImage(img,sx,sy,side,side,0,0,APP_ICON_SIZE,APP_ICON_SIZE);
+      let out=c.toDataURL("image/png");
+      if(out.length>APP_ICON_PNG_MAX){
+        const j=document.createElement("canvas");j.width=j.height=APP_ICON_SIZE;
+        const jc=j.getContext("2d");jc.fillStyle="#fff";jc.fillRect(0,0,APP_ICON_SIZE,APP_ICON_SIZE);jc.drawImage(c,0,0);
+        out=j.toDataURL("image/jpeg",0.85);
+      }
+      resolve(out);
+    };
+    img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error("The image could not be read."));};
+    img.src=url;
+  });
+}
+function wireInstrument(pane){
+  pane.querySelector("#offIconFile")?.addEventListener("change",async e=>{
+    const f=e.target.files&&e.target.files[0];if(!f)return;
+    try{state.settings.offline.icon=await readAppIcon(f);render();}
+    catch(err){alert(err.message);}
+  });
+  pane.querySelector("#offIconRm")?.addEventListener("click",()=>{delete state.settings.offline.icon;render();});
+  pane.querySelector('[data-i="offline.enabled"]')?.addEventListener("change",e=>{const w=pane.querySelector("#offIconWrap");if(w)w.style.display=e.target.checked?"":"none";});
+  pane.querySelectorAll("[data-i]").forEach(inp=>inp.addEventListener("input",()=>{const k=inp.dataset.i,v=inp.type==="checkbox"?inp.checked:inp.value;if(k.startsWith("nav."))state.settings.navigation[k.slice(4)]=v;else if(k.startsWith("offline."))state.settings.offline[k.slice(8)]=v;else if(k==="locales")state.locales=v.split(",").map(s=>s.trim()).filter(Boolean);else if(k==="referenceData"){try{state.referenceData=v.trim()?JSON.parse(v):{};inp.style.borderColor="";}catch(_){inp.style.borderColor="var(--bad)";}}else state[k]=v;runValidation();}));}
 
 function navForm(n,kind){
   const titleLabel=kind==="page"?"Page title":kind==="block"?"Block title (optional)":"Section title (optional)";
