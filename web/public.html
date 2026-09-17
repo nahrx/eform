@@ -381,7 +381,7 @@ installHeadIcons();
    again — under a fresh URL, or the browser would simply reuse the failed response. That
    re-run is what makes Chrome re-check installability and finally fire
    beforeinstallprompt, which is what puts the "Install App" button on screen. */
-function refreshHeadIcons(){HEAD_ASSET_NONCE=Date.now();installHeadIcons();}
+function refreshHeadIcons(){HEAD_ASSET_NONCE=String(Date.now());installHeadIcons();}
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const txt=v=>v==null?"":(typeof v==="object"?(v.id||Object.values(v)[0]||""):v);
 
@@ -958,6 +958,9 @@ async function fetchForm(){
   MULTI_RESPONSE=!!data.multiResponse;
   ROW_DISPLAY=Array.isArray(data.rowDisplay)?data.rowDisplay.filter(k=>typeof k==="string"&&k):[];
   ALLOW_NEW_WHILE_DRAFT=!!data.allowNewWhileDraft;
+  // The icon links were attached at parse time under whatever version was cached; if
+  // the instrument says the icon has changed since, attach them again under its version.
+  if(data.iconVersion&&String(data.iconVersion)!==String(HEAD_ASSET_NONCE)){HEAD_ASSET_NONCE=String(data.iconVersion);installHeadIcons();}
   ACCESS_MODE=data.accessMode||"public";
   OFFLINE_MODE=!!(SCHEMA?.settings?.offline?.enabled)&&MULTI_RESPONSE;
   if(OFFLINE_MODE){

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"hash/fnv"
 	"image"
 	"image/color"
 	_ "image/gif"  // decoders for the icon an admin uploads in the builder
@@ -47,6 +48,20 @@ func offlineSettings(schema json.RawMessage) (enabled bool, icon string) {
 		return false, ""
 	}
 	return parsed.Settings.Offline.Enabled, parsed.Settings.Offline.Icon
+}
+
+// iconVersion changes whenever the icon an admin uploaded changes (or is removed), and
+// goes into every icon URL. The icon is served with a long cache lifetime, and the
+// browser — and an installed app — would otherwise keep showing the lettered icon
+// long after a real one was uploaded, because the URL it had cached never changed.
+func iconVersion(f *models.Form) string {
+	_, icon := offlineSettings(f.Schema)
+	if icon == "" {
+		return "0"
+	}
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(icon))
+	return strconv.FormatUint(uint64(h.Sum32()), 36)
 }
 
 // decodeDataURLImage turns the builder's "data:image/png;base64,..." into an image.
@@ -136,7 +151,7 @@ func (s *Server) publicManifest(w http.ResponseWriter, r *http.Request) {
 		name = "Form"
 	}
 	icon := func(size int) string {
-		return "/api/public/forms/" + token + "/icon.png?size=" + strconv.Itoa(size)
+		return "/api/public/forms/" + token + "/icon.png?size=" + strconv.Itoa(size) + "&v=" + iconVersion(f)
 	}
 	manifest := map[string]any{
 		"id":               scope,

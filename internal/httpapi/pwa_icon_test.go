@@ -9,6 +9,8 @@ import (
 	"image/png"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/nahrx/eform/internal/models"
 )
 
 // A 40x20 red image with a blue centre square, as the data: URL the builder stores.
@@ -77,5 +79,20 @@ func TestWriteScaledIconCropsToSquare(t *testing.T) {
 	r, _, b, _ = out.At(2, 32).RGBA()
 	if r < b {
 		t.Fatalf("edge pixel is not red: r=%d b=%d", r, b)
+	}
+}
+
+func TestIconVersionFollowsTheIcon(t *testing.T) {
+	none := &models.Form{Schema: json.RawMessage(`{"settings":{"offline":{"enabled":true}}}`)}
+	a := &models.Form{Schema: json.RawMessage(`{"settings":{"offline":{"enabled":true,"icon":"data:image/png;base64,AAAA"}}}`)}
+	b := &models.Form{Schema: json.RawMessage(`{"settings":{"offline":{"enabled":true,"icon":"data:image/png;base64,BBBB"}}}`)}
+	if v := iconVersion(none); v != "0" {
+		t.Fatalf("no icon → %q, want 0", v)
+	}
+	if iconVersion(a) == "0" || iconVersion(a) == iconVersion(b) {
+		t.Fatalf("versions a=%q b=%q should be distinct and not 0", iconVersion(a), iconVersion(b))
+	}
+	if iconVersion(a) != iconVersion(a) {
+		t.Fatal("version is not stable")
 	}
 }

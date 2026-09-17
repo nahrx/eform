@@ -123,6 +123,7 @@ func (s *Server) publicGetForm(w http.ResponseWriter, r *http.Request) {
 		"multiResponse":  sh.MultiResponse,
 		"rowDisplay":     sh.RowDisplay,
 		"allowNewWhileDraft": sh.AllowNewWhileDraft,
+		"iconVersion":        iconVersion(f),
 		"accessMode":     sh.AccessMode,
 		"requireAuth":    true,
 		"googleEnabled":  s.cfg.GoogleClientID != "",
