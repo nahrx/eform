@@ -604,6 +604,14 @@
       .rv-row:last-child {
         margin-bottom: 0;
       }
+      /* A separate-page roster shows one row at a time behind a tab strip, the way the
+         respondent saw it — twenty household members stacked end to end were a long scroll
+         with no way to jump to the one being checked. Inline rosters keep the stacked view. */
+      .rv-tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+      .rv-tab{border:1px solid var(--line);background:var(--panel);color:var(--ink-soft);border-radius:999px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;line-height:1.2}
+      .rv-tab:hover{border-color:var(--roster);color:var(--ink)}
+      .rv-tab.active{background:var(--roster);border-color:var(--roster);color:#fff}
+      .rv-tabpanel[hidden]{display:none}
       .rv-row-num {
         font-family: var(--mono);
         font-size: 10.5px;
@@ -2263,10 +2271,21 @@ setTimeout(function(){document.documentElement.classList.remove("auth-checking")
             r.rowTitle
               ? `${esc(rowInterp(txt(r.rowTitle), answers, childRp))} #${i + 1}`
               : `Row #${i + 1}`;
+          const tabbed = r.rosterType === "separate";
+          if (tabbed)
+            html +=
+              `<div class="rv-tabs" role="tablist">` +
+              Array.from({ length: count }, (_, i) =>
+                `<button type="button" class="rv-tab${i === 0 ? " active" : ""}" role="tab" data-i="${i}">${rowLbl(i, rosterRowPrefix(r, i, rp))}</button>`,
+              ).join("") +
+              `</div>`;
           for (let i = 0; i < count; i++) {
             const childRp = rosterRowPrefix(r, i, rp);
             const rowHidden = computeRosterRowSkipState(r, i, answers, rp);
-            html += `<div class="rv-row"><div class="rv-row-num">${rowLbl(i, childRp)}</div>${renderNodes(r.components || [], answers, childRp, rowHidden)}</div>`;
+            const body = `<div class="rv-row"><div class="rv-row-num">${rowLbl(i, childRp)}</div>${renderNodes(r.components || [], answers, childRp, rowHidden)}</div>`;
+            html += tabbed
+              ? `<div class="rv-tabpanel" data-i="${i}"${i === 0 ? "" : " hidden"}>${body}</div>`
+              : body;
           }
         }
         if (EDIT_MODE)
@@ -2306,6 +2325,16 @@ setTimeout(function(){document.documentElement.classList.remove("auth-checking")
       }
       document.addEventListener("keydown", (e) => {
         if (e.key === "Escape") closePhotoModal();
+      });
+      /* ---- separate-roster tabs ---- */
+      document.addEventListener("click",e=>{
+        const tab=e.target.closest(".rv-tab");if(!tab)return;
+        const roster=tab.closest(".rv-roster");if(!roster)return;
+        const i=tab.dataset.i;
+        // Only this roster's own strip and panels: a nested roster inside a row has its own.
+        const strip=tab.parentElement;
+        [...strip.children].forEach(t=>t.classList.toggle("active",t===tab));
+        [...roster.children].forEach(el=>{if(el.classList.contains("rv-tabpanel"))el.hidden=el.dataset.i!==i;});
       });
 
       /* ---- helpers ---- */
