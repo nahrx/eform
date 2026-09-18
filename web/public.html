@@ -895,6 +895,14 @@ function refResolve(name,rowPrefix){
 }
 function evalExprSrc(src,rowPrefix){return Expr.evalSrc(src,name=>refResolve(name,rowPrefix||""));}
 function evalVisible(src,rowPrefix){if(!src)return true;const v=evalExprSrc(src,rowPrefix||"");return v===undefined?true:!!v;}
+/* A node the builder marked "hidden" is simply never on screen — while filling in and
+   in the read-only view alike. Rather than teaching every visibility check about one
+   more flag, the flag becomes the condition itself: visibleWhen "false" is evaluated
+   by the same code paths that already handle a condition, in pages, blocks, sections,
+   rosters and fields, and validation skips what is not visible as it always has. */
+function applyHiddenNodes(schema){
+  (function walk(nodes){(nodes||[]).forEach(n=>{if(n&&n.hidden===true)n.visibleWhen="false";walk(n.components);});})(schema&&schema.pages);
+}
 
 /* ---- headers helper ---- */
 function pubHeaders(extra){
@@ -954,6 +962,7 @@ async function fetchForm(){
   if(r.status===401){askPassword(data.error);return;}
   if(!r.ok)throw new Error(data.error||"Failed to load");
   SCHEMA=data.schema; ALLOW=data.allowResponses;
+  applyHiddenNodes(SCHEMA);
   SCHEMA_VERSION_ID=data.schemaVersionId||"";
   MULTI_RESPONSE=!!data.multiResponse;
   ROW_DISPLAY=Array.isArray(data.rowDisplay)?data.rowDisplay.filter(k=>typeof k==="string"&&k):[];

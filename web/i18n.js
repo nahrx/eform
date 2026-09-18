@@ -176,6 +176,8 @@
     "— none —": "— tidak ada —",
     "Behavior": "Perilaku",
     "Required": "Wajib diisi",
+    "Hidden — not shown when the form is filled in": "Disembunyikan — tidak ditampilkan saat kuesioner diisi",
+    "🚫 hidden": "🚫 tersembunyi",
     "Read-only": "Hanya baca",
     "Allow remarks": "Izinkan catatan",
     "Prompted when adding a row": "Ditanyakan saat tambah baris",

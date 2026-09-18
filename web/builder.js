@@ -360,7 +360,7 @@ function renderPages(){
   state.pages.forEach((p,i)=>{
     const row=document.createElement("div");
     row.className="pg"+(view.type==="page"&&view.uid===p.uid?" active":""); row.draggable=true; row.dataset.uid=p.uid;
-    row.innerHTML=`<span class="pt">${esc(p.title||p.name)}</span><button class="px" title="Delete page">×</button>`;
+    row.innerHTML=`<span class="pt">${p.hidden?"🚫 ":""}${esc(p.title||p.name)}</span><button class="px" title="Delete page">×</button>`;
     row.addEventListener("click",e=>{if(e.target.classList.contains("px"))return;openPage(p.uid);select(p.uid);});
     row.querySelector(".px").addEventListener("click",ev=>{ev.stopPropagation();if(state.pages.length<=1){alert("At least one page is required.");return;}if(confirm("Delete this page?")){removeNode(p.uid);view={type:"page",uid:state.pages[0].uid};selected=null;selectedSet=new Set();render();}});
     row.addEventListener("dragstart",e=>{e.stopPropagation();dnd.payload={mode:"page",id:p.uid};row.classList.add("dragging");});
@@ -587,7 +587,7 @@ function renderCanvas(){
 
 function nodeHead(node,kind,placeholder){
   const h=document.createElement("div"); h.className="node-head";
-  h.innerHTML=`<span class="tag ${kind}">${kind}</span><input class="ti" value="${esc(node.title||"")}" placeholder="${esc(placeholder||kind+" title (optional)")}">
+  h.innerHTML=`<span class="tag ${kind}">${kind}</span>${node.hidden?`<span class="badge" title="Hidden — not shown when the form is filled in">🚫 hidden</span>`:""}<input class="ti" value="${esc(node.title||"")}" placeholder="${esc(placeholder||kind+" title (optional)")}">
     <button class="icon-btn" data-a="sel" title="Settings">⚙</button><button class="icon-btn danger" data-a="del" title="Delete">🗑</button>`;
   h.querySelector(".ti").addEventListener("input",e=>{node.title=e.target.value;runValidation();renderPages();});
   h.querySelector('[data-a="sel"]').addEventListener("click",e=>{e.stopPropagation();select(node.uid,e.ctrlKey||e.metaKey||e.shiftKey);});
@@ -645,6 +645,7 @@ function renderNode(n){
     if(hidden)badges.push(`<span class="badge">${hidden} hidden</span>`);
   }
   if(n.validations&&n.validations.length)badges.push(`<span class="badge">${n.validations.length} cek</span>`);
+  if(n.hidden)badges.push(`<span class="badge" title="Hidden — not shown when the form is filled in">🚫 hidden</span>`);
   if(n.visibleWhen)badges.push(`<span class="badge">⊘ kondisi</span>`);
   const lbl=(n.type==="note"||n.type==="markdown")?`<span style="color:var(--ink-soft)">${esc(((n.type==="markdown"?(n.markdown||""):String(n.html||"").replace(/<[^>]+>/g," ")).replace(/[#>*`_-]/g," ").trim().slice(0,70))||"(empty label)")}</span>`:(n.label?esc(n.label):`<span class="empty">no label</span>`);
   el.innerHTML=`<div class="crail"></div><div class="body"><div class="top"><span class="ty">${n.type}</span>${n.required?'<span class="req">＊</span>':''}</div><div class="lbl">${lbl}</div><div class="meta">${badges.join("")}</div></div><div class="grip">⋮⋮</div>`;
@@ -885,7 +886,8 @@ function navForm(n,kind){
   return `${headBar(kind,n.name)}
   ${nameField}
   <div class="field"><label>${titleLabel}</label><input class="ctrl" data-k="title" value="${esc(n.title||"")}"></div>
-  <div class="field"><label>Visible when (visibleWhen)</label><textarea class="ctrl" data-k="visibleWhen" placeholder="\${field} == value">${esc(n.visibleWhen||"")}</textarea></div>`;
+  <div class="field"><label>Visible when (visibleWhen)</label><textarea class="ctrl" data-k="visibleWhen" placeholder="\${field} == value">${esc(n.visibleWhen||"")}</textarea></div>
+  <div class="group"><div class="gh">Behavior</div><label class="check"><input type="checkbox" data-k="hidden" ${n.hidden?"checked":""}> Hidden — not shown when the form is filled in</label><div class="help" style="margin-left:0;margin-top:4px">Everything inside stays in the instrument and in the data, it is simply never put on screen — a way to park a ${kind} without deleting it.</div></div>`;
 }
 function rosterForm(n){
   const childFields=(n.components||[]).filter(c=>c.kind==="field");
@@ -911,6 +913,7 @@ function rosterForm(n){
   ${rowDefaultEditor}
   ${dispBlock}
   <div class="field"><label>Visible when</label><textarea class="ctrl" data-k="visibleWhen">${esc(n.visibleWhen||"")}</textarea></div>
+  <div class="group"><div class="gh">Behavior</div><label class="check"><input type="checkbox" data-k="hidden" ${n.hidden?"checked":""}> Hidden — not shown when the form is filled in</label></div>
   ${validationsBlock(n,`Rules for the roster as a whole. <code>\${${esc(n.name)}}</code> is the list of its rows, so <code>len(\${${esc(n.name)}})</code> is how many there are — compare it with another answer, e.g. <code>len(\${${esc(n.name)}}) == \${jml_art}</code>.`)}
   ${n.rosterType==="separate"?`<button class="add-row" id="openRoster">Open the roster template editor →</button>`:""}`;
 }
@@ -939,7 +942,7 @@ function fieldForm(c){const t=c.type;let html=headBar(t,c.name);
     }
     return`<div class="field" style="margin-top:8px"><label>Default value</label><input class="ctrl" data-k="defaultValue" value="${esc(c.defaultValue||"")}"></div>`;
   })();
-  html+=`<div class="group"><div class="gh">Behavior</div><label class="check"><input type="checkbox" data-k="required" ${c.required?"checked":""}> Required</label><label class="check"><input type="checkbox" data-k="readOnly" ${c.readOnly?"checked":""}> Read-only</label><label class="check"><input type="checkbox" data-k="allowRemark" ${c.allowRemark?"checked":""}> Allow remarks</label><label class="check"><input type="checkbox" data-k="promptOnAdd" ${c.promptOnAdd?"checked":""}> Prompted when adding a row <span class="help">the value can be referenced in labels with <code>{{${c.name}}}</code></span></label>${dvHtml}</div>`;
+  html+=`<div class="group"><div class="gh">Behavior</div><label class="check"><input type="checkbox" data-k="required" ${c.required?"checked":""}> Required</label><label class="check"><input type="checkbox" data-k="readOnly" ${c.readOnly?"checked":""}> Read-only</label><label class="check"><input type="checkbox" data-k="allowRemark" ${c.allowRemark?"checked":""}> Allow remarks</label><label class="check"><input type="checkbox" data-k="hidden" ${c.hidden?"checked":""}> Hidden — not shown when the form is filled in</label><label class="check"><input type="checkbox" data-k="promptOnAdd" ${c.promptOnAdd?"checked":""}> Prompted when adding a row <span class="help">the value can be referenced in labels with <code>{{${c.name}}}</code></span></label>${dvHtml}</div>`;
   html+=`<div class="group"><div class="gh">Conditions & flow</div>${cond("visibleWhen","Visible when",c.visibleWhen)}${cond("enableWhen","Enabled when",c.enableWhen)}${cond("requiredWhen","Required when",c.requiredWhen)}${skipsBlock(c)}</div>`;
   html+=validationsBlock(c); return html;
 }
@@ -1033,10 +1036,10 @@ function clean(v){return v!==""&&v!=null;}
 function loc(t){return {[state.defaultLocale]:t};}
 function serialize(){const out={specVersion:"1.1",id:state.id,title:loc(state.title),version:state.version};if(state.acronym)out.acronym=state.acronym;out.locales=state.locales;out.defaultLocale=state.defaultLocale;out.settings=JSON.parse(JSON.stringify(state.settings));if(Object.keys(state.referenceData||{}).length)out.referenceData=state.referenceData;out.pages=state.pages.map(serNode);return out;}
 function serNode(n){
-  if(n.kind==="page"){const o={kind:"page",name:n.name};if(clean(n.title))o.title=loc(n.title);if(clean(n.visibleWhen))o.visibleWhen=n.visibleWhen;o.components=n.components.map(serNode);return o;}
-  if(n.kind==="block"){const o={kind:"block",name:n.name,layout:"card"};if(clean(n.title))o.title=loc(n.title);if(clean(n.visibleWhen))o.visibleWhen=n.visibleWhen;o.components=n.components.map(serNode);return o;}
-  if(n.kind==="section"){const o={kind:"section",name:n.name,layout:"bordered"};if(clean(n.title))o.title=loc(n.title);if(clean(n.visibleWhen))o.visibleWhen=n.visibleWhen;o.components=n.components.map(serNode);return o;}
-  if(n.kind==="roster"){const o={kind:"roster",name:n.name,rosterType:n.rosterType};if(clean(n.title))o.title=loc(n.title);if(clean(n.rowTitle))o.rowTitle=n.rowTitle;["min","max"].forEach(k=>{if(clean(n[k]))o[k]=num(n[k]);});if(clean(n.countFrom))o.countFrom=n.countFrom;if(n.requiredRows)o.requiredRows=true;if(clean(n.itemLabel))o.itemLabel=loc(n.itemLabel);if(clean(n.rowDefaults))o.rowDefaults=loc(n.rowDefaults);if(n.rowDisplay&&n.rowDisplay.length)o.rowDisplay=n.rowDisplay;if(clean(n.visibleWhen))o.visibleWhen=n.visibleWhen;if(n.validations&&n.validations.length){const v=n.validations.filter(x=>clean(x.test));if(v.length)o.validations=v.map(x=>({test:x.test,message:loc(x.message||""),severity:x.severity||"error"}));}o.components=n.components.map(serNode);return o;}
+  if(n.kind==="page"){const o={kind:"page",name:n.name};if(clean(n.title))o.title=loc(n.title);if(clean(n.visibleWhen))o.visibleWhen=n.visibleWhen;if(n.hidden)o.hidden=true;o.components=n.components.map(serNode);return o;}
+  if(n.kind==="block"){const o={kind:"block",name:n.name,layout:"card"};if(clean(n.title))o.title=loc(n.title);if(clean(n.visibleWhen))o.visibleWhen=n.visibleWhen;if(n.hidden)o.hidden=true;o.components=n.components.map(serNode);return o;}
+  if(n.kind==="section"){const o={kind:"section",name:n.name,layout:"bordered"};if(clean(n.title))o.title=loc(n.title);if(clean(n.visibleWhen))o.visibleWhen=n.visibleWhen;if(n.hidden)o.hidden=true;o.components=n.components.map(serNode);return o;}
+  if(n.kind==="roster"){const o={kind:"roster",name:n.name,rosterType:n.rosterType};if(n.hidden)o.hidden=true;if(clean(n.title))o.title=loc(n.title);if(clean(n.rowTitle))o.rowTitle=n.rowTitle;["min","max"].forEach(k=>{if(clean(n[k]))o[k]=num(n[k]);});if(clean(n.countFrom))o.countFrom=n.countFrom;if(n.requiredRows)o.requiredRows=true;if(clean(n.itemLabel))o.itemLabel=loc(n.itemLabel);if(clean(n.rowDefaults))o.rowDefaults=loc(n.rowDefaults);if(n.rowDisplay&&n.rowDisplay.length)o.rowDisplay=n.rowDisplay;if(clean(n.visibleWhen))o.visibleWhen=n.visibleWhen;if(n.validations&&n.validations.length){const v=n.validations.filter(x=>clean(x.test));if(v.length)o.validations=v.map(x=>({test:x.test,message:loc(x.message||""),severity:x.severity||"error"}));}o.components=n.components.map(serNode);return o;}
   const c=n,o={kind:"field",name:c.name,type:c.type};
   if(c.type!=="note"&&clean(c.label))o.label=loc(c.label);
   if(clean(c.hint))o.hint=loc(c.hint);
@@ -1060,6 +1063,7 @@ function serNode(n){
   ["required","readOnly","allowRemark","promptOnAdd"].forEach(k=>{if(c[k])o[k]=true;});
   if(clean(c.defaultValue))o.defaultValue=c.defaultValue;
   ["visibleWhen","enableWhen","requiredWhen"].forEach(k=>{if(clean(c[k]))o[k]=c[k];});
+  if(c.hidden)o.hidden=true;
   if(c.skips&&c.skips.length){const s=c.skips.filter(x=>clean(x.when)||clean(x.to));if(s.length)o.skips=s.map(x=>({when:x.when,to:x.to}));}
   if(c.validations&&c.validations.length){const v=c.validations.filter(x=>clean(x.test));if(v.length)o.validations=v.map(x=>({test:x.test,message:loc(x.message||""),severity:x.severity||"error"}));}
   return o;
@@ -1208,10 +1212,10 @@ function importJSON(obj){try{
 }catch(e){alert("Import failed: "+e.message);}}
 function impNode(n,forceKind){
   const kind=forceKind||n.kind||"field";
-  if(kind==="page"||kind==="block"||kind==="section"){return {uid:uid(),kind,name:n.name||autoName(kind),title:textOf(n.title),visibleWhen:n.visibleWhen||"",components:(n.components||[]).map(c=>impNode(c))};}
-  if(kind==="roster"){return {uid:uid(),kind:"roster",name:n.name||autoName("roster"),title:textOf(n.title),rowTitle:n.rowTitle||"",rosterType:n.rosterType||"inline",min:n.min??"",max:n.max??"",countFrom:n.countFrom||"",requiredRows:!!n.requiredRows,itemLabel:textOf(n.itemLabel),rowDefaults:textOf(n.rowDefaults),rowDisplay:n.rowDisplay||[],visibleWhen:n.visibleWhen||"",validations:(n.validations||[]).map(v=>({test:v.test||"",message:textOf(v.message),severity:v.severity||"error"})),components:(n.components||[]).map(c=>impNode(c))};}
+  if(kind==="page"||kind==="block"||kind==="section"){return {uid:uid(),kind,name:n.name||autoName(kind),title:textOf(n.title),visibleWhen:n.visibleWhen||"",hidden:!!n.hidden,components:(n.components||[]).map(c=>impNode(c))};}
+  if(kind==="roster"){return {uid:uid(),kind:"roster",name:n.name||autoName("roster"),hidden:!!n.hidden,title:textOf(n.title),rowTitle:n.rowTitle||"",rosterType:n.rosterType||"inline",min:n.min??"",max:n.max??"",countFrom:n.countFrom||"",requiredRows:!!n.requiredRows,itemLabel:textOf(n.itemLabel),rowDefaults:textOf(n.rowDefaults),rowDisplay:n.rowDisplay||[],visibleWhen:n.visibleWhen||"",validations:(n.validations||[]).map(v=>({test:v.test||"",message:textOf(v.message),severity:v.severity||"error"})),components:(n.components||[]).map(c=>impNode(c))};}
   const f=newField(n.type||"text");f.uid=uid();f.name=n.name||f.name;f.label=textOf(n.label);f.hint=textOf(n.hint);f.html=textOf(n.html);f.markdown=textOf(n.markdown);f.calculate=n.calculate||"";f.autofill=!!n.autofill;
-  ["required","readOnly","allowRemark","promptOnAdd","visibleWhen","enableWhen","requiredWhen","unit","pattern","optionsRef","optionsFilterBy","min","max","step","maxLength","maxPhotoKB","autoCompress","defaultValue"].forEach(k=>{if(n[k]!=null)f[k]=n[k];});
+  ["required","readOnly","allowRemark","promptOnAdd","hidden","visibleWhen","enableWhen","requiredWhen","unit","pattern","optionsRef","optionsFilterBy","min","max","step","maxLength","maxPhotoKB","autoCompress","defaultValue"].forEach(k=>{if(n[k]!=null)f[k]=n[k];});
   f.placeholder=textOf(n.placeholder);
   if(n.options)f.options=n.options.map(o=>{const x={value:String(o.value),label:textOf(o.label),skipTo:o.skipTo||""};if(o.hidden)x.hidden=true;return x;});
   if(n.optionsApi){f.optionsApi={...n.optionsApi};f.optionSource="api";}else if(n.optionsRef){f.optionSource="ref";}else if(CHOICE.has(f.type))f.optionSource="manual";
@@ -1865,7 +1869,7 @@ function optWrap(ro,fn,key){
   if(ro.state==="error")return `<div class="pv-vmsg error">Failed to load options: ${esc(ro.error||"")}</div>`;
   return fn();
 }
-function visiblePages(){return state.pages.filter(p=>evalVisible(p.visibleWhen,""));}
+function visiblePages(){return state.pages.filter(p=>!p.hidden&&evalVisible(p.visibleWhen,""));}
 function nodeContainsName(node,target){if(node.name===target)return true;return (node.components||[]).some(c=>nodeContainsName(c,target));}
 function pageIndexOfTarget(target,pages){
   if(!target)return null;
@@ -1989,12 +1993,12 @@ function clearSkippedPages(pages,fromIdx,toIdx){if(toIdx<=fromIdx+1)return;for(l
 function pageValidationTargets(page){
   const out=[];
   (function walk(n,prefix){(n.components||[]).forEach(c=>{
-    if(!evalVisible(c.visibleWhen,prefix))return;
+    if(c.hidden||!evalVisible(c.visibleWhen,prefix))return;
     if(c.kind==="field"){if(!SKIP_HIDDEN.has(c.name))out.push({c,rp:prefix});}
     else if(c.kind==="roster"){
       if(c.rosterType==="inline"){
         const cnt=rosterCount(c);
-        for(let i=0;i<cnt;i++){const rp2=`${c.name}#${i}#`;(c.components||[]).forEach(f=>{if(evalVisible(f.visibleWhen,rp2))out.push({c:f,rp:rp2});});}
+        for(let i=0;i<cnt;i++){const rp2=`${c.name}#${i}#`;(c.components||[]).forEach(f=>{if(!f.hidden&&evalVisible(f.visibleWhen,rp2))out.push({c:f,rp:rp2});});}
       }
     }else{walk(c,prefix);}
   });})(page,"");
@@ -2042,7 +2046,7 @@ function validateCurrentPage(page){
   // tell whether the rule they just wrote actually works.
   let gate=null;
   (function walkR(comps,pfx){if(gate)return;(comps||[]).forEach(c=>{
-    if(gate||!evalVisible(c.visibleWhen,pfx))return;
+    if(gate||c.hidden||!evalVisible(c.visibleWhen,pfx))return;
     if(c.kind==="roster"){if(rosterFailedRules(c,pfx,true).length)gate={ok:false,key:"pvroster_"+c.name};}
     else if(c.kind!=="field"&&c.components)walkR(c.components,pfx);
   });})(page.components||[],"");
@@ -2099,9 +2103,9 @@ function renderPreview(){
 function pvPage(p){let h=`<div class="pv-page" id="pvpage_${esc(p.name)}"><h2 class="pv-h2">${esc(p.title||p.name)}</h2>`;p.components.forEach(c=>h+=pvNode(c,null));return h+`</div>`;}
 function pvNode(c,row){
   const rp=rowStoragePrefix(row);
-  if(c.kind==="block"){if(!evalVisible(c.visibleWhen,rp))return "";const inner=(c.components||[]).map(x=>pvNode(x,row)).join("");if(!inner)return "";let h=`<div class="pv-card">`;if(c.title)h+=`<div class="pv-bt">${esc(rowInterp(c.title,row))}</div>`;return h+inner+`</div>`;}
-  if(c.kind==="section"){if(!evalVisible(c.visibleWhen,rp))return "";const inner=(c.components||[]).map(x=>pvNode(x,row)).join("");if(!inner)return "";let h=`<div class="pv-sec">`;if(c.title)h+=`<div class="pv-st">${esc(rowInterp(c.title,row))}</div>`;return h+inner+`</div>`;}
-  if(c.kind==="roster"){if(!evalVisible(c.visibleWhen,rp))return "";return pvRoster(c,row);}
+  if(c.kind==="block"){if(c.hidden||!evalVisible(c.visibleWhen,rp))return "";const inner=(c.components||[]).map(x=>pvNode(x,row)).join("");if(!inner)return "";let h=`<div class="pv-card">`;if(c.title)h+=`<div class="pv-bt">${esc(rowInterp(c.title,row))}</div>`;return h+inner+`</div>`;}
+  if(c.kind==="section"){if(c.hidden||!evalVisible(c.visibleWhen,rp))return "";const inner=(c.components||[]).map(x=>pvNode(x,row)).join("");if(!inner)return "";let h=`<div class="pv-sec">`;if(c.title)h+=`<div class="pv-st">${esc(rowInterp(c.title,row))}</div>`;return h+inner+`</div>`;}
+  if(c.kind==="roster"){if(c.hidden||!evalVisible(c.visibleWhen,rp))return "";return pvRoster(c,row);}
   return pvField(c,row);
 }
 /* An absolute ceiling on rows, whatever the answers say — Max on the roster is
@@ -2320,7 +2324,7 @@ function backFromRow(){
 function pvField(c,row){
   if(c.type==="hidden")return "";
   const rp=rowStoragePrefix(row);
-  if(!evalVisible(c.visibleWhen,rp))return "";
+  if(c.hidden||!evalVisible(c.visibleWhen,rp))return "";
   if(row?ROW_SKIP_HIDDEN.get(rp.slice(0,-1))?.has(c.name):SKIP_HIDDEN.has(c.name))return ""; // skip-to: a page or a roster row
   if(c.type==="note")return `<div class="pv-note pv-field">${c.html||""}</div>`;
   if(c.type==="markdown")return `<div class="pv-note pv-field pv-md">${mdToHtml(c.markdown||"")}</div>`;
