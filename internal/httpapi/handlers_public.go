@@ -254,16 +254,6 @@ func (s *Server) publicSubmit(w http.ResponseWriter, r *http.Request) {
 			in.LocalID = in.LocalID[:64]
 		}
 		meta["localId"] = in.LocalID
-		if sh.MultiResponse && in.ResponseID == "" {
-			existing, err := s.st.FindResponseByLocalID(r.Context(), sh.FormID, rc.RespondentID, in.LocalID)
-			if err != nil && !errors.Is(err, store.ErrNotFound) {
-				writeErr(w, http.StatusInternalServerError, "server error")
-				return
-			}
-			if existing != nil {
-				in.ResponseID = existing.ID
-			}
-		}
 	}
 	metaJSON, _ := json.Marshal(meta)
 	sid := sh.ID
@@ -304,7 +294,13 @@ func (s *Server) publicSubmit(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 			}
-			resp, err = s.st.CreateMultiResponseRow(r.Context(), sh.FormID, &sid, rc.RespondentID, status, in.Answers, metaJSON)
+			if in.LocalID != "" {
+				// The device named the response: create it, or update the row an earlier
+				// request for the same response already made — even one still committing.
+				resp, err = s.st.UpsertMultiResponseByLocalID(r.Context(), sh.FormID, &sid, rc.RespondentID, in.LocalID, status, in.Answers, metaJSON)
+			} else {
+				resp, err = s.st.CreateMultiResponseRow(r.Context(), sh.FormID, &sid, rc.RespondentID, status, in.Answers, metaJSON)
+			}
 		}
 	} else if in.ResponseID != "" {
 		// Single-response: putting a response that was previously unsubmitted

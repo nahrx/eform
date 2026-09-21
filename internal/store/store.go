@@ -1140,22 +1140,61 @@ func (s *Store) UpdateMultiResponseDraft(ctx context.Context, id, respondentID, 
 	return r, err
 }
 
-// FindResponseByLocalID finds the row an offline device already created for its own
-// response id (meta.localId), so a second queued save of the same response updates it
-// rather than adding another. Newest first in case an old duplicate exists.
-func (s *Store) FindResponseByLocalID(ctx context.Context, formID, respondentID, localID string) (*models.Response, error) {
+// UpsertMultiResponseByLocalID is CreateMultiResponseRow for a request that carries the
+// device's own id but no server id yet. Two such requests for one response can be in
+// flight at once — Save Draft still travelling when Submit is tapped, on a slow
+// connection — and a plain "look, then insert" lets both insert. So the lookup and
+// the write happen under a transaction-scoped advisory lock keyed on the response:
+// the second request waits for the first to commit, then finds its row and updates
+// it. A row that is already submitted is returned as is — a repeated submit is
+// idempotent, not a second answer.
+func (s *Store) UpsertMultiResponseByLocalID(ctx context.Context, formID string, shareID *string, respondentID, localID, status string, answers, meta json.RawMessage) (*models.Response, error) {
+	if len(answers) == 0 {
+		answers = json.RawMessage(`{}`)
+	}
+	if len(meta) == 0 {
+		meta = json.RawMessage(`{}`)
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, formID+"|"+respondentID+"|"+localID); err != nil {
+		return nil, err
+	}
 	r := &models.Response{}
-	err := s.pool.QueryRow(ctx, `
+	scan := func(row pgx.Row) error {
+		return row.Scan(&r.ID, &r.FormID, &r.ShareID, &r.RespondentID, &r.Status, &r.Answers, &r.Meta, &r.SubmittedAt)
+	}
+	err = scan(tx.QueryRow(ctx, `
 		SELECT id,form_id,share_id,respondent_id,status,answers,meta,submitted_at
 		FROM form_responses
 		WHERE form_id=$1 AND respondent_id=$2 AND meta->>'localId'=$3
-		ORDER BY submitted_at DESC LIMIT 1`,
-		formID, respondentID, localID,
-	).Scan(&r.ID, &r.FormID, &r.ShareID, &r.RespondentID, &r.Status, &r.Answers, &r.Meta, &r.SubmittedAt)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, ErrNotFound
+		ORDER BY submitted_at DESC LIMIT 1`, formID, respondentID, localID))
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		err = scan(tx.QueryRow(ctx,
+			`INSERT INTO form_responses(form_id,share_id,respondent_id,status,answers,meta) VALUES ($1,$2,$3,$4,$5,$6)
+			 RETURNING id,form_id,share_id,respondent_id,status,answers,meta,submitted_at`,
+			formID, shareID, respondentID, status, answers, meta))
+	case err != nil:
+		return nil, err
+	case r.Status == "draft":
+		err = scan(tx.QueryRow(ctx, `
+			UPDATE form_responses SET
+			  answers=$2, meta=$3, status=$4,
+			  submitted_at = CASE WHEN $4='submitted' THEN now() ELSE submitted_at END
+			WHERE id=$1
+			RETURNING id,form_id,share_id,respondent_id,status,answers,meta,submitted_at`,
+			r.ID, answers, meta, status))
+	default:
+		// already submitted: leave it be
 	}
-	return r, err
+	if err != nil {
+		return nil, err
+	}
+	return r, tx.Commit(ctx)
 }
 
 // UnsubmitResponse moves a response from 'submitted' back to 'draft' so it can be edited.

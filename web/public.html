@@ -1772,7 +1772,16 @@ async function draftSaveError(r){
   if(r.status===401)return "Session expired — please sign in again, then save the draft.";
   return "Failed to save draft"+(msg?": "+msg:" (HTTP "+r.status+")");
 }
+/* Resolves while a Save Draft request is on its way. Submit waits for it: on a slow
+   connection a respondent taps Submit before the save has answered, and the submit
+   would then travel without the row id the save is about to hand back. */
+let DRAFT_SAVE_INFLIGHT=null;
 async function saveDraftToServer(){
+  if(DRAFT_SAVE_INFLIGHT)return DRAFT_SAVE_INFLIGHT;
+  let done;DRAFT_SAVE_INFLIGHT=new Promise(r=>{done=r;});
+  try{await saveDraftToServerNow();}finally{DRAFT_SAVE_INFLIGHT=null;done();}
+}
+async function saveDraftToServerNow(){
   const btn=document.getElementById("pvSaveDraft");
   if(btn){btn.disabled=true;btn.textContent="Saving…";}
   if(!ensureNoPendingUploads()){
@@ -3305,6 +3314,7 @@ async function submit(){
   const ans=collectAll();
   if(!Object.keys(ans).length){msg.className="msg err";msg.textContent="No answers have been filled in yet.";return;}
   btn.disabled=true;btn.textContent="Submitting…";
+  if(DRAFT_SAVE_INFLIGHT){btn.textContent="Saving the draft first…";await DRAFT_SAVE_INFLIGHT;btn.textContent="Submitting…";}
   const headers=pubHeaders({"Content-Type":"application/json"});
   // Travels with the queued payload when offline, so a response sent days later still
   // names the instrument it was filled against rather than today's.
