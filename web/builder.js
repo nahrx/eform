@@ -2086,7 +2086,8 @@ function renderPreview(){
   document.getElementById("pvPrev")?.addEventListener("click",()=>{pv.page--;body.scrollTop=0;renderPreview();});
   document.getElementById("pvNext")?.addEventListener("click",()=>{
     const curP=pages[pv.page];
-    const gate=validateCurrentPage(curP);
+    // Same rule as the live form: only gate when the instrument asks for it.
+    const gate=state.settings.navigation.gateRequired?validateCurrentPage(curP):{ok:true};
     if(!gate.ok){const err=document.getElementById("pvNavErr");if(err)err.textContent="Complete the required questions / fix the invalid entries before continuing.";focusPvField(gate.key);return;}
     const target=computePageSkipState(curP).crossPageTarget;
     const idx=target?pageIndexOfTarget(target,pages):null;

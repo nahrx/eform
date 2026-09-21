@@ -2811,7 +2811,11 @@ function bindPageEvents(){
     renderMyResponsesList({title:txt(SCHEMA?.title)||"Form"},resps);
   });
   document.getElementById("pvNext")?.addEventListener("click",()=>{
-    const gate=validateCurrentPage();
+    // Moving on is free unless the instrument says otherwise ("Must be completed
+    // before continuing" in the builder). Everything unanswered or invalid is still
+    // caught at Submit, which lists it all at once — an enumerator may want to fill
+    // in what the respondent knows now and come back for the rest.
+    const gate=SCHEMA?.settings?.navigation?.gateRequired?validateCurrentPage():{ok:true};
     if(!gate.ok){
       const err=document.getElementById("pvNavErr");if(err){err.textContent="Complete the required questions / fix the invalid entries before continuing.";setTimeout(()=>{err.textContent="";},3000);}
       focusField(gate.key);
