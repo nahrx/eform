@@ -2770,6 +2770,10 @@ function renderRosterRow(){
   const backFn=()=>{saveAnswers();const rname=rosterView.roster.name;rosterView=null;renderSidebar();renderCurrentPage();setTimeout(()=>{const el=document.getElementById("pvroster_"+rname);if(el)el.scrollIntoView({behavior:"smooth",block:"center"});},40);};
   const backDoneFn=()=>{
     saveAnswers();
+    // The row check follows the same instrument setting as the page check: unless
+    // "Must be completed before continuing" is on, an incomplete row may be left and
+    // returned to — Submit still reports it.
+    if(!SCHEMA?.settings?.navigation?.gateRequired){backFn();return;}
     const {roster,rowIdx}=rosterView;
     const rp=`${roster.name}#${rowIdx}#`;
     const rowSkip=computeRosterRowSkipState(roster,rowIdx);
