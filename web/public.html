@@ -33,6 +33,8 @@ input,select,textarea{font-family:inherit;font-size:13.5px;color:var(--ink)}
 .pv-side{width:230px;flex:none;background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding:14px 12px;transition:width .2s ease,padding .2s ease}
 .pv-side.collapsed{width:0;padding:0;overflow:hidden;border-right-color:transparent}
 .pv-side-h{font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 4px 10px}
+.pv-back-list{border:1px solid var(--line);background:var(--panel);color:var(--ink-soft);padding:5px 10px;border-radius:999px;cursor:pointer;font-size:12px;font-weight:600;line-height:1.2;flex:none;white-space:nowrap}
+.pv-back-list:hover{border-color:var(--accent);color:var(--ink)}
 .pv-side-tog{border:none;background:transparent;color:var(--ink-soft);padding:5px 8px;border-radius:6px;cursor:pointer;font-size:18px;line-height:1;flex:none;transition:background .12s}
 .pv-side-tog:hover{background:var(--panel-2);color:var(--ink)}
 .pv-side-bd{display:none;position:fixed;inset:0;background:rgba(19,23,30,.35);z-index:59;cursor:pointer}
@@ -1237,6 +1239,7 @@ async function renderMyResponsesList(meta,responses){
   renderMyResponsesListNow(meta,await composeResponseList(responses));
 }
 function renderMyResponsesListNow(meta,responses){
+  FORM_HISTORY_PUSHED=false;
   const title=txt(meta.title||txt(SCHEMA?.title)||"Form");
   document.title=title;
   _responseMap={};responses.forEach(r=>{_responseMap[r.id]=r;});
@@ -1318,6 +1321,7 @@ function startNewResponse(){
   answers={};
   render({title:txt(SCHEMA?.title)||"Form",schema:SCHEMA});
   goToPage(0);
+  enterFormHistory();
 }
 
 function editDraftResponseById(id){
@@ -1344,6 +1348,7 @@ function editDraftResponse(resp){
   saveDraft(); // sync to localStorage as well
   render({title:txt(SCHEMA?.title)||"Form",schema:SCHEMA});
   goToPage(0);
+  enterFormHistory();
 }
 
 /* ==================== View Response (read-only mode for respondents) ====================
@@ -1641,6 +1646,28 @@ async function viewSubmittedResponse(id){
   renderViewPage();
 }
 let VIEW_HISTORY_PUSHED=false;
+/* Multi-response: opening a response from the list pushes one history entry, so the
+   phone's back button returns to the list instead of leaving the form — and a back
+   press while inside a roster row first returns to the row's page, as a respondent
+   expects "back" to mean. The list is the home state and holds no entry of its own. */
+let FORM_HISTORY_PUSHED=false,SKIP_NEXT_POPSTATE=false;
+function enterFormHistory(){
+  if(!MULTI_RESPONSE||FORM_HISTORY_PUSHED)return;
+  try{history.pushState({pvForm:true},"",location.href);FORM_HISTORY_PUSHED=true;}catch(_){}
+}
+async function backToResponseList(){
+  saveAnswers();
+  rosterView=null;
+  const resps=await fetchMyResponses();
+  renderMyResponsesList({title:txt(SCHEMA?.title)||"Form"},resps);
+}
+// The buttons go through history when an entry was pushed, so the entry is consumed
+// and the next back press leaves the page as it should.
+function leaveFormToList(){
+  rosterView=null;
+  if(FORM_HISTORY_PUSHED){history.back();return;}
+  backToResponseList();
+}
 function openViewOverlay(){
   if(document.getElementById("pvViewOverlay"))return;
   // Unsubmit still requires the share to be active (ALLOW) — same as in the response list.
@@ -1668,6 +1695,7 @@ function closeResponseViewer(){
   VIEW_RESP=null;VIEW_ANSWERS={};VIEW_PAGES=[];VIEW_VISITED=[];VIEW_CUR=0;
   if(VIEW_HISTORY_PUSHED){
     VIEW_HISTORY_PUSHED=false;
+    SKIP_NEXT_POPSTATE=true; // this back() is ours, not the respondent's
     history.back(); // consume the entry pushed when the overlay opened, so it does not get stuck in history
   }
 }
@@ -1675,11 +1703,23 @@ function closeResponseViewer(){
 // instead of navigating away from the form. No further history.back() is needed here,
 // because this popstate is ALREADY the consequence of the back navigation.
 window.addEventListener("popstate",()=>{
+  if(SKIP_NEXT_POPSTATE){SKIP_NEXT_POPSTATE=false;return;}
   const ovl=document.getElementById("pvViewOverlay");
   if(ovl){
     ovl.remove();
     VIEW_RESP=null;VIEW_ANSWERS={};VIEW_PAGES=[];VIEW_VISITED=[];VIEW_CUR=0;
     VIEW_HISTORY_PUSHED=false;
+    return;
+  }
+  if(FORM_HISTORY_PUSHED){
+    if(rosterView){
+      // Back from a roster row: to the row's page, and stay in the form.
+      saveAnswers();rosterView=null;renderSidebar();renderCurrentPage();
+      try{history.pushState({pvForm:true},"",location.href);}catch(_){}
+      return;
+    }
+    FORM_HISTORY_PUSHED=false;
+    backToResponseList();
   }
 });
 function viewGoPage(idx){
@@ -2609,7 +2649,7 @@ function render(meta){
       <button id="draftNoteClose" title="Close">×</button>
     </div>`:"";
   setRoot(`<div class="pv">
-    <div class="pv-bar"><button class="pv-side-tog" id="pvSideTog" title="Page list">☰</button><span class="pv-title">${esc(title)}</span><span id="pvOfflineBadge"></span><span id="pvInstallWrap"></span><span class="pv-brand">eForm · {{ORG_NICK}}</span></div>
+    <div class="pv-bar"><button class="pv-side-tog" id="pvSideTog" title="Page list">☰</button>${MULTI_RESPONSE?`<button class="pv-back-list" id="pvTopBackToList" type="button" title="Back to your responses">← Responses</button>`:""}<span class="pv-title">${esc(title)}</span><span id="pvOfflineBadge"></span><span id="pvInstallWrap"></span><span class="pv-brand">eForm · {{ORG_NICK}}</span></div>
     <div id="pvSideBd" class="pv-side-bd"></div>
     ${draftNote}
     <div class="pv-main">
@@ -2641,6 +2681,7 @@ function saveAnswers(){
   saveDraft();
 }
 function setupSidebarToggle(side){
+  document.getElementById("pvTopBackToList")?.addEventListener("click",leaveFormToList);
   const tog=document.getElementById("pvSideTog");
   const bd=document.getElementById("pvSideBd");
   if(!tog||!side)return;
@@ -2819,10 +2860,7 @@ function restoreAnswers(){
 }
 function bindPageEvents(){
   document.getElementById("pvPrev")?.addEventListener("click",()=>{const p=prevVisibleIndex(curPage);if(p!==-1)goToPage(p);});
-  document.getElementById("pvBackToList")?.addEventListener("click",async()=>{
-    const resps=await fetchMyResponses();
-    renderMyResponsesList({title:txt(SCHEMA?.title)||"Form"},resps);
-  });
+  document.getElementById("pvBackToList")?.addEventListener("click",leaveFormToList);
   document.getElementById("pvNext")?.addEventListener("click",()=>{
     // Moving on is free unless the instrument says otherwise ("Must be completed
     // before continuing" in the builder). Everything unanswered or invalid is still

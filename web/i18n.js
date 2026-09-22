@@ -568,6 +568,8 @@
     "Search name / email…": "Cari nama / email…",
     "Submitted": "Terkirim",
     "Draft": "Draf",
+    "← Responses": "← Daftar respons",
+    "Back to your responses": "Kembali ke daftar respons Anda",
     "⏳ Waiting to be sent": "⏳ Menunggu dikirim",
     "⏳ Draft · waiting to be sent": "⏳ Draf · menunggu dikirim",
     "Draft · on this device": "Draf · di perangkat ini",
