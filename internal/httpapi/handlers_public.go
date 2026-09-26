@@ -388,6 +388,27 @@ func (s *Server) unsubmitResponse(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"id": resp.ID, "status": resp.Status})
 }
 
+// DELETE /api/public/forms/{token}/responses/{responseId} — the respondent discards one
+// of their own unfinished responses. Drafts only; a submitted answer is not theirs to
+// remove, and the client confirms with a typed code before calling this.
+func (s *Server) deleteOwnDraftResponse(w http.ResponseWriter, r *http.Request) {
+	rc := respondentFrom(r.Context())
+	sh, ok := s.resolveShare(w, r)
+	if !ok {
+		return
+	}
+	err := s.st.DeleteOwnDraftResponse(r.Context(), r.PathValue("responseId"), rc.RespondentID, sh.FormID)
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "the draft was not found, is not yours, or has already been submitted")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "failed to delete the draft")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"deleted": true})
+}
+
 // GET /api/public/forms/{token}/draft — fetch the draft stored on the server.
 func (s *Server) myDraft(w http.ResponseWriter, r *http.Request) {
 	rc := respondentFrom(r.Context())

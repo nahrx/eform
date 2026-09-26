@@ -168,6 +168,7 @@ func (s *Server) Routes() http.Handler {
 	mux.Handle("POST /api/public/forms/{token}/uploads", s.respondentMW(s.limitRespondent(s.publicUpload, 30, 90)))
 	mux.Handle("POST /api/public/forms/{token}/responses", s.respondentMW(s.limitRespondent(s.publicSubmit, 20, 60)))
 	mux.Handle("POST /api/public/forms/{token}/responses/{responseId}/unsubmit", s.respondentMW(s.limitRespondent(s.unsubmitResponse, 20, 60)))
+	mux.Handle("DELETE /api/public/forms/{token}/responses/{responseId}", s.respondentMW(s.limitRespondent(s.deleteOwnDraftResponse, 20, 60)))
 	mux.Handle("GET /api/public/forms/{token}/draft", s.respondentMW(s.myDraft))
 	mux.Handle("POST /api/public/forms/{token}/draft", s.respondentMW(s.limitRespondent(s.saveDraftHandler, 120, 300)))
 	// Offline devices report what their queue is still holding. Sent after every flush

@@ -1379,6 +1379,22 @@ func (s *Store) GetDraftByFormAndRespondent(ctx context.Context, formID, respond
 	return d, err
 }
 
+// DeleteOwnDraftResponse removes one response of the respondent's own, and only while
+// it is still a draft: an answer they have already submitted is never deleted from the
+// public side — that stays with the admin.
+func (s *Store) DeleteOwnDraftResponse(ctx context.Context, responseID, respondentID, formID string) error {
+	res, err := s.pool.Exec(ctx,
+		`DELETE FROM form_responses WHERE id=$1 AND respondent_id=$2 AND form_id=$3 AND status='draft'`,
+		responseID, respondentID, formID)
+	if err != nil {
+		return err
+	}
+	if res.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (s *Store) DeleteDraft(ctx context.Context, formID, respondentID string) error {
 	_, err := s.pool.Exec(ctx,
 		`DELETE FROM response_drafts WHERE form_id=$1 AND respondent_id=$2`,
