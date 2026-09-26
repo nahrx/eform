@@ -581,6 +581,8 @@
       }
 
       /* roster */
+      .rv-photogrid{display:flex;flex-wrap:wrap;gap:8px}
+      .rv-photogrid img{width:120px;height:120px;object-fit:cover;border-radius:8px;border:1px solid var(--line);cursor:zoom-in}
       .rv-roster {
         border: 1.5px dashed var(--roster);
         border-radius: 10px;
@@ -2070,11 +2072,23 @@ setTimeout(function(){document.documentElement.classList.remove("auth-checking")
           c.type === "signature" ||
           (c.type === "file" && isImageSrc(getMediaSource(val)))
         ) {
+          const alt = esc(rowInterp(txt(c.label) || c.name, answers, rp));
+          const many = photoValueList(val);
+          if (many.length > 1) {
+            const imgs = many
+              .map((v, i) => {
+                const s = getMediaSource(v);
+                return s
+                  ? `<a href="${esc(s)}" target="_blank" rel="noreferrer"><img src="${esc(s)}" alt="${alt} ${i + 1}"></a>`
+                  : "";
+              })
+              .join("");
+            return `<div class="rv-field"><div class="rv-label">${label} <span style="font-weight:400;font-size:11px;color:var(--muted)">(${many.length})</span></div>${desc}<div class="rv-photogrid">${imgs}</div></div>`;
+          }
           const src = getMediaSource(val);
           if (!src) {
             return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer-box"><span style="color:var(--muted);font-style:italic">—</span></div></div>`;
           }
-          const alt = esc(rowInterp(txt(c.label) || c.name, answers, rp));
           return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-photo-wrap"><a class="rv-photo-link" href="${esc(src)}" target="_blank" rel="noreferrer">Open image</a><img class="rv-photo-img" src="${esc(src)}" alt="${alt}"></div></div>`;
         }
 
@@ -2611,6 +2625,13 @@ setTimeout(function(){document.documentElement.classList.remove("auth-checking")
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
         if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
         return { lat, lng };
+      }
+      /* A photo question that takes several photos answers with a list; one that takes a
+         single photo answers with a string. Read either as a list so the view draws one grid. */
+      function photoValueList(val){
+        if(val==null||val==="")return [];
+        if(Array.isArray(val))return val.filter(v=>v!=null&&v!=="");
+        return [val];
       }
       function getMediaSource(val) {
         if (!val) return "";

@@ -130,6 +130,8 @@ button,input,select,textarea{font-family:inherit}
 .ed-radio-item input,.ed-check-item input{accent-color:var(--accent);width:15px;height:15px;cursor:pointer;flex:none}
 
 /* roster */
+.rv-photogrid{display:flex;flex-wrap:wrap;gap:8px}
+.rv-photogrid img{width:120px;height:120px;object-fit:cover;border-radius:8px;border:1px solid var(--line);cursor:zoom-in}
 .rv-roster{border:1.5px dashed var(--roster);border-radius:10px;padding:14px;margin-bottom:14px;background:#eefaf3}
 .rv-roster-title{font-weight:700;font-size:13.5px;color:var(--roster);margin-bottom:10px}
 .rv-row{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-bottom:8px}
@@ -284,6 +286,13 @@ function rowInterp(text,answers,rowPrefix){
     if(name in answers)return String(answers[name]);
     return"";
   });
+}
+/* A photo question that takes several photos answers with a list; one that takes a
+   single photo answers with a string. Read either as a list so the view draws one grid. */
+function photoValueList(val){
+  if(val==null||val==="")return [];
+  if(Array.isArray(val))return val.filter(v=>v!=null&&v!=="");
+  return [val];
 }
 function getMediaSource(val){
   if(!val)return "";
@@ -773,6 +782,11 @@ function renderReadField(c,answers,rp){
   }
   // Photo / File / Signature
   if(c.type==="photo"||c.type==="file"||c.type==="signature"){
+    const many=photoValueList(val);
+    if(many.length>1){
+      const imgs=many.map(v=>{const s=getMediaSource(v);return s?`<img src="${s}" onclick="openPhotoModal(this.src)" title="Click to enlarge">`:"";}).join("");
+      return`<div class="rv-field"><div class="rv-label">${label} <span style="font-weight:400;font-size:11px;color:var(--muted)">(${many.length})</span></div>${desc}<div class="rv-photogrid">${imgs}</div></div>`;
+    }
     const src=getMediaSource(val);
     if(!src)return`<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer empty">—</div></div>`;
     if(isImageMedia(c,src)){

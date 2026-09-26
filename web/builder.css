@@ -290,6 +290,11 @@
   .pv-sigactions{display:flex}
   .pv-photowrap{display:flex;flex-direction:column;gap:8px}
   .pv-photorow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .pv-photogrid{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+  .pv-photothumb{position:relative;line-height:0}
+  .pv-photothumb img{width:92px;height:92px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}
+  .pv-thumb-x{position:absolute;top:-7px;right:-7px;width:20px;height:20px;border-radius:50%;border:1px solid var(--line);background:var(--panel);color:var(--ink-soft);font-size:11px;line-height:1;cursor:pointer;padding:0}
+  .pv-thumb-x:hover{border-color:var(--bad);color:var(--bad)}
   .pv-photolabel{display:inline-flex;align-items:center;gap:6px;cursor:pointer;background:var(--panel);border:1.5px dashed var(--line);border-radius:var(--radius-s);padding:10px 16px;font-size:13px;font-weight:500;color:var(--ink-soft);transition:.12s;user-select:none}
   .pv-photolabel:hover:not(.pv-photolabel-dis){border-color:var(--accent);background:var(--accent-soft);color:var(--ink)}
   .pv-photolabel.pv-photolabel-dis{opacity:.5;cursor:not-allowed}

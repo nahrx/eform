@@ -97,6 +97,13 @@ input,select,textarea{font-family:inherit;font-size:13.5px;color:var(--ink)}
 .pv-sigmsg.error{color:var(--bad)}
 .pv-photowrap{display:flex;flex-direction:column;gap:8px}
 .pv-photorow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pv-photogrid{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+.pv-photothumb{position:relative;line-height:0}
+.pv-photothumb img{width:92px;height:92px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}
+.pv-photothumb .pv-thumb-cap{position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.45);color:#fff;font-size:10px;line-height:1.4;text-align:center;border-radius:0 0 8px 8px}
+.pv-thumb-x{position:absolute;top:-7px;right:-7px;width:20px;height:20px;border-radius:50%;border:1px solid var(--line);background:var(--panel);color:var(--ink-soft);font-size:11px;line-height:1;cursor:pointer;padding:0}
+.pv-thumb-x:hover{border-color:var(--bad);color:var(--bad)}
+.pv-thumb-x[disabled]{opacity:.4;cursor:not-allowed}
 .pv-photolabel{display:inline-flex;align-items:center;gap:6px;cursor:pointer;background:var(--panel);border:1.5px dashed var(--line);border-radius:var(--radius-s);padding:10px 16px;font-size:13px;font-weight:500;color:var(--ink-soft);transition:.12s;user-select:none}
 .pv-photolabel:hover:not(.pv-photolabel-dis){border-color:var(--accent);background:var(--accent-soft);color:var(--ink)}
 .pv-photolabel.pv-photolabel-dis{opacity:.5;cursor:not-allowed}
@@ -731,14 +738,14 @@ function applyResolvedUploads(map){
 window.addEventListener("online",()=>flushOfflineQueue());
 function clearPendingUpload(key){
   const item=PENDING_UPLOADS[key];
-  if(item&&item.objectUrl)URL.revokeObjectURL(item.objectUrl);
+  if(item)(item.items||[]).forEach(it=>{if(it.objectUrl)URL.revokeObjectURL(it.objectUrl);});
   delete PENDING_UPLOADS[key];
 }
 function resetPendingUploads(){
   Object.keys(PENDING_UPLOADS).forEach(clearPendingUpload);
 }
 function pendingUploadKeys(){
-  return Object.keys(PENDING_UPLOADS).filter(key=>PENDING_UPLOADS[key]&&PENDING_UPLOADS[key].file);
+  return Object.keys(PENDING_UPLOADS).filter(key=>PENDING_UPLOADS[key]&&(PENDING_UPLOADS[key].items||[]).length);
 }
 function showNavError(msg){
   const err=document.getElementById("pvNavErr");
@@ -751,6 +758,19 @@ function ensureNoPendingUploads(){
   showNavError("Some files are selected but not uploaded yet. Upload them before saving a draft or submitting.");
   return false;
 }
+/* A photo question set to "several photos" answers with a list of URLs; a single one
+   answers with a plain string, exactly as before. Everything else — validation, the
+   read-only view, exports — sees an ordinary array, the same shape a checkbox answer
+   already has. These two helpers are the only place that has to know the difference. */
+function photoValueList(v){
+  if(v==null||v==="")return [];
+  if(Array.isArray(v))return v.filter(x=>x!=null&&x!=="");
+  if(typeof v==="string"&&v.trim().startsWith("[")){
+    try{const a=JSON.parse(v);if(Array.isArray(a))return a.filter(x=>x!=null&&x!=="");}catch(_){}
+  }
+  return [v];
+}
+function photoHiddenValue(v,multi){return multi?JSON.stringify(photoValueList(v)):(photoValueList(v)[0]||"");}
 function mediaSourceOf(val){
   if(!val)return "";
   const s=String(val);
@@ -1591,6 +1611,12 @@ function renderViewField(c,ans,rp){
     return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer${g?"":" empty"}">${esc(coordText)}</div>${map}</div>`;
   }
   if(c.type==="photo"||c.type==="image"||c.type==="signature"||(c.type==="file"&&isImageSrc(getMediaSource(val)))){
+    const many=photoValueList(val);
+    if(many.length>1){
+      const alt=esc(viewRowInterp(txt(c.label)||c.name,ans,rp));
+      const items=many.map((v,i)=>{const s2=getMediaSource(v);return s2?`<div class="pv-photothumb"><a href="${esc(s2)}" target="_blank" rel="noreferrer"><img src="${esc(s2)}" alt="${alt} ${i+1}"></a></div>`:"";}).join("");
+      return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="pv-photogrid">${items}</div></div>`;
+    }
     const src=getMediaSource(val);
     if(!src)return `<div class="rv-field"><div class="rv-label">${label}</div>${desc}<div class="rv-answer-box"><span style="color:var(--muted);font-style:italic">—</span></div></div>`;
     const alt=esc(viewRowInterp(txt(c.label)||c.name,ans,rp));
@@ -2087,9 +2113,11 @@ function fieldHtml(c,rp,scopes){
     ctrl=`<div class="pv-sigwrap"><input type="hidden" data-k="${ke}" value="${esc(val)}"><canvas class="pv-sigpad" width="400" height="140"${(enabled&&!c.readOnly)?"":' data-disabled="1"'}></canvas><div class="pv-sigactions"><button type="button" class="pv-smbtn pv-sigsave"${disAll} disabled>Save signature</button><button type="button" class="pv-smbtn pv-sigclear"${disAll}>Clear signature</button><span class="pv-sigmsg"></span></div></div>`;
   else if(c.type==="photo"||c.type==="file"){
     const isPhoto=c.type==="photo";
+    const multi=isPhoto&&!!c.multiple;
+    const mattr=multi?" multiple":"";
     const disClass=(!enabled||c.readOnly)?' pv-photolabel-dis':'';
     const dis2=(!enabled||c.readOnly)?' disabled':'';
-    ctrl=`<div class="pv-photowrap" data-field-type="${isPhoto?'photo':'file'}" data-max-kb="${isPhoto?photoMaxKB(c):0}"><input type="hidden" data-k="${ke}" value="${esc(val)}"><div class="pv-photorow">${isPhoto?(hasDeviceCamera()?`<label class="pv-photolabel${disClass}"><input type="file" class="pv-photofile" accept="image/*" capture="environment"${dis2}>📷 Take photo</label><label class="pv-photolabel${disClass}"><input type="file" class="pv-photofile" accept="image/*"${dis2}>🖼 From gallery</label>`:`<label class="pv-photolabel${disClass}"><input type="file" class="pv-photofile" accept="image/*"${dis2}>🖼 Choose photo</label>`):`<label class="pv-photolabel${disClass}"><input type="file" class="pv-photofile"${dis2}>📎 Choose File</label>`}<button type="button" class="pv-smbtn pv-photoupload"${dis2} disabled>Upload</button></div><div class="pv-photostate"></div><div class="pv-photopreview" hidden></div></div>`;
+    ctrl=`<div class="pv-photowrap" data-field-type="${isPhoto?'photo':'file'}" data-max-kb="${isPhoto?photoMaxKB(c):0}"${multi?` data-multi data-max-photos="${esc(c.maxPhotos??"")}"`:""}><input type="hidden" data-k="${ke}"${multi?" data-multi":""} value="${esc(multi?photoHiddenValue(val,true):val)}"><div class="pv-photorow">${isPhoto?(hasDeviceCamera()?`<label class="pv-photolabel${disClass}"><input type="file" class="pv-photofile" accept="image/*" capture="environment"${dis2}>📷 Take photo</label><label class="pv-photolabel${disClass}"><input type="file" class="pv-photofile" accept="image/*"${mattr}${dis2}>🖼 From gallery</label>`:`<label class="pv-photolabel${disClass}"><input type="file" class="pv-photofile" accept="image/*"${mattr}${dis2}>🖼 Choose photo</label>`):`<label class="pv-photolabel${disClass}"><input type="file" class="pv-photofile"${dis2}>📎 Choose File</label>`}<button type="button" class="pv-smbtn pv-photoupload"${dis2} disabled>Upload</button></div><div class="pv-photostate"></div><div class="pv-photopreview" hidden></div></div>`;
   }
   else
     ctrl=`<input type="text" data-k="${ke}" class="pv-in" placeholder="${esc(c.placeholder||"")}"${dis}${rdOnly}>`;
@@ -2674,7 +2702,11 @@ function logout(){clearRespSession();location.reload();}
 
 /* ---- navigasi ---- */
 function saveAnswers(){
-  document.querySelectorAll("[data-k]").forEach(el=>{answers[el.dataset.k]=el.dataset.cur!=null?curParse(el.value):el.value;});
+  document.querySelectorAll("[data-k]").forEach(el=>{
+    answers[el.dataset.k]=el.dataset.cur!=null?curParse(el.value)
+      :el.dataset.multi!=null?photoValueList(el.value)
+      :el.value;
+  });
   document.querySelectorAll("[data-kr]:checked").forEach(el=>{answers[el.dataset.kr]=el.value;});
   const cbKeys=new Set([...document.querySelectorAll("[data-kc]")].map(el=>el.dataset.kc));
   cbKeys.forEach(key=>{answers[key]=[...document.querySelectorAll(`[data-kc="${CSS.escape(key)}"]:checked`)].map(el=>el.value);});
@@ -2855,7 +2887,10 @@ function renderRosterRow(){
 
 /* ---- restore & bind ---- */
 function restoreAnswers(){
-  document.querySelectorAll("[data-k]").forEach(el=>{const v=answers[el.dataset.k];if(v!=null)el.value=el.dataset.cur!=null?curFormat(v):v;});
+  document.querySelectorAll("[data-k]").forEach(el=>{
+    const v=answers[el.dataset.k];if(v==null)return;
+    el.value=el.dataset.cur!=null?curFormat(v):el.dataset.multi!=null?photoHiddenValue(v,true):v;
+  });
   document.querySelectorAll("[data-kr]").forEach(el=>{el.checked=(String(answers[el.dataset.kr])===el.value);});
 }
 function bindPageEvents(){
@@ -3126,84 +3161,130 @@ function wirePhotoField(wrap){
   if(!hidden||!fileInput||!uploadBtn||!state||!preview)return;
   const key=hidden.dataset.k;
   const fieldType=wrap.dataset.fieldType||"file";
+  // "Several photos": each pick adds to the answer instead of replacing it, and the
+  // answer is a list. A single-photo field keeps a list of one internally, so there is
+  // one code path here rather than two.
+  const multi=wrap.dataset.multi!=null;
+  const cap=multi?Number(wrap.dataset.maxPhotos||0):1;
+  const savedList=()=>photoValueList(hidden.value);
+  const setSaved=list=>{hidden.value=multi?JSON.stringify(list):(list[0]||"");};
+  const pend=()=>PENDING_UPLOADS[key]||{fieldType,items:[]};
   renderPhotoPreview(wrap);
   wrap._pickSeq=0;
   fileInputs.forEach(inp=>inp.addEventListener("change",async()=>{
-    const f=inp.files[0];if(!f)return;
+    const picked=[...inp.files];if(!picked.length)return;
     // Picking from the other button afterwards must not leave a stale file behind.
     fileInputs.forEach(o=>{if(o!==inp)o.value="";});
-    clearPendingUpload(key);
-    let use=f,note="";
+    const current=pend();
+    const items=multi?current.items.slice():[];
+    if(!multi)clearPendingUpload(key);
+    let room=cap>0?cap-savedList().length-items.length:Infinity;
+    let note="";
+    if(room<=0){renderPhotoPreview(wrap,`This question takes at most ${cap} photo${cap===1?"":"s"}.`);return;}
+    const take=picked.slice(0,room===Infinity?picked.length:room);
+    if(take.length<picked.length)note=`Only ${cap} photo${cap===1?"":"s"} allowed — ${picked.length-take.length} left out.`;
     const maxKB=Number(wrap.dataset.maxKb||0);
-    if(fieldType==="photo"&&maxKB>0&&window.ImageCompress){
-      state.className="pv-photostate pending";
-      state.textContent="Compressing the photo…";
-      // Shrinking a large photo takes a moment; if the enumerator picks another
-      // one meanwhile, the slower result must not overwrite the newer choice.
-      const seq=++wrap._pickSeq;
-      const res=await ImageCompress.compress(f,maxKB);
-      if(seq!==wrap._pickSeq)return;
-      use=res.file;
-      if(res.changed){
-        note=`Compressed ${fmtSize(res.originalSize)} → ${fmtSize(use.size)}.`;
-        // Even the smallest setting can miss the budget on a very detailed photo.
-        // It is still uploaded: refusing it would leave the enumerator standing in
-        // the field with no way to record the answer.
-        if(!res.reachedTarget)note+=` Still above the ${maxKB} KB limit.`;
+    const seq=++wrap._pickSeq;
+    for(const f of take){
+      let use=f,itemNote="";
+      if(fieldType==="photo"&&maxKB>0&&window.ImageCompress){
+        state.className="pv-photostate pending";
+        state.textContent=take.length>1?`Compressing ${take.length} photos…`:"Compressing the photo…";
+        // Shrinking a large photo takes a moment; if the enumerator picks another
+        // one meanwhile, the slower result must not overwrite the newer choice.
+        const res=await ImageCompress.compress(f,maxKB);
+        if(seq!==wrap._pickSeq)return;
+        use=res.file;
+        if(res.changed){
+          itemNote=`Compressed ${fmtSize(res.originalSize)} → ${fmtSize(use.size)}.`;
+          // Even the smallest setting can miss the budget on a very detailed photo.
+          // It is still uploaded: refusing it would leave the enumerator standing in
+          // the field with no way to record the answer.
+          if(!res.reachedTarget)itemNote+=` Still above the ${maxKB} KB limit.`;
+        }
       }
+      items.push({
+        file:use,
+        note:itemNote,
+        objectUrl:(fieldType==="photo"||String(use.type||"").startsWith("image/"))?URL.createObjectURL(use):""
+      });
     }
-    PENDING_UPLOADS[key]={
-      file:use,
-      fieldType,
-      note,
-      objectUrl:(fieldType==="photo"||String(use.type||"").startsWith("image/"))?URL.createObjectURL(use):""
-    };
+    PENDING_UPLOADS[key]={fieldType,items,note};
     renderPhotoPreview(wrap);
   }));
   uploadBtn.addEventListener("click",async()=>{
     const pending=PENDING_UPLOADS[key];
-    if(!pending||!pending.file)return;
+    if(!pending||!pending.items.length)return;
     uploadBtn.disabled=true;
     setInputs("disabled",true);
-    state.className="pv-photostate pending";
-    state.textContent="Uploading the file…";
-    try{
-      const fd=new FormData();
-      fd.append("file",pending.file);
-      fd.append("fieldType",fieldType);
-      const r=await fetch("/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/uploads",{
-        method:"POST",
-        headers:pubHeaders({}),
-        body:fd
-      });
-      const d=await r.json();
-      if(!r.ok)throw new Error(d.error||"Failed to upload the file");
-      hidden.value=d.url||"";
-      setInputs("value","");
-      setInputs("disabled",false);
-      clearPendingUpload(key);
-      hidden.dispatchEvent(new Event("change",{bubbles:true}));
-    }catch(e){
-      setInputs("disabled",false);
-      // Offline the upload can never succeed, and refusing it would strand the whole
-      // response: submit is blocked while a file is still pending. So the photo is
-      // kept on the device and the answer points at it until it can be sent.
-      if(isNetworkError(e)){
-        try{
-          const ref=await storeOfflineUpload(pending.file,fieldType);
-          hidden.value=ref;
-          setInputs("value","");
-          clearPendingUpload(key);
-          hidden.dispatchEvent(new Event("change",{bubbles:true}));
-          updateOfflineBadge();
-          renderPhotoPreview(wrap);
-          return;
-        }catch(_e2){}
+    const total=pending.items.length;
+    const done=[];          // what actually reached the server (or this device, offline)
+    let failure="";
+    for(let n=0;n<total;n++){
+      const it=pending.items[n];
+      state.className="pv-photostate pending";
+      state.textContent=total>1?`Uploading ${n+1} of ${total}…`:"Uploading the file…";
+      try{
+        const fd=new FormData();
+        fd.append("file",it.file);
+        fd.append("fieldType",fieldType);
+        const r=await fetch("/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/uploads",{
+          method:"POST",
+          headers:pubHeaders({}),
+          body:fd
+        });
+        const d=await r.json();
+        if(!r.ok)throw new Error(d.error||"Failed to upload the file");
+        done.push({item:it,value:d.url||""});
+      }catch(e){
+        // Offline the upload can never succeed, and refusing it would strand the whole
+        // response: submit is blocked while a file is still pending. So the photo is
+        // kept on the device and the answer points at it until it can be sent.
+        if(isNetworkError(e)){
+          try{
+            done.push({item:it,value:await storeOfflineUpload(it.file,fieldType)});
+            continue;
+          }catch(_e2){}
+        }
+        failure=e.message;
+        break;    // the rest stay selected, so nothing is silently dropped
       }
-      renderPhotoPreview(wrap,e.message);
     }
+    setInputs("disabled",false);
+    if(done.length){
+      setSaved(savedList().concat(done.map(d=>d.value)));
+      // Only what went through leaves the selection; a failure keeps its photo.
+      const sent=new Set(done.map(d=>d.item));
+      const left=pending.items.filter(it=>!sent.has(it));
+      done.forEach(d=>{if(d.item.objectUrl)URL.revokeObjectURL(d.item.objectUrl);});
+      if(left.length)PENDING_UPLOADS[key]={fieldType,items:left};
+      else{delete PENDING_UPLOADS[key];setInputs("value","");}
+      hidden.dispatchEvent(new Event("change",{bubbles:true}));
+      updateOfflineBadge();
+    }
+    renderPhotoPreview(wrap,failure);
   });
   preview.addEventListener("click",e=>{
+    const rmPending=e.target.closest("[data-rm-pending]");
+    if(rmPending){
+      const p=PENDING_UPLOADS[key];
+      if(p){
+        const [gone]=p.items.splice(+rmPending.dataset.rmPending,1);
+        if(gone&&gone.objectUrl)URL.revokeObjectURL(gone.objectUrl);
+        if(!p.items.length)delete PENDING_UPLOADS[key];
+      }
+      setInputs("value","");
+      renderPhotoPreview(wrap);
+      return;
+    }
+    const rmSaved=e.target.closest("[data-rm-saved]");
+    if(rmSaved){
+      const list=savedList();list.splice(+rmSaved.dataset.rmSaved,1);
+      setSaved(list);setInputs("value","");
+      renderPhotoPreview(wrap);
+      hidden.dispatchEvent(new Event("change",{bubbles:true}));
+      return;
+    }
     if(e.target.classList.contains("pv-photocancel")){
       clearPendingUpload(key);
       setInputs("value","");
@@ -3212,7 +3293,7 @@ function wirePhotoField(wrap){
     }
     if(!e.target.classList.contains("pv-photoclear"))return;
     clearPendingUpload(key);
-    hidden.value="";setInputs("value","");
+    setSaved([]);setInputs("value","");
     preview.hidden=true;preview.innerHTML="";
     hidden.dispatchEvent(new Event("change",{bubbles:true}));
   });
@@ -3239,23 +3320,67 @@ function renderPhotoPreview(wrap,errorMsg){
   if(!hidden||!fileInput||!uploadBtn||!state||!preview)return;
   const key=hidden.dataset.k;
   const fieldType=wrap.dataset.fieldType||"file";
+  const multi=wrap.dataset.multi!=null;
   const pending=PENDING_UPLOADS[key];
+  const pendingItems=(pending&&pending.items)||[];
   const disabled=fileInput.disabled;
-  const savedValue=String(hidden.value||"");
-  if(pending&&pending.file){
-    const dis=disabled?" disabled":"";
-    const media=pending.objectUrl?`<img class="pv-photoimg" src="${pending.objectUrl}">`:`<span style="font-size:12.5px;color:var(--ink-soft)">${esc(pending.file.name)}</span>`;
+  const dis=disabled?" disabled":"";
+  const saved=photoValueList(hidden.value);
+
+  /* Several photos: one grid holding what is already stored and what is still waiting
+     to go up, each with its own ✕ — removing the wrong photo of six should not mean
+     starting the question again. */
+  if(multi){
+    const thumbs=[];
+    saved.forEach((v,idx)=>{
+      const local=isLocalRef(v);
+      const src=local?loadLocalPreview(v,()=>renderPhotoPreview(wrap)):(mediaSourceOf(v)||v);
+      const img=src?`<img src="${esc(src)}">`:`<img>`;
+      thumbs.push(`<div class="pv-photothumb">${img}${local?`<span class="pv-thumb-cap">on device</span>`:""}<button type="button" class="pv-thumb-x" data-rm-saved="${idx}"${dis} title="Remove">✕</button></div>`);
+    });
+    pendingItems.forEach((it,idx)=>{
+      const img=it.objectUrl?`<img src="${it.objectUrl}">`:`<img>`;
+      thumbs.push(`<div class="pv-photothumb">${img}<span class="pv-thumb-cap">not sent</span><button type="button" class="pv-thumb-x" data-rm-pending="${idx}"${dis} title="Remove">✕</button></div>`);
+    });
+    if(!thumbs.length){
+      preview.hidden=true;preview.innerHTML="";
+      uploadBtn.disabled=true;
+      state.className="pv-photostate";
+      state.textContent=errorMsg||"";
+      return;
+    }
+    preview.innerHTML=`<div class="pv-photogrid">${thumbs.join("")}</div>`+
+      (saved.length?`<button type="button" class="pv-smbtn pv-photoclear"${dis}>Remove all (${saved.length})</button>`:"");
+    preview.hidden=false;
+    uploadBtn.disabled=disabled||!pendingItems.length;
+    if(pendingItems.length){
+      state.className="pv-photostate pending";
+      const notes=pendingItems.map(it=>it.note).filter(Boolean);
+      state.textContent=errorMsg||((pending&&pending.note?pending.note+" ":"")+(notes.length?notes[notes.length-1]+" ":"")+
+        `Press Upload to store ${pendingItems.length} photo${pendingItems.length===1?"":"s"} on the server.`);
+    }else if(saved.some(isLocalRef)){
+      state.className="pv-photostate pending";
+      state.textContent=errorMsg||"Saved on this device — they will be uploaded once you are back online.";
+    }else{
+      state.className="pv-photostate ok";
+      state.textContent=errorMsg||`${saved.length} photo${saved.length===1?"":"s"} stored.`;
+    }
+    return;
+  }
+
+  const savedValue=saved[0]||"";
+  const one=pendingItems[0];
+  if(one){
+    const media=one.objectUrl?`<img class="pv-photoimg" src="${one.objectUrl}">`:`<span style="font-size:12.5px;color:var(--ink-soft)">${esc(one.file.name)}</span>`;
     preview.innerHTML=`${media}<button type="button" class="pv-smbtn pv-photocancel"${dis}>Cancel selection</button>`;
     preview.hidden=false;
     uploadBtn.disabled=disabled;
     state.className="pv-photostate pending";
-    const picked=(pending.note?pending.note+" ":"")+"Press Upload to store it on the server.";
-    state.textContent=errorMsg||picked;
+    state.textContent=errorMsg||((one.note?one.note+" ":"")+"Press Upload to store it on the server.");
     return;
   }
   uploadBtn.disabled=true;
   if(isLocalRef(savedValue)){
-    const dis=disabled?" disabled":"";
     const src=loadLocalPreview(savedValue,()=>renderPhotoPreview(wrap));
     const media=src?`<img class="pv-photoimg" src="${src}">`:`<span style="font-size:12.5px;color:var(--ink-soft)">Attachment saved on this device</span>`;
     preview.innerHTML=`${media}<button type="button" class="pv-smbtn pv-photoclear"${dis}>Remove</button>`;
@@ -3265,7 +3390,6 @@ function renderPhotoPreview(wrap,errorMsg){
     return;
   }
   if(savedValue){
-    const dis=disabled?" disabled":"";
     const src=mediaSourceOf(savedValue)||savedValue;
     if(isImageMediaSource(fieldType,src)){
       preview.innerHTML=`<img class="pv-photoimg" src="${src}"><button type="button" class="pv-smbtn pv-photoclear"${dis}>Remove photo</button>`;

@@ -176,6 +176,8 @@
     "— none —": "— tidak ada —",
     "Behavior": "Perilaku",
     "Required": "Wajib diisi",
+    "Allow several photos in this question": "Izinkan beberapa foto pada pertanyaan ini",
+    "Maximum number of photos": "Jumlah foto maksimum",
     "Hidden — not shown when the form is filled in": "Disembunyikan — tidak ditampilkan saat kuesioner diisi",
     "🚫 hidden": "🚫 tersembunyi",
     "Read-only": "Hanya baca",
