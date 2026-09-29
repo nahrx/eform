@@ -115,3 +115,30 @@ func TestExportAnswersRewritesNestedAttachments(t *testing.T) {
 		t.Fatalf("other answers must be untouched, got %v", got["nama"])
 	}
 }
+
+func TestListAnswerKeepsAmpersandsReadable(t *testing.T) {
+	// The value as it comes out of the database: two signed attachment links.
+	v := []any{
+		"https://eform.example.go.id/uploads/a.jpg?e=1&s=abc",
+		"https://eform.example.go.id/uploads/b.jpg?e=2&s=def",
+	}
+	got := toStr(v)
+	escaped := `\` + "u0026" // the JSON escape for & — valid, but unusable in a cell
+	if strings.Contains(got, escaped) {
+		t.Fatalf("an exported list must not carry escaped ampersands: %s", got)
+	}
+	if !strings.Contains(got, "?e=1&s=abc") || !strings.Contains(got, "?e=2&s=def") {
+		t.Fatalf("both links must survive intact: %s", got)
+	}
+	if strings.HasSuffix(got, "\n") {
+		t.Fatalf("a cell must not end with a newline: %q", got)
+	}
+	// Still valid JSON, so anything reading the column as data keeps working.
+	var back []string
+	if err := json.Unmarshal([]byte(got), &back); err != nil || len(back) != 2 {
+		t.Fatalf("the cell should still parse as JSON: %v (%v)", got, err)
+	}
+	if back[0] != v[0].(string) {
+		t.Fatalf("round-trip changed the link: %q", back[0])
+	}
+}

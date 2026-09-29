@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bytes"
 	"encoding/csv"
 	"encoding/json"
 	"errors"
@@ -997,6 +998,18 @@ func toStr(v any) string {
 		return strconv.FormatFloat(t, 'f', -1, 64)
 	case bool:
 		return strconv.FormatBool(t)
+	case []any:
+		// A list answer — several photos, or the choices ticked on a checkbox — is
+		// written as JSON. json.Marshal escapes &, < and > as \u0026 and friends,
+		// which is valid JSON but useless in a spreadsheet: the URLs in the cell are
+		// read and copied by a person, and "?e=1&s=..." must survive that.
+		var buf bytes.Buffer
+		enc := json.NewEncoder(&buf)
+		enc.SetEscapeHTML(false)
+		if err := enc.Encode(v); err != nil {
+			return ""
+		}
+		return strings.TrimRight(buf.String(), "\n")
 	default:
 		b, _ := json.Marshal(v)
 		return string(b)
