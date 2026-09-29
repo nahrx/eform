@@ -619,7 +619,7 @@ func (s *Server) viewerExportResponses(w http.ResponseWriter, r *http.Request) {
 	_ = cw.Write(append(csvBaseHeader(true), cols...))
 	n := 0
 	_ = s.st.ForEachViewerResponse(r.Context(), viewerID, formID, func(rr models.Response) error {
-		writeCSVRow(cw, rr, cols, true)
+		s.writeCSVRow(cw, rr, cols, true)
 		n++
 		return nil
 	})

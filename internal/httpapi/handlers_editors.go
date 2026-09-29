@@ -553,7 +553,7 @@ func (s *Server) editorExportResponses(w http.ResponseWriter, r *http.Request) {
 	_ = cw.Write(append(csvBaseHeader(true), cols...))
 	n := 0
 	_ = s.st.ForEachEditorResponse(r.Context(), editorID, formID, func(rr models.Response) error {
-		writeCSVRow(cw, rr, cols, true)
+		s.writeCSVRow(cw, rr, cols, true)
 		n++
 		return nil
 	})

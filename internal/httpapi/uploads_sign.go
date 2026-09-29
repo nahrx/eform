@@ -29,6 +29,13 @@ import (
 // read one response page, short enough that a leaked link expires quickly.
 const uploadURLTTL = 2 * time.Hour
 
+// exportUploadURLTTL is the same idea for a downloaded sheet. A CSV or Excel file is
+// read days after it was produced, often on another machine, so a two-hour link would
+// be dead on arrival — which is exactly what it was: exports carried the bare
+// /uploads/ path, and a bare path is refused. Long, but still finite, and every export
+// is audited.
+const exportUploadURLTTL = 30 * 24 * time.Hour
+
 // uploadSigKey derives the signing key from the JWT secret, so operators do not have
 // to configure yet another secret.
 func (s *Server) uploadSigKey() []byte {
@@ -47,6 +54,10 @@ func (s *Server) uploadSig(path string, exp int64) string {
 // signUploadURL menambahkan parameter kedaluwarsa + tanda tangan ke path lampiran.
 // Values that are not /uploads/ paths are returned unchanged.
 func (s *Server) signUploadURL(raw string) string {
+	return s.signUploadURLFor(raw, uploadURLTTL)
+}
+
+func (s *Server) signUploadURLFor(raw string, ttl time.Duration) string {
 	if !isUploadPath(raw) || isPublicUploadPath(raw) {
 		return raw
 	}
@@ -55,8 +66,18 @@ func (s *Server) signUploadURL(raw string) string {
 	if i := strings.IndexByte(path, '?'); i >= 0 {
 		path = path[:i]
 	}
-	exp := time.Now().Add(uploadURLTTL).Unix()
+	exp := time.Now().Add(ttl).Unix()
 	return path + "?e=" + strconv.FormatInt(exp, 10) + "&s=" + s.uploadSig(path, exp)
+}
+
+// exportUploadURL is what goes into a downloaded CSV or Excel file: absolute, so it is
+// clickable away from the app, and signed for long enough to still open. A file from a
+// question whose links are public needs no signature — only the host in front of it.
+func (s *Server) exportUploadURL(raw string) string {
+	if !isUploadPath(raw) {
+		return raw
+	}
+	return s.cfg.PublicBaseURL + s.signUploadURLFor(raw, exportUploadURLTTL)
 }
 
 // verifyUploadURL checks the signature on a file request.
@@ -94,6 +115,11 @@ func isPublicUploadPath(v string) bool {
 // The answer structure is free-form (values may be strings, arrays, or objects), so the walk
 // is recursive and only touches strings that look like upload paths.
 func (s *Server) signAnswerUploads(raw json.RawMessage) json.RawMessage {
+	return s.mapAnswerUploads(raw, s.signUploadURL)
+}
+
+// mapAnswerUploads rewrites every /uploads/ path inside the answer JSON with fn.
+func (s *Server) mapAnswerUploads(raw json.RawMessage, fn func(string) string) json.RawMessage {
 	if len(raw) == 0 {
 		return raw
 	}
@@ -101,7 +127,7 @@ func (s *Server) signAnswerUploads(raw json.RawMessage) json.RawMessage {
 	if err := json.Unmarshal(raw, &v); err != nil {
 		return raw
 	}
-	out, changed := s.signAny(v)
+	out, changed := mapAny(v, fn)
 	if !changed {
 		return raw
 	}
@@ -128,16 +154,16 @@ func (s *Server) signResponses(rows []models.Response) []models.Response {
 	return rows
 }
 
-func (s *Server) signAny(v any) (any, bool) {
+func mapAny(v any, fn func(string) string) (any, bool) {
 	switch t := v.(type) {
 	case string:
 		if isUploadPath(t) {
-			return s.signUploadURL(t), true
+			return fn(t), true
 		}
 	case []any:
 		changed := false
 		for i, item := range t {
-			nv, c := s.signAny(item)
+			nv, c := mapAny(item, fn)
 			if c {
 				t[i] = nv
 				changed = true
@@ -147,7 +173,7 @@ func (s *Server) signAny(v any) (any, bool) {
 	case map[string]any:
 		changed := false
 		for k, item := range t {
-			nv, c := s.signAny(item)
+			nv, c := mapAny(item, fn)
 			if c {
 				t[k] = nv
 				changed = true

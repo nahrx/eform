@@ -178,7 +178,7 @@ func (s *Server) apiExportResponses(w http.ResponseWriter, r *http.Request) {
 	_ = cw.Write(append(csvBaseHeader(key.IncludeRespondent), cols...))
 	n := 0
 	_ = s.st.ForEachScopedResponse(r.Context(), scope, func(rr models.Response) error {
-		writeCSVRow(cw, rr, cols, key.IncludeRespondent)
+		s.writeCSVRow(cw, rr, cols, key.IncludeRespondent)
 		n++
 		return nil
 	})

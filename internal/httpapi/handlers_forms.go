@@ -740,7 +740,7 @@ func (s *Server) exportResponses(w http.ResponseWriter, r *http.Request) {
 	// 3. Stream each row straight into the CSV without buffering in memory
 	n := 0
 	_ = s.st.ForEachResponseByForm(r.Context(), formID, func(rr models.Response) error {
-		writeCSVRow(cw, rr, cols, true)
+		s.writeCSVRow(cw, rr, cols, true)
 		n++
 		return nil
 	})
@@ -845,9 +845,16 @@ func responseRow(rr models.Response, cols []string, includeRespondent bool) []st
 
 // writeCSVRow writes one response row to the csv.Writer using the given answer column list.
 // Shared by the admin, viewer, editor, and API key CSV exports.
-func writeCSVRow(cw *csv.Writer, rr models.Response, cols []string, includeRespondent bool) {
-	_ = cw.Write(responseRow(rr, cols, includeRespondent))
+func (s *Server) writeCSVRow(cw *csv.Writer, rr models.Response, cols []string, includeRespondent bool) {
+	_ = cw.Write(responseRow(s.exportAnswers(rr), cols, includeRespondent))
 	cw.Flush()
+}
+
+// exportAnswers turns the attachment paths in one response into links a downloaded
+// sheet can actually open — see exportUploadURL.
+func (s *Server) exportAnswers(rr models.Response) models.Response {
+	rr.Answers = s.mapAnswerUploads(rr.Answers, s.exportUploadURL)
+	return rr
 }
 
 // streamXLSX writes the responses as an Excel file and returns the number of data rows.
@@ -867,7 +874,7 @@ func (s *Server) streamXLSX(w http.ResponseWriter, formID, sheetName string, col
 	x.WriteRow(append(csvBaseHeader(includeRespondent), cols...))
 	n := 0
 	_ = forEach(func(rr models.Response) error {
-		x.WriteRow(responseRow(rr, cols, includeRespondent))
+		x.WriteRow(responseRow(s.exportAnswers(rr), cols, includeRespondent))
 		n++
 		return nil
 	})
