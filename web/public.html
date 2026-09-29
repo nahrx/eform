@@ -3110,6 +3110,7 @@ function wireSignaturePad(canvas){
       const fd=new FormData();
       fd.append("file",blob,`signature-${Date.now()}.png`);
       fd.append("fieldType","signature");
+      fd.append("fieldKey",hidden.dataset.k||"");
       const r=await fetch("/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/uploads",{
         method:"POST",
         headers:pubHeaders({}),
@@ -3316,6 +3317,9 @@ function wirePhotoField(wrap){
         const fd=new FormData();
         fd.append("file",it.file);
         fd.append("fieldType",fieldType);
+        // Which question this belongs to: the server reads the instrument to decide
+        // whether its link may be handed out openly.
+        fd.append("fieldKey",key);
         const r=await fetch("/api/public/forms/"+encodeURIComponent(SHARE_TOKEN)+"/uploads",{
           method:"POST",
           headers:pubHeaders({}),

@@ -47,7 +47,7 @@ func (s *Server) uploadSig(path string, exp int64) string {
 // signUploadURL menambahkan parameter kedaluwarsa + tanda tangan ke path lampiran.
 // Values that are not /uploads/ paths are returned unchanged.
 func (s *Server) signUploadURL(raw string) string {
-	if !isUploadPath(raw) {
+	if !isUploadPath(raw) || isPublicUploadPath(raw) {
 		return raw
 	}
 	// Drop any existing query so signatures do not stack up when data is passed through twice.
@@ -75,6 +75,15 @@ func (s *Server) verifyUploadURL(path string, q url.Values) bool {
 
 func isUploadPath(v string) bool {
 	return strings.HasPrefix(v, "/uploads/")
+}
+
+// publicUploadPrefix holds the attachments of questions the instrument marked as
+// openly linkable. The choice is carried by the path so serving stays stateless: no
+// lookup per file request, and a link that is meant to be shareable does not expire.
+const publicUploadPrefix = "/uploads/public/"
+
+func isPublicUploadPath(v string) bool {
+	return strings.HasPrefix(v, publicUploadPrefix)
 }
 
 /* ---- signing attachments inside an answer ---- */

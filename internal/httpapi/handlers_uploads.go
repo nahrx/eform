@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"io"
 	"mime"
 	"net/http"
@@ -76,7 +77,25 @@ func (s *Server) publicUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	relDir := filepath.ToSlash(filepath.Join("uploads", time.Now().Format("2006/01/02"), rc.RespondentID))
+	// Whether the link may be opened by anyone is the instrument's decision, looked up
+	// from the schema — a request cannot ask for it. fieldKey is the answer key, so a
+	// field inside a roster arrives as "art#0#foto" and the name is its last segment.
+	publicLink := false
+	if key := strings.TrimSpace(r.FormValue("fieldKey")); key != "" {
+		if i := strings.LastIndexByte(key, '#'); i >= 0 {
+			key = key[i+1:]
+		}
+		if f, err := s.st.GetForm(r.Context(), sh.FormID); err == nil {
+			publicLink = fieldWantsPublicLink(f.Schema, key)
+		}
+	}
+
+	dirParts := []string{"uploads"}
+	if publicLink {
+		dirParts = append(dirParts, "public")
+	}
+	dirParts = append(dirParts, time.Now().Format("2006/01/02"), rc.RespondentID)
+	relDir := filepath.ToSlash(filepath.Join(dirParts...))
 	absDir := filepath.Join(s.cfg.PublicDir, filepath.FromSlash(relDir))
 	if err := os.MkdirAll(absDir, 0o755); err != nil {
 		writeErr(w, http.StatusInternalServerError, "failed to prepare the upload folder")
@@ -96,6 +115,49 @@ func (s *Server) publicUpload(w http.ResponseWriter, r *http.Request) {
 		"contentType": contentType,
 		"size":        len(data),
 	})
+}
+
+// fieldWantsPublicLink reports whether the named field in this instrument is set to
+// hand out links anyone can open. Unknown names, and a schema that cannot be read, mean
+// no — the protected link stays the default everywhere.
+func fieldWantsPublicLink(schema json.RawMessage, name string) bool {
+	if len(schema) == 0 || name == "" {
+		return false
+	}
+	var doc struct {
+		Pages []json.RawMessage `json:"pages"`
+	}
+	if err := json.Unmarshal(schema, &doc); err != nil {
+		return false
+	}
+	// Returns (found, publicLink), so the first field of that name settles it.
+	var walk func(raw json.RawMessage) (bool, bool)
+	walk = func(raw json.RawMessage) (bool, bool) {
+		var n struct {
+			Kind       string            `json:"kind"`
+			Name       string            `json:"name"`
+			PublicLink bool              `json:"publicLink"`
+			Components []json.RawMessage `json:"components"`
+		}
+		if err := json.Unmarshal(raw, &n); err != nil {
+			return false, false
+		}
+		if n.Kind == "field" && n.Name == name {
+			return true, n.PublicLink
+		}
+		for _, c := range n.Components {
+			if found, pub := walk(c); found {
+				return true, pub
+			}
+		}
+		return false, false
+	}
+	for _, pg := range doc.Pages {
+		if found, pub := walk(pg); found {
+			return pub
+		}
+	}
+	return false
 }
 
 func safeUploadExt(filename, contentType string) string {

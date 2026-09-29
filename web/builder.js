@@ -645,6 +645,7 @@ function renderNode(n){
     if(hidden)badges.push(`<span class="badge">${hidden} hidden</span>`);
   }
   if(n.validations&&n.validations.length)badges.push(`<span class="badge">${n.validations.length} cek</span>`);
+  if((n.type==="photo"||n.type==="file")&&n.publicLink)badges.push(`<span class="badge" title="The attachment link can be opened by anyone">🔓 public link</span>`);
   if(n.type==="photo"&&n.multiple)badges.push(`<span class="badge" title="Several photos allowed">multi${clean(n.maxPhotos)?" ≤"+esc(n.maxPhotos):""}</span>`);
   if(n.hidden)badges.push(`<span class="badge" title="Hidden — not shown when the form is filled in">🚫 hidden</span>`);
   if(n.visibleWhen)badges.push(`<span class="badge">⊘ kondisi</span>`);
@@ -928,6 +929,9 @@ function fieldForm(c){const t=c.type;let html=headBar(t,c.name);
   if(NUMERIC.has(t))html+=`<div class="row3">${mini("min","Min",c.min)}${mini("max","Max",c.max)}${mini("step","Step",c.step)}</div><div class="field"><label>Unit</label><input class="ctrl" data-k="unit" value="${esc(c.unit||"")}"></div>`;
   if(DATETIME.has(t)){const it=DT_INPUT_TYPE[t];html+=`<div class="row2">${mini("min","From",c.min,it)}${mini("max","To",c.max,it)}</div>`;}
   if(TEXTY.has(t))html+=`<div class="row2">${mini("maxLength","Max characters",c.maxLength,"number")}<div class="field"><label>Placeholder</label><input class="ctrl" data-k="placeholder" value="${esc(c.placeholder||"")}"></div></div><div class="field"><label>Pattern (regex)</label><input class="ctrl mono" data-k="pattern" value="${esc(c.pattern||"")}"></div>`;
+  if(t==="photo"||t==="file"){
+    html+=`<div class="group"><div class="gh">Attachment link</div><label class="check"><input type="checkbox" data-k="publicLink" ${c.publicLink?"checked":""}> The link can be opened by anyone (no expiry)</label><div class="help" style="margin-left:0;margin-top:4px">Off: the link is signed and expires after two hours, and only someone entitled to the response is given one. On: the file is served to anyone who holds the address — use it when the attachment has to be shared or embedded elsewhere.</div></div>`;
+  }
   if(t==="photo"){
     // Absent means on, so fields built before this option existed keep compressing.
     const ac=c.autoCompress!==false;
@@ -1052,6 +1056,7 @@ function serNode(n){
   // Only the off state and an explicit budget are written; an untouched field stays
   // absent from the schema and falls back to the runtime default, which is what keeps
   // the photo fields that predate this option compressing at 200 KB.
+  if(c.publicLink&&(c.type==="photo"||c.type==="file"))o.publicLink=true;
   if(c.type==="photo"){
     if(c.autoCompress===false)o.autoCompress=false;
     else if(clean(c.maxPhotoKB))o.maxPhotoKB=num(c.maxPhotoKB);
@@ -1217,7 +1222,7 @@ function impNode(n,forceKind){
   if(kind==="page"||kind==="block"||kind==="section"){return {uid:uid(),kind,name:n.name||autoName(kind),title:textOf(n.title),visibleWhen:n.visibleWhen||"",hidden:!!n.hidden,components:(n.components||[]).map(c=>impNode(c))};}
   if(kind==="roster"){return {uid:uid(),kind:"roster",name:n.name||autoName("roster"),hidden:!!n.hidden,title:textOf(n.title),rowTitle:n.rowTitle||"",rosterType:n.rosterType||"inline",min:n.min??"",max:n.max??"",countFrom:n.countFrom||"",requiredRows:!!n.requiredRows,itemLabel:textOf(n.itemLabel),rowDefaults:textOf(n.rowDefaults),rowDisplay:n.rowDisplay||[],visibleWhen:n.visibleWhen||"",validations:(n.validations||[]).map(v=>({test:v.test||"",message:textOf(v.message),severity:v.severity||"error"})),components:(n.components||[]).map(c=>impNode(c))};}
   const f=newField(n.type||"text");f.uid=uid();f.name=n.name||f.name;f.label=textOf(n.label);f.hint=textOf(n.hint);f.html=textOf(n.html);f.markdown=textOf(n.markdown);f.calculate=n.calculate||"";f.autofill=!!n.autofill;
-  ["required","readOnly","allowRemark","promptOnAdd","hidden","visibleWhen","enableWhen","requiredWhen","unit","pattern","optionsRef","optionsFilterBy","min","max","step","maxLength","maxPhotoKB","multiple","maxPhotos","autoCompress","defaultValue"].forEach(k=>{if(n[k]!=null)f[k]=n[k];});
+  ["required","readOnly","allowRemark","promptOnAdd","hidden","visibleWhen","enableWhen","requiredWhen","unit","pattern","optionsRef","optionsFilterBy","min","max","step","maxLength","maxPhotoKB","multiple","maxPhotos","publicLink","autoCompress","defaultValue"].forEach(k=>{if(n[k]!=null)f[k]=n[k];});
   f.placeholder=textOf(n.placeholder);
   if(n.options)f.options=n.options.map(o=>{const x={value:String(o.value),label:textOf(o.label),skipTo:o.skipTo||""};if(o.hidden)x.hidden=true;return x;});
   if(n.optionsApi){f.optionsApi={...n.optionsApi};f.optionSource="api";}else if(n.optionsRef){f.optionSource="ref";}else if(CHOICE.has(f.type))f.optionSource="manual";

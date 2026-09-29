@@ -262,7 +262,9 @@ func (s *Server) uploadFileOnly(w http.ResponseWriter, r *http.Request) {
 	// Attachments can only be fetched through a signed URL issued when the response is
 	// served to someone who is actually entitled to it (see uploads_sign.go).
 	// Deliberately 404 rather than 403, so the file's existence is not confirmed.
-	if !s.verifyUploadURL(p, r.URL.Query()) {
+	// The exception is a question the instrument marked as openly linkable: its files
+	// live under /uploads/public/ and are served to anyone holding the link.
+	if !isPublicUploadPath(p) && !s.verifyUploadURL(p, r.URL.Query()) {
 		http.NotFound(w, r)
 		return
 	}
